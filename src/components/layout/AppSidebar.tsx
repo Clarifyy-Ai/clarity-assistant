@@ -303,6 +303,7 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}): JSX.Element {
   const isFeatureEnabled = useGlobalStore((state) => state.isFeatureEnabled);
 
   const signOut = useAuthStore((state) => state.signOut);
+  const signOutThisTab = useAuthStore((state) => state.signOutThisTab);
 
   const [hoverExpanded, setHoverExpanded] = useState(false);
   /** Forced collapse below lg — does not write into persisted preference. */
@@ -334,7 +335,7 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}): JSX.Element {
 
   // Mock-test question count badge removed alongside section de-scoping.
 
-  async function handleLogout(): Promise<void> {
+  async function handleLogoutEverywhere(): Promise<void> {
     try {
       const returnTo = `${location.pathname}${location.search}${location.hash}`;
       await signOut();
@@ -342,6 +343,19 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}): JSX.Element {
     } catch (error) {
       console.error("[AppSidebar] Sign out failed:", error);
     }
+  }
+
+  async function handleLogoutThisTab(): Promise<void> {
+    try {
+      await signOutThisTab();
+      assignLoginWithReturnTo({ returnTo: "/login" });
+    } catch (error) {
+      console.error("[AppSidebar] Tab-local sign out failed:", error);
+    }
+  }
+
+  async function handleLogout(): Promise<void> {
+    await handleLogoutEverywhere();
   }
 
   return (
@@ -566,8 +580,12 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}): JSX.Element {
           <button
             type="button"
             onClick={() => void handleLogout()}
-            title="Log out"
-            aria-label="Log out"
+            onContextMenu={(event) => {
+              event.preventDefault();
+              void handleLogoutThisTab();
+            }}
+            title="Log out everywhere (right-click: this tab only)"
+            aria-label="Log out everywhere"
             className={cn(
               "p-1.5 rounded-lg text-muted-foreground transition-colors hover:text-red-400 hover:bg-red-500/10",
               visuallyCollapsed && "mx-auto",

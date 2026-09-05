@@ -317,6 +317,8 @@ export type PaperJobResult = {
   idempotentReplay?: boolean;
   /** Present when the client poll window ended while the durable job is still running. */
   progressPercent?: number | null;
+  startedAt?: string | null;
+  createdAt?: string | null;
 };
 
 export async function createExamPaper(

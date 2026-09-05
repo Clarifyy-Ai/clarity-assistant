@@ -11,7 +11,7 @@
 // HOW TO CONFIGURE:
 //
 // ALLOWED_ORIGINS — comma-separated explicit origins
-//   https://clarify.ai.sltfinanceindia.com,https://clarityapp.ai,https://www.clarityapp.ai
+//   https://trycareerpilot.com,https://www.trycareerpilot.com
 //
 // ALLOW_LOCALHOST_ORIGINS — "true" (default) or "false"
 // ALLOW_PREVIEW_ORIGINS — "true" (default) or "false" (Lovable preview hosts)
@@ -57,10 +57,8 @@ const LOCAL_DEV_ORIGINS = [
 
 /** Known production browser origins — merged even if ALLOWED_ORIGINS secret is missing. */
 const KNOWN_PRODUCTION_ORIGINS = [
-  "https://clarify.ai.sltfinanceindia.com",
-  "https://clarityapp.ai",
-  "https://www.clarityapp.ai",
-  "https://app.clarityapp.ai",
+  "https://trycareerpilot.com",
+  "https://www.trycareerpilot.com",
 ];
 
 /** Custom-protocol Electron shells (file:// uses Origin: null, handled separately). */

@@ -11,7 +11,7 @@
 import fs from "node:fs";
 
 const RECOMMENDED_CORS_ORIGINS =
-  "https://trycareerpilot.com,https://www.trycareerpilot.com,https://clarify.ai.sltfinanceindia.com";
+  "https://trycareerpilot.com,https://www.trycareerpilot.com";
 
 function loadEnv(filePath) {
   const out = {};

@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/Button";
 
 import { OAuthProviderSection } from "@/components/auth/OAuthProviderSection";
 import { isUserEmailConfirmed } from "@/lib/auth/emailVerification";
-import { getAuthenticatedEntryPath } from "@/lib/auth/postAuthRedirect";
+import { getAuthenticatedEntryPath, resolveOnboardingCompletedForRedirect } from "@/lib/auth/postAuthRedirect";
 
 import { signupSchema } from "@/lib/validators";
 import { getCSRFHiddenInputProps, validateCSRFToken } from "@/lib/security";
@@ -30,7 +30,7 @@ import { cn } from "@/lib/utils";
 import {
   setPendingPlan,
 } from "@/lib/billing/pendingPlan";
-import { extractRefCodeFromSearchParams, getStoredRefCode, storeRefCode } from "@/lib/referrals";
+import { extractRefCodeFromSearchParams, getStoredRefCode, referralCodeSavedMessage, storeRefCode, validateReferralCode } from "@/lib/referrals";
 import { formatSupabaseAuthError } from "@/lib/errors";
 import { trackGoogleAdsSignup } from "@/lib/ads/googleAds";
 
@@ -145,6 +145,23 @@ export default function Signup(): JSX.Element {
     () => extractRefCodeFromSearchParams(searchParams),
     [searchParams],
   );
+  const [refValidation, setRefValidation] = useState<
+    "idle" | "checking" | "valid" | "invalid"
+  >("idle");
+
+  useEffect(() => {
+    if (!refCode) {
+      setRefValidation("idle");
+      return;
+    }
+    setRefValidation("checking");
+    const timer = window.setTimeout(() => {
+      void validateReferralCode(refCode).then((result) => {
+        setRefValidation(result.valid ? "valid" : "invalid");
+      });
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [refCode]);
 
   const authStatus = useAuthStore((state) => state.status);
   const signUpWithEmail = useAuthStore((state) => state.signUpWithEmail);
@@ -184,9 +201,12 @@ export default function Signup(): JSX.Element {
       navigate("/verify-email", { replace: true });
       return;
     }
-    const { isOnboarded, isAdmin } = useAuthStore.getState();
+    const { isAdmin, profile, isProfileLoaded } = useAuthStore.getState();
     navigate(
-      getAuthenticatedEntryPath({ isAdmin, isOnboarded }),
+      getAuthenticatedEntryPath({
+        isAdmin,
+        isOnboarded: resolveOnboardingCompletedForRedirect({ profile, isProfileLoaded }),
+      }),
       { replace: true },
     );
   }, [authStatus, navigate]);
@@ -300,9 +320,15 @@ export default function Signup(): JSX.Element {
 
           {refCode && (
             <div className="mb-4 px-3 py-2.5 bg-primary/10 border border-primary/20 rounded-xl text-xs text-primary text-center">
-              Referral code{" "}
-              <span className="font-mono font-bold">{refCode}</span> applied —
-              you&apos;ll both earn bonus credits!
+              {refValidation === "invalid" ? (
+                <>
+                  Referral code{" "}
+                  <span className="font-mono font-bold">{refCode}</span> could not
+                  be verified — you can still sign up without a referral bonus.
+                </>
+              ) : (
+                referralCodeSavedMessage(refCode)
+              )}
             </div>
           )}
 

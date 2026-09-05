@@ -1,4 +1,5 @@
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
+import { withPrepToolContext } from "@/lib/prep/prepToolContext";
 import { prepToolContentIdempotencyKey } from "@/lib/network/idempotency";
 import { sha256 } from "@/lib/utils/hashUtils";
 import {
@@ -223,10 +224,10 @@ export default function SystemDesign() {
       inflightKeyRef.current = idempotencyKey;
 
       setGenPhase("GENERATING");
-      const data = await fetchEdgeJson<Record<string, unknown>>("prep-tool", {
+      const data = await fetchEdgeJson<Record<string, unknown>>("prep-tool", withPrepToolContext({
         tool_id: "system_design",
         input,
-      }, {
+      }), {
         headers: {
           "x-idempotency-key": idempotencyKey,
         },

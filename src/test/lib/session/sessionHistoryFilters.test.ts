@@ -36,6 +36,11 @@ function item(partial: Partial<SessionHistoryItem>): SessionHistoryItem {
 }
 
 describe("session history filters", () => {
+  it("maps legacy rehearsal overlay rows to Live Copilot chip", () => {
+    expect(sessionMatchesTypeFilter("rehearsal", "live_copilot")).toBe(true);
+    expect(sessionMatchesTypeFilter("live", "live_copilot")).toBe(true);
+  });
+
   it("maps rehearsal to the Practice chip", () => {
     expect(sessionMatchesTypeFilter("rehearsal", "practice")).toBe(true);
     expect(sessionMatchesTypeFilter("practice", "practice")).toBe(true);

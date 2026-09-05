@@ -1,4 +1,5 @@
 import { ENV } from "@/lib/env";
+import { resolvePublicAppOrigin } from "@/lib/auth/redirectUrl";
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { format, formatDistanceToNow, parseISO, isValid } from "date-fns";
@@ -216,9 +217,12 @@ export function generateShareToken(): string {
 // ─────────────────────────────────────────────────────────────────
 
 export function buildShareUrl(token: string): string {
-  const base =
-    ENV.APP_URL ||
-    (typeof window !== "undefined" ? window.location.origin : "");
+  const base = resolvePublicAppOrigin({
+    configuredAppUrl: ENV.APP_URL,
+    appEnv: ENV.APP_ENV,
+    windowOrigin:
+      typeof window !== "undefined" ? window.location.origin : null,
+  });
   return `${base}/share/${token}`;
 }
 

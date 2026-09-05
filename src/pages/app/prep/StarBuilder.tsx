@@ -1,4 +1,5 @@
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
+import { withPrepToolContext } from "@/lib/prep/prepToolContext";
 import { prepToolContentIdempotencyKey } from "@/lib/network/idempotency";
 import { sha256 } from "@/lib/utils/hashUtils";
 import { refreshCredits } from "@/lib/billing/creditsManager";
@@ -214,10 +215,10 @@ export default function StarBuilder() {
 
     try {
 
-      const data = await fetchEdgeJson<Record<string, unknown>>("prep-tool", {
+      const data = await fetchEdgeJson<Record<string, unknown>>("prep-tool", withPrepToolContext({
         tool_id: "star_method",
         input,
-      }, {
+      }), {
         headers: {
           "x-idempotency-key": idempotencyKey,
         },

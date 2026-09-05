@@ -1,7 +1,7 @@
 ================================================================================
 CLARIFY AI â€” OVERALL CHECKLIST WITH LIVE AUDIT RESULTS
 ================================================================================
-Site        : https://clarify.ai.sltfinanceindia.com/
+Site        : https://trycareerpilot.com/
 Audit date  : 2026-08-05 (genuine run â€” HTTP + Supabase API + Playwright Chromium)
 Method      : scripts/production-live-audit.mjs + production-live-audit-roles.mjs
 Evidence    : CLARIFY_AI_LIVE_AUDIT_REPORT.txt
@@ -20,7 +20,7 @@ RELEASE DECISION FROM AUDIT: NO-GO / CONDITIONAL GO until remediations are DEPLO
 ================================================================================
 A. TEST SETUP
 ================================================================================
-[P] Site reachable https://clarify.ai.sltfinanceindia.com/
+[P] Site reachable https://trycareerpilot.com/
 [P] QA accounts credentials work (Free/Pro/Max/Admin via Auth API + UI)
 [W] Node TLS leaf cert incomplete for this host (browser OK; Node needed TLS bypass for probe)
 
@@ -190,7 +190,7 @@ WHAT WAS *NOT* FULLY AUTOMATED (still on master checklist for manual QA)
 NEXT ACTIONS (ENGINEERING)
 ================================================================================
 1. DEPLOY current workspace tip (auth/CSP/profile remediations) to
-   https://clarify.ai.sltfinanceindia.com/
+   https://trycareerpilot.com/
 2. Re-run: node scripts/production-live-audit.mjs
 3. Expect FAILâ†’PASS for: structured-data.js gone, clarify-page-jsonld present,
    CSP console clean, session_expired banner visible
@@ -209,7 +209,7 @@ Human QA  : _________________                 Date: _______________
 ================================================================================
 
 ================================================================================
-POST-DEPLOY FULL SUITE — 2026-08-06
+POST-DEPLOY FULL SUITE ï¿½ 2026-08-06
 ================================================================================
 Report: CLARIFY_AI_POST_DEPLOY_FULL_TEST_REPORT.txt
 Script: scripts/post-deploy-full-suite.mjs
@@ -217,13 +217,13 @@ Summary (raw): PASS=61 FAIL=2 WARN=2 ? after triage FAIL CSP remains, bundle FAI
 
 [P] Deploy: no structured-data.js script; jsonld slot; session_expired banner; /dashboard 200
 [W] theme-init still relative on live
-[F] CSP console still blocks some inline script (host/widget — investigate)
+[F] CSP console still blocks some inline script (host/widget ï¿½ investigate)
 [P] Public HTTP+UI pages
 [P] Free/Pro/Max/Admin API+UI logins; profile <2s; hard refresh; logout; returnTo
 [P] Pro denied admin; Admin portal OK
 [P] RLS core tables; cross-user isolation; release-security-gates
 [P] Responsive 375/390/768/1440; login UX; Free shell credits
 [P] Load probe anon+auth
-[P] Advisors reviewed (WARN list documented — not GO blockers alone)
+[P] Advisors reviewed (WARN list documented ï¿½ not GO blockers alone)
 
 Decision: CONDITIONAL GO (CSP injector + theme-init redeploy + auth leaked-pw setting)

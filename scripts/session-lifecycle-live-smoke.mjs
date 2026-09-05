@@ -48,7 +48,7 @@ function originHeaders(extra = {}) {
   return {
     apikey: anon,
     "Content-Type": "application/json",
-    Origin: "https://clarityapp.ai",
+    Origin: "https://trycareerpilot.com",
     ...extra,
   };
 }
@@ -110,7 +110,7 @@ const results = {};
 const options = await fetch(`${base}/functions/v1/start-session`, {
   method: "OPTIONS",
   headers: {
-    Origin: "https://clarityapp.ai",
+    Origin: "https://trycareerpilot.com",
     "Access-Control-Request-Method": "POST",
     "Access-Control-Request-Headers": "authorization,content-type,apikey",
   },

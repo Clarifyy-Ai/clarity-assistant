@@ -5,10 +5,14 @@
 
 import type { CoachingContext } from "@/types/ai.types";
 import { useAuthStore } from "@/store/userStore";
-import { createIdempotencyKey } from "@/lib/api/functions";
-import { fetchEdgeJson } from "@/lib/network/fetchEdge";
-import { retry } from "@/lib/utils";
-import { useNetworkStore } from "@/store/networkStore";
+import {
+  formatAnswerBankBlock,
+  selectRelevantAnswerBankEntries,
+  type AnswerBankEntryForContext,
+} from "@/lib/ai/answerBankRelevance";
+import { answerBankDB, jobDescriptionsDB } from "@/lib/supabase/database";
+import { buildResumeContextForAI } from "@/lib/documents/interviewContext";
+import { loadCompanyResearchBriefBlock } from "@/lib/company/loadCompanyResearchBrief";
 
 /* ────────────────────────────────────────────────────────────── */
 /* Types                                                         */
@@ -86,6 +90,10 @@ export interface ContextEnvelopeOptions {
  * Main entry point for Stage 3 — loads all relevant context in parallel
  * and returns a structured envelope plus a prompt‑ready text block. [file:1][file:3]
  */
+/**
+ * @deprecated Prefer `buildFeatureContext()` for new AI call sites.
+ * Kept for coach store compatibility via `useSessionContext`.
+ */
 export async function buildContextEnvelope(
   opts: ContextEnvelopeOptions,
 ): Promise<ContextEnvelope> {
@@ -120,7 +128,7 @@ export async function buildContextEnvelope(
       ? loadAnswerBankContext(userId, question ?? null, context.session_type ?? null)
       : emptyAnswerBank(),
     includeCompanyResearch
-      ? loadCompanyResearch(context.target_company ?? null)
+      ? loadCompanyResearch(userId, context.target_company ?? null)
       : emptyCompanyResearch(context.target_company ?? null),
   ]);
 
@@ -150,34 +158,11 @@ export async function buildContextEnvelope(
 async function loadResumeContext(userId: string | null): Promise<ResumeContext> {
   if (!userId) return emptyResume();
 
-  // Use existing CoachingContext when available to avoid network calls.
-  const ctx = useAuthStore.getState().profile as any;
-  if (ctx?.resume_experience_summary) {
+  try {
+    const block = await buildResumeContextForAI(userId, {});
     return {
       raw_text: null,
-      summary: ctx.resume_experience_summary,
-    };
-  }
-
-  // Fallback – call prep-tool EF with tool_id="resume_summary" if it exists.
-  try {
-    const data = await retry(
-      () =>
-        fetchEdgeJson<Record<string, unknown>>("prep-tool", {
-          tool_id: "resume_context",
-          input: { user_id: userId },
-        }, {
-          headers: {
-            "Idempotency-Key": createIdempotencyKey("prep-tool"),
-          },
-        }),
-      2,
-      300,
-    );
-
-    return {
-      raw_text: (data.resume_raw as string | null | undefined) ?? null,
-      summary: (data.resume_summary as string | null | undefined) ?? null,
+      summary: block?.trim() || null,
     };
   } catch {
     return emptyResume();
@@ -196,29 +181,25 @@ async function loadJDContext(
   userId: string | null,
   jobId: string | null,
 ): Promise<JobDescriptionContext> {
-  if (!userId) return emptyJD(null);
+  if (!userId || !jobId) return emptyJD(null);
 
   try {
-    const data = await retry(
-      () =>
-        fetchEdgeJson<Record<string, unknown>>("prep-tool", {
-          tool_id: "job_description_context",
-          input: { user_id: userId, job_id: jobId },
-        }, {
-          headers: {
-            "Idempotency-Key": createIdempotencyKey("prep-tool"),
-          },
-        }),
-      2,
-      300,
-    );
+    const row = await jobDescriptionsDB.getByIdMaybe(jobId);
+    if (!row) return emptyJD(null);
+    const r = row as Record<string, unknown>;
+    const raw =
+      String(r.description ?? r.content ?? r.raw_text ?? r.jd_text ?? "").trim();
+    const kw = r.keywords ?? r.required_skills ?? r.skills;
+    const highlights = Array.isArray(kw)
+      ? kw.filter((s): s is string => typeof s === "string")
+      : [];
 
     return {
-      id: (data.job_id as string | null | undefined) ?? jobId ?? null,
-      title: (data.title as string | null | undefined) ?? null,
-      company: (data.company as string | null | undefined) ?? null,
-      raw_text: (data.text as string | null | undefined) ?? null,
-      highlights: (data.highlights as string[] | undefined) ?? [],
+      id: jobId,
+      title: typeof r.title === "string" ? r.title : null,
+      company: typeof r.company === "string" ? r.company : null,
+      raw_text: raw || null,
+      highlights,
     };
   } catch {
     return emptyJD(null);
@@ -242,39 +223,46 @@ function emptyJD(company: string | null): JobDescriptionContext {
 async function loadAnswerBankContext(
   userId: string | null,
   question: string | null,
-  sessionType: string | null,
+  _sessionType: string | null,
 ): Promise<AnswerBankContext> {
   if (!userId) return emptyAnswerBank();
 
   try {
-    const data = await retry(
-      () =>
-        fetchEdgeJson<{ entries?: any[] }>("prep-tool", {
-          tool_id: "answer_bank_context",
-          input: {
-            user_id: userId,
-            question,
-            session_type: sessionType,
-            limit: 5,
-          },
-        }, {
-          headers: {
-            "Idempotency-Key": createIdempotencyKey("prep-tool"),
-          },
-        }),
-      2,
-      300,
-    );
+    const rows = await answerBankDB.listByUserId(userId);
+    const mapped: AnswerBankEntryForContext[] = rows.map((entry) => ({
+      id: entry.id,
+      question_text: entry.question_text,
+      answer_text: entry.answer_text,
+      star_situation: (entry as { star_situation?: string }).star_situation,
+      star_task: (entry as { star_task?: string }).star_task,
+      star_action: (entry as { star_action?: string }).star_action,
+      star_result: (entry as { star_result?: string }).star_result,
+      summary: (entry as { summary?: string }).summary,
+      tags: (entry as { tags?: string[] }).tags,
+      category: (entry as { category?: string }).category,
+    }));
+    const selected = question?.trim()
+      ? selectRelevantAnswerBankEntries(mapped, question, { max: 5 })
+      : mapped.slice(0, 5);
 
-    const entries: AnswerBankEntry[] = (data.entries ?? []).map(
-      (e: any): AnswerBankEntry => ({
+    const entries: AnswerBankEntry[] = selected.map((e) => {
+      const starParts = [
+        e.star_situation,
+        e.star_task,
+        e.star_action,
+        e.star_result,
+      ].filter(Boolean);
+      return {
         id: e.id,
-        question: e.question,
-        star_summary: e.star_summary,
+        question: e.question_text,
+        star_summary:
+          starParts.length > 0
+            ? starParts.join(" → ")
+            : (e.summary ?? e.answer_text?.slice(0, 240) ?? ""),
         category: e.category ?? null,
         tags: e.tags ?? [],
-      }),
-    );
+      };
+    });
 
     return { entries };
   } catch {
@@ -291,32 +279,22 @@ function emptyAnswerBank(): AnswerBankContext {
 /* ────────────────────────────────────────────────────────────── */
 
 async function loadCompanyResearch(
+  userId: string | null,
   company: string | null,
 ): Promise<CompanyResearchContext> {
-  if (!company) return emptyCompanyResearch(null);
+  if (!company || !userId) return emptyCompanyResearch(company);
 
   try {
-    const data = await retry(
-      () =>
-        fetchEdgeJson<Record<string, unknown>>("prep-tool", {
-          tool_id: "company_research_context",
-          input: { company },
-        }, {
-          headers: {
-            "Idempotency-Key": createIdempotencyKey("prep-tool"),
-          },
-        }),
-      2,
-      300,
-    );
+    const brief = await loadCompanyResearchBriefBlock(userId, company);
+    if (!brief) return emptyCompanyResearch(company);
 
     return {
-      company,
-      summary: (data.summary as string | null | undefined) ?? null,
-      recent_news: (data.recent_news as string[] | undefined) ?? [],
-      culture_signals: (data.culture as string[] | undefined) ?? [],
-      interview_format: (data.interview_format as string | null | undefined) ?? null,
-      tech_stack: (data.tech_stack as string | null | undefined) ?? null,
+      company: brief.company,
+      summary: brief.summary,
+      recent_news: [],
+      culture_signals: [],
+      interview_format: null,
+      tech_stack: null,
     };
   } catch {
     return emptyCompanyResearch(company);

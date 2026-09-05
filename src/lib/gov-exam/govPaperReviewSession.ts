@@ -141,15 +141,60 @@ export function availabilityCheckingElapsedMs(
 
 export function beginGenerationSession(
   jobId: string,
-  options?: { idempotencyKey?: string; nowMs?: number },
+  options?: {
+    idempotencyKey?: string;
+    nowMs?: number;
+    /** Authoritative server job.started_at (ISO) — survives refresh/resume. */
+    serverStartedAt?: string | null;
+    /** Fallback when started_at is null (queued job). */
+    serverCreatedAt?: string | null;
+  },
 ): GovPaperGenerationSession {
-  const nowMs = options?.nowMs ?? Date.now();
+  const startTime = resolveGenerationStartTimeMs(
+    {
+      startedAt: options?.serverStartedAt,
+      createdAt: options?.serverCreatedAt,
+    },
+    options?.nowMs,
+  );
   return {
     phase: "active",
     jobId,
-    startTime: nowMs,
+    startTime,
     idempotencyKey: options?.idempotencyKey,
   };
+}
+
+/** Resolve timer origin from server job timestamps. */
+export function resolveGenerationStartTimeMs(
+  job: { startedAt?: string | null; createdAt?: string | null },
+  fallbackMs = Date.now(),
+): number {
+  if (job.startedAt) {
+    const parsed = Date.parse(job.startedAt);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  if (job.createdAt) {
+    const parsed = Date.parse(job.createdAt);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return fallbackMs;
+}
+
+export function beginGenerationSessionFromJob(
+  job: {
+    jobId: string;
+    startedAt?: string | null;
+    createdAt?: string | null;
+  },
+  options?: { idempotencyKey?: string; nowMs?: number },
+): GovPaperGenerationSession {
+  return beginGenerationSession(job.jobId, {
+    idempotencyKey: options?.idempotencyKey,
+    serverStartedAt: job.startedAt,
+    serverCreatedAt: job.createdAt,
+    nowMs: options?.nowMs,
+  });
 }
 
 export function completeGenerationSession(

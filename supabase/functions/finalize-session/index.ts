@@ -4,6 +4,7 @@ import { authenticateRequest } from "../_shared/auth.ts";
 import { parseJsonBody } from "../_shared/errors.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { rpcJson } from "../_shared/sessionLifecycleRpc.ts";
+import { logProductEvent } from "../_shared/productEvents.ts";
 
 const schema = z.object({
   session_id: z.string().uuid(),
@@ -47,10 +48,21 @@ Deno.serve(async (req) => {
       p_metrics: parsed.data.metrics,
     });
     if (error) {
+      logProductEvent("session_finalize_failure", {
+        user_id: auth.context.user.id,
+        session_id: parsed.data.session_id,
+        code: "RPC_ERROR",
+        detail: error.message ?? "unknown",
+      });
       console.error("[finalize-session] rpc:", error);
       return json(req, 500, { error: "Could not finalize session.", code: "FINALIZATION_FAILED" });
     }
     if (data.reason === "NOT_FOUND" || data.ok === false) {
+      logProductEvent("session_finalize_failure", {
+        user_id: auth.context.user.id,
+        session_id: parsed.data.session_id,
+        code: String(data.reason ?? "NOT_FOUND"),
+      });
       return json(req, 404, { error: "Session not found.", code: "NOT_FOUND" });
     }
     return json(req, 200, data);

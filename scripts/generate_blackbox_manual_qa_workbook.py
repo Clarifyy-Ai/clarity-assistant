@@ -138,7 +138,7 @@ def sheet_cover(wb: Workbook) -> None:
         "CYCLE",
         "Wave 2 — Retest after 30-08 remediation + live Gov exam proof.",
         "Window: complete within 2 days (31 Aug – 1 Sep 2026, IST). Testers pick their own hours.",
-        "App: https://clarify.ai.sltfinanceindia.com",
+        "App: https://trycareerpilot.com",
         "",
         "TEAM (3 testers — every case is pre-assigned)",
         "1. Anushka — Government Exams + live proof, AI Fallback, Practice Coach, Live Overlay, Mock Interview, Documents, Resume/JD, AI Chat, Module smoke, Journey 2, Admin gov ingest/review (TC-ADM-019–024)",
@@ -992,7 +992,7 @@ def sheet_release(wb: Workbook) -> None:
     ws.merge_cells(start_row=r + 3, start_column=1, end_row=r + 6, end_column=3)
     ws.cell(row=r + 3, column=1, value=(
         "NO_GO / RELEASE BLOCKED until a real Custom or Full Mock paper completes on "
-        "https://clarify.ai.sltfinanceindia.com (00d TC-GOV-LIVE-06). Official-empty is an accepted "
+        "https://trycareerpilot.com (00d TC-GOV-LIVE-06). Official-empty is an accepted "
         "limitation only after that paper exists. Migrations + Edge + Python worker were not live "
         "as of 31 Aug 2026."
     )).alignment = WRAP

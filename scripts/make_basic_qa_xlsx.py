@@ -79,10 +79,10 @@ def main() -> None:
 
     info = [
         ("", ""),
-        ("Test Site (use this only)", "https://clarify.ai.sltfinanceindia.com/"),
-        ("Login", "https://clarify.ai.sltfinanceindia.com/login"),
-        ("Signup", "https://clarify.ai.sltfinanceindia.com/signup"),
-        ("App Dashboard", "https://clarify.ai.sltfinanceindia.com/app/dashboard"),
+        ("Test Site (use this only)", "https://trycareerpilot.com/"),
+        ("Login", "https://trycareerpilot.com/login"),
+        ("Signup", "https://trycareerpilot.com/signup"),
+        ("App Dashboard", "https://trycareerpilot.com/app/dashboard"),
         ("", ""),
         ("Tester Name", ""),
         ("Date", ""),
@@ -231,7 +231,7 @@ def main() -> None:
     wss["A1"] = "QA Sign-off"
     wss["A1"].font = Font(bold=True, size=14, color="1F4E79")
     sign_rows = [
-        ("Site tested", "https://clarify.ai.sltfinanceindia.com/"),
+        ("Site tested", "https://trycareerpilot.com/"),
         ("Total items", len(rows)),
         ("Passed", ""),
         ("Failed", ""),

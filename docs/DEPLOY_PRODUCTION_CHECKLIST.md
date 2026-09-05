@@ -47,7 +47,7 @@ Required migrations include:
 **Recommended `ALLOWED_ORIGINS` value:**
 
 ```
-https://preview--clarify-aii.lovable.app,https://clarityapp.ai,https://www.clarityapp.ai,https://app.clarityapp.ai
+https://preview--clarify-aii.lovable.app,https://trycareerpilot.com,https://www.trycareerpilot.com
 ```
 
 Code also allows `*.lovable.app`, `*.lovable.dev`, `*.lovableproject.com` after redeploy.

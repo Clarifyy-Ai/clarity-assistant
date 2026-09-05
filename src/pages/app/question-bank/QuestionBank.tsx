@@ -35,6 +35,7 @@ import { ASSESSMENT_ROLE_SLUGS, REVIEW_STATUSES } from "@/lib/assessments/taxono
 import {
   assertPublishableForTrigger,
   buildQuestionPublishPatch,
+  buildQuestionApprovePatch,
 } from "@/lib/question-bank/questionPublishPatch";
 import { userFacingDbError } from "@/lib/errors/userFacingDbError";
 import {
@@ -297,6 +298,24 @@ export default function QuestionBankPage() {
       void load();
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function approveQuestion(id: string): Promise<void> {
+    const row = rows.find((r) => r.id === id);
+    const gate = assertPublishableForTrigger(row);
+    if (gate) {
+      toast.error(gate);
+      return;
+    }
+    const { error } = await supabase
+      .from("questions")
+      .update(buildQuestionApprovePatch())
+      .eq("id", id);
+    if (error) toast.error(userFacingDbError(error, "save"));
+    else {
+      toast.success("Question approved for publication.");
+      void load();
     }
   }
 
@@ -747,7 +766,7 @@ export default function QuestionBankPage() {
                         <Button size="xs" variant="outline" onClick={() => void setStatusFor(row.id, "draft")}>Unpublish</Button>
                       )}
                       {isAdmin && row.review_status !== "approved" && (
-                        <Button size="xs" variant="outline" onClick={() => void supabase.from("questions").update({ review_status: "approved" }).eq("id", row.id).then(({ error }) => { if (error) toast.error(userFacingDbError(error, "save")); else void load(); })}>
+                        <Button size="xs" variant="outline" onClick={() => void approveQuestion(row.id)}>
                           Approve
                         </Button>
                       )}

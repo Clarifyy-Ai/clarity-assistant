@@ -117,7 +117,7 @@ export default function CodingLabPage() {
         source: "ORIGINAL",
         license_type: "ORIGINAL",
         copyright_status: "ORIGINAL",
-        publish_status: "published",
+        publish_status: isAdmin ? "published" : "draft",
       })
       .select("id")
       .maybeSingle();
@@ -135,7 +135,11 @@ export default function CodingLabPage() {
         sort_order: c.sort_order,
       })) as any,
     );
-    toast.success("Coding question created. Hidden cases stay server-side.");
+    toast.success(
+      isAdmin
+        ? "Coding question published."
+        : "Coding question saved as draft — an admin must publish before it appears in the catalog.",
+    );
     void load();
   }
 

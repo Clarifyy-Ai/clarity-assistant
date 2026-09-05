@@ -6,6 +6,10 @@ import {
 } from "@/lib/ai/questionDetection";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { useMockHintBridge } from "@/lib/mock/mockHintBridge";
+import {
+  setMockInterviewContext,
+  clearMockInterviewContext,
+} from "@/lib/mock/mockContextBridge";
 import { AiFormattedOutput } from "@/components/common/AiFormattedOutput";
 import { useAudioSession } from "@/hooks/useAudioSession";
 import { useFillerWordDetection } from "@/hooks/useFillerWordDetection";
@@ -213,6 +217,8 @@ interface QuestionAnswer {
   wpm: number;
   duration_seconds: number;
   timestamp: string;
+  is_follow_up?: boolean;
+  parent_question_id?: string | null;
 }
 
 interface MockSessionSummaryStats {
@@ -682,9 +688,17 @@ export default function MockSession() {
     const id = window.setInterval(() => {
       if (!isMockSessionMutable(lifecycleRef.current)) return;
       void writeMockProgress();
+      void persistCurrentAnswers().catch((err) => {
+        console.warn("[MockSession] answer checkpoint failed:", err);
+      });
     }, 15_000);
     const onHide = () => {
-      if (document.visibilityState === "hidden") void writeMockProgress();
+      if (document.visibilityState === "hidden") {
+        void writeMockProgress();
+        void persistCurrentAnswers().catch((err) => {
+          console.warn("[MockSession] answer checkpoint failed:", err);
+        });
+      }
     };
     document.addEventListener("visibilitychange", onHide);
     return () => {
@@ -766,7 +780,6 @@ export default function MockSession() {
           session_id: sessionId,
           resume_context: docs.resume,
           job_description: docs.jd,
-          free_session: true,
           exclude_questions: usedTexts,
           allow_fallback: true,
           questionNumber: nextNumber,
@@ -1169,6 +1182,8 @@ export default function MockSession() {
       wpm: wpmHook.wpm ?? 0,
       duration_seconds: elapsed,
       timestamp: new Date().toISOString(),
+      is_follow_up: followUpsUsedRef.current > 0 && Boolean(parentQuestionIdRef.current),
+      parent_question_id: parentQuestionIdRef.current,
     };
     if (existingIdx >= 0) {
       answersRef.current[existingIdx] = entry;
@@ -1206,38 +1221,67 @@ export default function MockSession() {
     );
   }
 
-  async function writeMockProgress(): Promise<void> {
+  async function buildMockProgressNotesString(): Promise<string | null> {
     const sessionId = useSessionStore.getState().session_id;
-    if (!sessionId) return;
+    if (!sessionId) return null;
     const questions = useSessionStore.getState().questions;
-    if (!questions.length) return;
+    if (!questions.length) return null;
 
-    const progressNotes = encodeMockProgressNotes({
-      current_question_index: useSessionStore.getState().current_question_index ?? 0,
+    const qIndex = useSessionStore.getState().current_question_index ?? 0;
+    const typedDraft = typedAnswerRef.current.trim();
+    const baseAnswers = answersRef.current.map(
+      (a): MockProgressAnswer => ({
+        question_id: a.question_id,
+        question_text: a.question_text,
+        answer_text: a.answer_text,
+        question_index: a.question_index,
+        skipped: a.skipped,
+        status: a.status,
+        outcome: a.outcome,
+        filler_count: a.filler_count,
+        wpm: a.wpm,
+        duration_seconds: a.duration_seconds,
+        timestamp: a.timestamp,
+        answer_source: a.answer_source,
+        parent_question_id: a.parent_question_id ?? null,
+        is_follow_up: Boolean(a.is_follow_up),
+      }),
+    );
+
+    let progressAnswers = baseAnswers;
+    if (typedDraft || currentAnswerStatus === "draft") {
+      const q = questions[qIndex];
+      const existing = baseAnswers.find((a) => a.question_index === qIndex);
+      if (!existing || existing.status === "draft" || existing.status === "unanswered") {
+        const draftEntry: MockProgressAnswer = {
+          question_id: q?.id ?? `q-${qIndex}`,
+          question_text: q?.question_text ?? "",
+          answer_text: typedDraft,
+          question_index: qIndex,
+          skipped: false,
+          status: "draft",
+          outcome: "UNANSWERED",
+          filler_count: fillerHook.totalCount ?? 0,
+          wpm: wpmHook.wpm ?? 0,
+          duration_seconds: Math.round((Date.now() - questionStartRef.current) / 1000),
+          timestamp: new Date().toISOString(),
+          parent_question_id: parentQuestionIdRef.current,
+          is_follow_up: followUpsUsedRef.current > 0 && Boolean(parentQuestionIdRef.current),
+          answer_source: "typed",
+        };
+        progressAnswers = existing
+          ? baseAnswers.map((a) => (a.question_index === qIndex ? draftEntry : a))
+          : [...baseAnswers, draftEntry];
+      }
+    }
+
+    return encodeMockProgressNotes({
+      current_question_index: qIndex,
       elapsed_seconds: sessionElapsedRef.current,
       target_question_count: targetQuestionCount,
       started_at: startTimeRef.current,
       questions,
-      answers: answersRef.current.map(
-        (a): MockProgressAnswer => ({
-          question_id: a.question_id,
-          question_text: a.question_text,
-          answer_text: a.answer_text,
-          question_index: a.question_index,
-          skipped: a.skipped,
-          status: a.status,
-          outcome: a.outcome,
-          filler_count: a.filler_count,
-          wpm: a.wpm,
-          duration_seconds: a.duration_seconds,
-          timestamp: a.timestamp,
-          answer_source: a.answer_source,
-          parent_question_id: parentQuestionIdRef.current,
-          is_follow_up: Boolean(
-            (a as { is_follow_up?: boolean }).is_follow_up,
-          ),
-        }),
-      ),
+      answers: progressAnswers,
       interview_context: interviewContextRef.current,
       interview_blueprint: interviewBlueprintRef.current,
       follow_ups_used_for_parent: followUpsUsedRef.current,
@@ -1258,12 +1302,21 @@ export default function MockSession() {
           skipped: a.skipped,
           question_index: a.question_index,
           is_follow_up: Boolean((a as { is_follow_up?: boolean }).is_follow_up),
-          parent_question_id: parentQuestionIdRef.current,
+          parent_question_id: a.parent_question_id ?? null,
           timestamp: a.timestamp,
           answer_source: a.answer_source,
         })),
       }),
     });
+  }
+
+  async function writeMockProgress(): Promise<void> {
+    const sessionId = useSessionStore.getState().session_id;
+    const userId = profile?.id;
+    if (!sessionId || !userId) return;
+
+    const progressNotes = await buildMockProgressNotesString();
+    if (!progressNotes) return;
 
     try {
       await sessionsDB.updateForUser(sessionId, userId, {
@@ -1367,6 +1420,9 @@ export default function MockSession() {
           wpm: a.wpm,
           duration_seconds: a.duration_seconds,
           timestamp: a.timestamp,
+          answer_source: a.answer_source,
+          is_follow_up: Boolean(a.is_follow_up),
+          parent_question_id: a.parent_question_id ?? null,
         }))
       : answerRows.map((row) => {
           const skipped = isSkippedAnswerText(row.answer);
@@ -1445,8 +1501,20 @@ export default function MockSession() {
 
     rebuildMockTranscriptFromProgress(restoredQuestions, restoredAnswers);
 
+    const currentDraft = restoredAnswers.find(
+      (a) => a.question_index === restoreIndex && a.status === "draft",
+    );
+    if (currentDraft?.answer_text?.trim()) {
+      setTypedAnswer(currentDraft.answer_text);
+      typedAnswerRef.current = currentDraft.answer_text;
+      userTypedOverrideRef.current = true;
+      setCurrentAnswerStatus("draft");
+      setAnswerNextState((s) => reduceAnswerNext(s, { type: "ANSWER_DETECTED" }));
+    }
+
     if (progress?.interview_context && isInterviewContextSnapshot(progress.interview_context)) {
       interviewContextRef.current = progress.interview_context;
+      setMockInterviewContext(progress.interview_context);
     }
     if (progress?.interview_blueprint && isInterviewBlueprint(progress.interview_blueprint)) {
       interviewBlueprintRef.current = progress.interview_blueprint;
@@ -1555,7 +1623,6 @@ export default function MockSession() {
         session_id: options.dbSessionId,
         resume_context,
         job_description,
-        free_session: true,
         exclude_questions: options.usedTexts,
         allow_fallback: true,
         questionNumber: options.questionNumber,
@@ -1719,6 +1786,7 @@ export default function MockSession() {
     sessionElapsedRef.current = 0;
     answersRef.current = [];
     interviewContextRef.current = null;
+    clearMockInterviewContext();
     interviewBlueprintRef.current = null;
     followUpsUsedRef.current = 0;
     parentQuestionIdRef.current = null;
@@ -1733,6 +1801,7 @@ export default function MockSession() {
     const mockConfigEarly = config as MockConfig;
     if (isInterviewContextSnapshot(mockConfigEarly.interview_context)) {
       interviewContextRef.current = mockConfigEarly.interview_context;
+      setMockInterviewContext(mockConfigEarly.interview_context);
     }
     if (isInterviewBlueprint(mockConfigEarly.interview_blueprint)) {
       interviewBlueprintRef.current = mockConfigEarly.interview_blueprint;
@@ -2149,6 +2218,7 @@ export default function MockSession() {
   }
 
   async function handleNextQuestion(options?: { skipCapture?: boolean; skipped?: boolean }) {
+    prefetchRef.current.abortAll();
     if (!isMockSessionMutable(lifecycleRef.current)) return;
     // Idempotent Next: take the lock before any async work / double-click race.
     if (nextOpLockRef.current) return;
@@ -2497,13 +2567,22 @@ export default function MockSession() {
       // Durable count wins — never CANCELLED when answers exist (opts can race last answer).
       const incompleteNoAnswers = answeredCount === 0;
 
-      const existingNotes = sessionNotes.trim();
-      const persistTranscripts = parsePrivacyPrefs(profile?.privacy_prefs).store_transcripts;
-      const notesParts = [
-        incompleteNoAnswers ? INCOMPLETE_NO_ANSWERS_NOTE : null,
-        existingNotes || null,
-        persistTranscripts && !incompleteNoAnswers ? transcript || null : null,
-      ].filter(Boolean);
+      const progressNotes = await buildMockProgressNotesString();
+      const userNotes = sessionNotes.trim();
+      const notesForFinalize = progressNotes
+        ? [
+            progressNotes,
+            incompleteNoAnswers ? INCOMPLETE_NO_ANSWERS_NOTE : null,
+            userNotes || null,
+          ]
+            .filter(Boolean)
+            .join("\n\n")
+        : [
+            incompleteNoAnswers ? INCOMPLETE_NO_ANSWERS_NOTE : null,
+            userNotes || null,
+          ]
+            .filter(Boolean)
+            .join("\n\n") || null;
 
       const scoredAnswers = answersRef.current.filter(
         (a) =>
@@ -2530,7 +2609,7 @@ export default function MockSession() {
           duration_ms: a.duration_seconds * 1000,
         })),
         transcript:
-          transcript && !incompleteNoAnswers && persistTranscripts
+          transcript && !incompleteNoAnswers && parsePrivacyPrefs(profile?.privacy_prefs).store_transcripts
             ? { content: transcript, utterances }
             : null,
         metrics: {
@@ -2541,7 +2620,7 @@ export default function MockSession() {
           hints_used: overlay.hint_history.length,
           answers_generated: answeredCount,
           questions_asked: questionsAsked,
-          notes: notesParts.length > 0 ? notesParts.join("\n") : null,
+          notes: notesForFinalize,
           ...(endedByRpc
           ? {}
           : {}),

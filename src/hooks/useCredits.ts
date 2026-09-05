@@ -11,38 +11,13 @@ import { toast } from "sonner";
 
 import { deductCredits as deductCreditsApi } from "@/lib/api/billing";
 import { resolveCreditBalance } from "@/lib/billing/resolveCreditBalance";
-import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
+import { UI_CREDIT_COSTS, type UICreditAction } from "@/lib/constants/creditEconomics";
 import { useAuthStore } from "@/store/authStore";
 
-/** UI-facing action keys — costs mirror creditEconomics.ts / edge functions. */
-export const CREDIT_COSTS = {
-  live_answer: AI_CREDIT_COSTS.live_answer,
-  /** Matches Edge resolveActionCost("liveanswerlong") / live_answer_long. */
-  live_answer_long: AI_CREDIT_COSTS.live_answer + 4,
-  live_hint: AI_CREDIT_COSTS.live_hint,
-  live_feedback: AI_CREDIT_COSTS.live_feedback,
-  generate_questions: AI_CREDIT_COSTS.generate_questions,
-  generate_hint: AI_CREDIT_COSTS.live_hint,
-  generate_debrief: AI_CREDIT_COSTS.session_debrief,
-  ai_coach_message: AI_CREDIT_COSTS.ai_coach_message,
-  mock_question: AI_CREDIT_COSTS.generate_questions,
-  mock_full_answer: AI_CREDIT_COSTS.live_answer,
-  mock_session: AI_CREDIT_COSTS.mock_session,
-  scorecard_generate: AI_CREDIT_COSTS.generate_scorecard,
-  gap_analysis: AI_CREDIT_COSTS.gap_analysis,
-  star_generate: AI_CREDIT_COSTS.star_builder,
-  star_analyse: AI_CREDIT_COSTS.polish_star,
-  company_brief: AI_CREDIT_COSTS.company_research,
-  screenshot_analyse: AI_CREDIT_COSTS.screenshot_answer,
-  coding_hint: AI_CREDIT_COSTS.coding_hint,
-  coding_solution: AI_CREDIT_COSTS.live_answer,
-  system_design: AI_CREDIT_COSTS.system_design,
-  rephrase: AI_CREDIT_COSTS.rephraser,
-  project_build: AI_CREDIT_COSTS.project_builder,
-  resume_analysis: AI_CREDIT_COSTS.resume_analysis,
-} as const;
+/** UI-facing action keys — costs from creditEconomics.ts (authoritative). */
+export const CREDIT_COSTS = UI_CREDIT_COSTS;
 
-export type CreditAction = keyof typeof CREDIT_COSTS;
+export type CreditAction = UICreditAction;
 
 export type DeductCreditsResult = {
   success: boolean;

@@ -44,6 +44,9 @@ export type MockGenerateQuestionsRequest = {
     | "skills_not_to_claim"
     | "focus_competencies"
     | "language"
+    | "seniority"
+    | "industry"
+    | "topics_to_avoid"
   > | null;
 };
 
@@ -201,7 +204,6 @@ export async function generateMockInterviewQuestion(
         session_id: body.session_id,
         resume_context: body.resume_context ?? "",
         job_description: body.job_description ?? "",
-        free_session: body.free_session ?? true,
         exclude_questions: body.exclude_questions ?? usedTexts,
         allow_fallback,
         follow_up_depth: body.follow_up_depth ?? "light",
@@ -219,6 +221,9 @@ export async function generateMockInterviewQuestion(
         skills_not_to_claim: body.interview_context?.skills_not_to_claim ?? [],
         focus_areas: body.interview_context?.focus_competencies ?? [],
         language: body.interview_context?.language ?? "en",
+        seniority: body.interview_context?.seniority ?? body.interview_context?.experience_level ?? "",
+        industry: body.interview_context?.industry ?? "",
+        topics_to_avoid: body.interview_context?.topics_to_avoid ?? [],
       },
       {
         signal,

@@ -39,6 +39,8 @@ export type InterviewContextSnapshot = {
   skills_not_to_claim: string[];
   topics_to_avoid: string[];
   answer_bank_context_ids: string[];
+  /** Frozen Answer Bank snippets selected at start. */
+  answer_bank_snippets: string[];
   rubric_version: string;
   question_policy_version: string;
 };
@@ -79,6 +81,7 @@ export function buildInterviewContextSnapshot(input: {
   durationMinutes?: number;
   resumeText?: string;
   jdText?: string;
+  answerBankSnippets?: string[];
   now?: Date;
 }): InterviewContextSnapshot {
   const { config } = input;
@@ -118,6 +121,10 @@ export function buildInterviewContextSnapshot(input: {
     skills_not_to_claim: [...(config.skills_not_to_claim ?? [])],
     topics_to_avoid: [...(config.topics_to_avoid ?? [])],
     answer_bank_context_ids: [...(config.answer_bank_context_ids ?? [])],
+    answer_bank_snippets: (input.answerBankSnippets ?? [])
+      .map((s) => String(s ?? "").trim())
+      .filter(Boolean)
+      .slice(0, 8),
     rubric_version: RUBRIC_VERSION,
     question_policy_version: QUESTION_POLICY_VERSION,
   };

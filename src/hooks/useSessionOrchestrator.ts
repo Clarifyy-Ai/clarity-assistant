@@ -8,10 +8,9 @@ import { useOverlayStore } from "@/store/overlayStore";
 import { useAuthStore } from "@/store/userStore";
 import { streamGenerateHint, type GenerateHintRequest } from "@/lib/api/ai";
 import { hintIdempotencyKey } from "@/lib/ai/questionDetection";
-import {
-  getOrBuildSessionAiContext,
-  lastTranscriptSlice,
-} from "@/lib/ai/sessionAiContext";
+import { lastTranscriptSlice } from "@/lib/ai/sessionAiContext";
+import { buildFeatureContext } from "@/lib/ai/buildFeatureContext";
+import { getMockInterviewContext } from "@/lib/mock/mockContextBridge";
 import { parseResumeContentString } from "@/lib/documents/resumeParse";
 import { useMockHintBridge } from "@/lib/mock/mockHintBridge";
 import {
@@ -127,39 +126,48 @@ export function useSessionOrchestrator() {
       resume_id?: string | null;
       jd_id?: string | null;
       interview_type?: string;
+      hint_style?: string;
+      seniority?: string;
     } | null;
-    const resumeSummary =
-      typeof overlay.resume_context === "string"
-        ? overlay.resume_context
-        : overlay.resume_context?.summary ?? "";
     const userId = useAuthStore.getState().profile?.id ?? useAuthStore.getState().user?.id;
     const activeResume = useDocumentStore.getState().active_context.resume as
       | { content?: string | null }
       | null;
     const parsed = parseResumeContentString(activeResume?.content ?? null);
-    const cached = userId
-      ? await getOrBuildSessionAiContext({
+    const interviewSnapshot = isMock ? getMockInterviewContext() : null;
+    const transcript = lastTranscriptSlice(
+      useAudioStore.getState().transcript?.full_transcript ?? "",
+    );
+
+    const built = userId
+      ? await buildFeatureContext({
+          operation: "generate_hint",
           userId,
+          sessionId: session.session_id,
+          question: questionText,
+          interviewSnapshot,
+          role: cfg?.role,
+          company: cfg?.company,
+          interviewType: cfg?.interview_type,
+          experienceLevel: cfg?.seniority,
+          seniority: cfg?.seniority,
           resumeId: cfg?.resume_id,
           jdId: cfg?.jd_id,
           instructions: cfg?.instructions,
-          role: cfg?.role,
-          company: cfg?.company,
           parsedResume: parsed,
           resumeContent: activeResume?.content ?? null,
-          resumeSummary,
+          hintStyle: cfg?.hint_style ?? overlay.hint_style,
+          coachTone: overlay.coach_tone,
+          transcript,
+          model: overlay.active_model ?? "gemini-2.5-flash",
         })
       : null;
-    const resumeCtx = cached?.resumeBlock || resumeSummary || "None provided.";
+    const resumeCtx = built?.resumeBlock || "None provided.";
 
     // Re-check after async context build — session may have ended.
     if (store.getState().status === "completed" || store.getState().status === "abandoned") {
       return;
     }
-
-    const transcript = lastTranscriptSlice(
-      useAudioStore.getState().transcript?.full_transcript ?? "",
-    );
 
     // Record the user's question in chat history when overlay is active.
     if (!isMock) {
@@ -197,14 +205,17 @@ export function useSessionOrchestrator() {
         overlay.setChatGenerating?.(true);
       }
 
-      const payload: GenerateHintRequest = {
-        question: questionText,
-        resume_context: resumeCtx,
-        transcript,
-        interview_type: cfg?.interview_type ?? "behavioural",
-        model: overlay.active_model ?? "gemini-2.5-flash",
-        session_id: session.session_id ?? undefined,
-      };
+      const payload: GenerateHintRequest = built
+        ? (built.payload as GenerateHintRequest)
+        : {
+            question: questionText,
+            resume_context: resumeCtx,
+            transcript,
+            interview_type: cfg?.interview_type ?? "behavioural",
+            target_company: cfg?.company ?? "",
+            model: overlay.active_model ?? "gemini-2.5-flash",
+            session_id: session.session_id ?? undefined,
+          };
       let streamed = "";
       let firstChunk = true;
       markAnswerLatency("t3", { feature: "mock_hint" });

@@ -65,6 +65,8 @@
     "seo:sitemap": "node scripts/generate-sitemap.mjs",
     "seo:ping": "node scripts/generate-sitemap.mjs --ping",
     "verify:dist-env": "node scripts/verify-dist-env.mjs",
+    "verify:gov-ops-gate": "node scripts/verify-gov-exam-ops-gate.mjs",
+    "verify:staging-e2e-gate": "node scripts/staging-e2e-gate.mjs",
     "publish:desktop-installer": "node scripts/publish-desktop-installer.mjs",
     "validate:desktop-installer": "node scripts/validate-desktop-installer.mjs",
     "install:desktop": "powershell -ExecutionPolicy Bypass -File scripts/install-desktop-local.ps1",

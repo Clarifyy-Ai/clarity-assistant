@@ -13,7 +13,7 @@ describe("official PYQ block on create", () => {
     );
     expect(create).toContain("sourcePolicyForMode");
     expect(create).toMatch(/countEligibleGovQuestions|inventory/i);
-    expect(create).toMatch(/official_previous|INSUFFICIENT|reject|block/i);
+    expect(create).toMatch(/CONTENT_INSUFFICIENT|official_previous/i);
   });
 
   it("availability and create share sourcePolicyForMode", () => {

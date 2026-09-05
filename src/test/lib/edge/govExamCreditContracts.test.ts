@@ -12,7 +12,7 @@ function readFn(name: string): string {
 describe("gov exam credit/inventory contracts", () => {
   it("keeps availability free and separates official/PYQ inventory from mocks", () => {
     const src = readFn("check-exam-paper-availability");
-    expect(src).toContain('sourcePolicy: mode === "official_previous" ? "public_pyp" : "approved_bank"');
+    expect(src).toContain("sourcePolicy: sourcePolicyForMode(mode)");
     expect(src).toContain('mode !== "official_previous" && isPythonGovExamConfigured()');
     expect(src).toContain('inventoryClass:');
     expect(src).toContain("sourceCounts");

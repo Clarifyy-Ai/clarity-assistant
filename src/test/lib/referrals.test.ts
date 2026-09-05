@@ -119,6 +119,104 @@ describe("buildReferralLink", () => {
   });
 });
 
+describe("referralCodeSavedMessage", () => {
+  it("does not imply reward was granted", async () => {
+    const { referralCodeSavedMessage } = await import("@/lib/referrals");
+    const msg = referralCodeSavedMessage("FRIEND01");
+    expect(msg).toContain("FRIEND01");
+    expect(msg).toContain("verification");
+    expect(msg.toLowerCase()).not.toContain("applied");
+  });
+});
+
+describe("validateReferralCode", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.resetModules();
+  });
+
+  it("returns invalid for malformed codes without calling edge", async () => {
+    vi.resetModules();
+    const edge = vi.fn();
+    vi.doMock("@/lib/api/payments", () => ({
+      validateReferralViaEdge: edge,
+      recordReferralViaEdge: vi.fn(),
+    }));
+    vi.doMock("@/lib/supabase/client", () => ({
+      supabase: { auth: { updateUser: vi.fn() } },
+    }));
+    const { validateReferralCode } = await import("@/lib/referrals");
+    const result = await validateReferralCode("bad");
+    expect(result.valid).toBe(false);
+    expect(edge).not.toHaveBeenCalled();
+  });
+
+  it("delegates to validate-referral-code edge", async () => {
+    vi.resetModules();
+    vi.doMock("@/lib/api/payments", () => ({
+      validateReferralViaEdge: vi.fn().mockResolvedValue({
+        valid: true,
+        programmeVersion: "referral-v1",
+        code: "OK",
+      }),
+      recordReferralViaEdge: vi.fn(),
+    }));
+    vi.doMock("@/lib/supabase/client", () => ({
+      supabase: { auth: { updateUser: vi.fn() } },
+    }));
+    const { validateReferralCode } = await import("@/lib/referrals");
+    const result = await validateReferralCode("FRIEND01");
+    expect(result.valid).toBe(true);
+    expect(result.programmeVersion).toBe("referral-v1");
+  });
+});
+
+describe("persistPendingReferralToAuthMetadata", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.resetModules();
+    localStorage.clear();
+  });
+
+  it("writes storage code to auth metadata when none exists", async () => {
+    localStorage.setItem(REFERRAL_STORAGE_KEY, "STORE01");
+    vi.resetModules();
+    const updateUser = vi.fn().mockResolvedValue({ error: null });
+    vi.doMock("@/lib/supabase/client", () => ({
+      supabase: { auth: { updateUser } },
+    }));
+    vi.doMock("@/lib/api/payments", () => ({
+      validateReferralViaEdge: vi.fn(),
+      recordReferralViaEdge: vi.fn(),
+    }));
+    const { persistPendingReferralToAuthMetadata } = await import("@/lib/referrals");
+    const code = await persistPendingReferralToAuthMetadata({ user_metadata: {} });
+    expect(code).toBe("STORE01");
+    expect(updateUser).toHaveBeenCalledWith({
+      data: { pending_referral_code: "STORE01" },
+    });
+  });
+
+  it("does not overwrite existing metadata with storage-only code", async () => {
+    localStorage.setItem(REFERRAL_STORAGE_KEY, "OTHER01");
+    vi.resetModules();
+    const updateUser = vi.fn();
+    vi.doMock("@/lib/supabase/client", () => ({
+      supabase: { auth: { updateUser } },
+    }));
+    vi.doMock("@/lib/api/payments", () => ({
+      validateReferralViaEdge: vi.fn(),
+      recordReferralViaEdge: vi.fn(),
+    }));
+    const { persistPendingReferralToAuthMetadata } = await import("@/lib/referrals");
+    const code = await persistPendingReferralToAuthMetadata({
+      user_metadata: { pending_referral_code: "FIRST01" },
+    });
+    expect(code).toBe("FIRST01");
+    expect(updateUser).not.toHaveBeenCalled();
+  });
+});
+
 describe("shouldClearStoredReferral", () => {
   it("clears after a successful award", () => {
     expect(
@@ -274,5 +372,43 @@ describe("referral qualification is server-side only", () => {
     expect(src).not.toMatch(/\.from\(["']profiles["']\)/);
     expect(src).not.toContain("add_credits");
     expect(src).not.toContain("increment_profile_credits");
+  });
+
+  it("mark_referral_converted skips duplicate conversion events", () => {
+    const src = fs.readFileSync(
+      path.join(root, "supabase/migrations/20260905200000_referral_conversion_event_dedupe.sql"),
+      "utf8",
+    );
+    expect(src).toContain("converted_at IS NOT NULL");
+    expect(src).toContain("already_converted");
+  });
+
+  it("validate-referral-code checks programme start_at and end_at", () => {
+    const src = fs.readFileSync(
+      path.join(root, "supabase/functions/validate-referral-code/index.ts"),
+      "utf8",
+    );
+    expect(src).toContain("start_at");
+    expect(src).toContain("end_at");
+  });
+
+  it("record-referral edge emits structured opsLog on claim outcomes", () => {
+    const src = fs.readFileSync(
+      path.join(root, "supabase/functions/record-referral/index.ts"),
+      "utf8",
+    );
+    expect(src).toContain("opsLog");
+    expect(src).toContain("correlation_id");
+    expect(src).toContain("referral_id");
+  });
+
+  it("razorpay-create-order validates pending promo expiry and redemptions", () => {
+    const src = fs.readFileSync(
+      path.join(root, "supabase/functions/razorpay-create-order/index.ts"),
+      "utf8",
+    );
+    expect(src).toContain("isPromoEligible");
+    expect(src).toContain("max_redemptions");
+    expect(src).toContain("valid_until");
   });
 });

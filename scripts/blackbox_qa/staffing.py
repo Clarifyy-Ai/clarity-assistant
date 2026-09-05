@@ -100,7 +100,7 @@ PRIORITY_RANK = {"P0": 0, "P1": 1, "P2": 2, "P3": 3, "P4": 4}
 CYCLE_START = date(2026, 8, 31)
 CYCLE_END = date(2026, 9, 1)
 WINDOW_LABEL = "Complete within 2 days (31 Aug – 1 Sep 2026, IST)"
-SITE_URL = "https://clarify.ai.sltfinanceindia.com"
+SITE_URL = "https://trycareerpilot.com"
 
 TESTER_FOCUS = {
     "Anushka": (

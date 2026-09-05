@@ -1164,9 +1164,9 @@ def build_environments(wb: Workbook):
     ]
     samples = [
         ("Local", "http://localhost:5173", "qzgvjrvtkwlzxpmlddkx (linked)", "Dev Lead", "Read-Write", "npm run dev"),
-        ("Staging / closed beta", "https://clarify.ai.sltfinanceindia.com", "qzgvjrvtkwlzxpmlddkx", "QA Lead", "Read-Write",
+        ("Staging / closed beta", "https://trycareerpilot.com", "qzgvjrvtkwlzxpmlddkx", "QA Lead", "Read-Write",
          "Primary QA target — same project as prod until separate staging exists"),
-        ("Prod (read-only QA)", "https://clarify.ai.sltfinanceindia.com", "qzgvjrvtkwlzxpmlddkx", "QA Lead", "Read-only",
+        ("Prod (read-only QA)", "https://trycareerpilot.com", "qzgvjrvtkwlzxpmlddkx", "QA Lead", "Read-only",
          "Prefer seeded QA_* users; avoid destructive admin tests on shared data"),
     ]
     write_table(ws, "Environments", "B3 (Staging Base URL) powers Feature Inventory Deep Link formulas", headers, samples)

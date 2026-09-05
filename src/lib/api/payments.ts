@@ -15,6 +15,20 @@ export type RecordReferralResponse = {
   };
 };
 
+export type ValidateReferralResponse = {
+  valid: boolean;
+  programmeVersion: string | null;
+  code?: string;
+};
+
+export async function validateReferralViaEdge(
+  referralCode: string,
+): Promise<ValidateReferralResponse> {
+  return invokeFunction<ValidateReferralResponse>("validate-referral-code", {
+    referral_code: referralCode,
+  });
+}
+
 export async function recordReferralViaEdge(
   referralCode: string,
 ): Promise<RecordReferralResponse> {

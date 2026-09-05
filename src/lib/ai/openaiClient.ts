@@ -6,6 +6,9 @@ import { consumeSSEStream } from "@/lib/ai/geminiClient";
 import { ApiClientError } from "@/lib/api/apiClient";
 import type { CoachingContext } from "@/types/ai.types";
 import type { CoachTone, HintStyle } from "@/types/user.types";
+import { classifyCoachQuestion } from "@/lib/ai/coachQuestionClassify";
+import { practiceCoachStylePayload } from "@/lib/ai/practiceCoachContract";
+import { useOverlayStore } from "@/store/overlayStore";
 
 export interface OpenAIStreamOptions {
   question: string;
@@ -43,10 +46,22 @@ export async function streamOpenAIHint(opts: OpenAIStreamOptions): Promise<void>
     opts.mode ??
     (sessionId ? undefined : opts.isLive ? "rehearsal" : "practice");
 
+  const styleFields = practiceCoachStylePayload({
+    hintStyle: context.hint_style ?? useOverlayStore.getState().hint_style,
+    coachTone: context.coach_tone,
+    answerMode: useOverlayStore.getState().answer_mode,
+  });
+
+  const question_class = classifyCoachQuestion(
+    question,
+    context.session_type ?? "behavioral",
+  );
+
   const body = {
     question,
     model: opts.model ?? "gpt-4o",
     interview_type: context.session_type ?? "behavioral",
+    question_class,
     target_company: context.target_company ?? "",
     transcript: context.last_transcript ?? "",
     resume_context: [
@@ -60,6 +75,7 @@ export async function streamOpenAIHint(opts: OpenAIStreamOptions): Promise<void>
     experience_level: context.experience_level ?? "",
     simple_language: simpleLanguage ?? false,
     session_id: sessionId,
+    ...styleFields,
     ...(mode ? { mode } : {}),
   };
 

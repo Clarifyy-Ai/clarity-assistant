@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
+import { withPrepToolContext } from "@/lib/prep/prepToolContext";
 import { createIdempotencyKey } from "@/lib/api/functions";
 import {
   getAiUserFacingError,
@@ -235,10 +236,10 @@ export default function ProjectBuilder() {
     try {
       const techList = techStack.length > 0 ? techStack.join(", ") : "not specified";
       const input = `Project: ${projectName}\nRole: ${role}\nTech Stack: ${techList}\n\nWhat I did:\n${description}${impact ? `\n\nImpact & Metrics:\n${impact}` : ""}${githubUrl ? `\n\nGitHub/Portfolio URL: ${githubUrl}` : ""}`;
-      const data = await fetchEdgeJson<{ result?: string }>("prep-tool", {
+      const data = await fetchEdgeJson<{ result?: string }>("prep-tool", withPrepToolContext({
         tool_id: "project_build",
         input,
-      }, {
+      }), {
         headers: {
           "Idempotency-Key": createIdempotencyKey("prep-tool"),
         },

@@ -127,7 +127,7 @@ Legend: ✅ done · ⚠️ partial · ❌ not done
 
 | Item | Status | Reference |
 |------|--------|-----------|
-| DNS / SSL / CDN | ⚠️ | `clarityapp.ai` + Lovable preview documented in deploy checklist |
+| DNS / SSL / CDN | ⚠️ | `trycareerpilot.com` + Lovable preview documented in deploy checklist |
 | Production secrets rotated | ⚠️ | Manual; `DEPLOY_PRODUCTION_CHECKLIST.md` |
 | DB backups + restore drill | ❌ | Supabase default; drill not recorded |
 | On-call alerting | ❌ | Not configured |

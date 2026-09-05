@@ -81,6 +81,7 @@ import {
   availabilityResult,
   beginAvailabilityCheck,
   beginGenerationSession,
+  beginGenerationSessionFromJob,
   completeAvailabilityCheck,
   completeGenerationSession,
   failAvailabilityCheck,
@@ -625,9 +626,10 @@ export default function GenerateGovPaper(): React.ReactElement {
           setJob(current);
           if (stored?.examId) setExamId(stored.examId);
           if (!isPaperJobTerminal(current.status)) {
-            setGenerationSession(beginGenerationSession(jobId, {
-              idempotencyKey: stored?.idempotencyKey,
-            }));
+            setGenerationSession(beginGenerationSessionFromJob(
+              { jobId, startedAt: current.startedAt, createdAt: current.createdAt },
+              { idempotencyKey: stored?.idempotencyKey },
+            ));
           }
           const status = mapPaperJobPublicStatus(current.status);
           if (isPaperJobTerminal(status)) {
@@ -708,9 +710,10 @@ export default function GenerateGovPaper(): React.ReactElement {
         const status = mapPaperJobPublicStatus(current.status);
         if (!isPaperJobTerminal(status)) {
           setGenerationSession(
-            beginGenerationSession(jobId, {
-              idempotencyKey: stored?.idempotencyKey,
-            }),
+            beginGenerationSessionFromJob(
+              { jobId, startedAt: current.startedAt, createdAt: current.createdAt },
+              { idempotencyKey: stored?.idempotencyKey },
+            ),
           );
         }
         if (isPaperJobTerminal(status)) {
@@ -1316,9 +1319,14 @@ export default function GenerateGovPaper(): React.ReactElement {
       setJob(result);
       if (result.jobId && !isPaperJobTerminal(result.status)) {
         setGenerationSession(
-          beginGenerationSession(result.jobId, {
-            idempotencyKey: idempotencyKeyRef.current ?? undefined,
-          }),
+          beginGenerationSessionFromJob(
+            {
+              jobId: result.jobId,
+              startedAt: result.startedAt,
+              createdAt: result.createdAt,
+            },
+            { idempotencyKey: idempotencyKeyRef.current ?? undefined },
+          ),
         );
       }
       const resumeUserId = user?.id ?? profile?.id;
@@ -1475,9 +1483,14 @@ export default function GenerateGovPaper(): React.ReactElement {
       } else if (isPaperJobStillRunningAdvisory(current) || !isPaperJobTerminal(current.status)) {
         // Client poll window ended — durable job may still be running. Do not cancel credits.
         setGenerationSession((prev) =>
-          beginGenerationSession(current.jobId ?? result.jobId, {
-            idempotencyKey: idempotencyKeyRef.current ?? undefined,
-          }),
+          beginGenerationSessionFromJob(
+            {
+              jobId: current.jobId ?? result.jobId,
+              startedAt: current.startedAt ?? result.startedAt,
+              createdAt: current.createdAt ?? result.createdAt,
+            },
+            { idempotencyKey: idempotencyKeyRef.current ?? undefined },
+          ),
         );
         toast.message(
           current.errorMessage ??
@@ -1547,9 +1560,14 @@ export default function GenerateGovPaper(): React.ReactElement {
         if (latest && !isPaperJobTerminal(latest.status)) {
           setJob(latest);
           setGenerationSession(
-            beginGenerationSession(jobId, {
-              idempotencyKey: idempotencyKeyRef.current ?? undefined,
-            }),
+            beginGenerationSessionFromJob(
+              {
+                jobId,
+                startedAt: latest.startedAt,
+                createdAt: latest.createdAt,
+              },
+              { idempotencyKey: idempotencyKeyRef.current ?? undefined },
+            ),
           );
           await processPaperGenerationJob(jobId).catch(() => undefined);
           const current = await pollJobUntilTerminal(jobId, latest);

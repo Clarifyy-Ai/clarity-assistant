@@ -1,4 +1,4 @@
-import { ENV } from "@/lib/env";
+import { buildShareUrl } from "@/lib/utils";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { scorecardsDB, sessionAnswersDB } from "@/lib/supabase/database";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
@@ -543,8 +543,4 @@ export function useScorecard({ sessionId }: UseScorecardOptions) {
     exportPDF,
     reload: loadScorecard,
   };
-}
-
-function buildShareUrl(token: string): string {
-  return `${ENV.APP_URL || window.location.origin}/share/${token}`;
 }

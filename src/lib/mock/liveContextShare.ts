@@ -59,6 +59,7 @@ export function configFromInterviewSnapshot(
     skills_to_emphasize: snapshot.skills_to_emphasize,
     skills_not_to_claim: snapshot.skills_not_to_claim,
     topics_to_avoid: snapshot.topics_to_avoid,
+    answer_bank_context_ids: snapshot.answer_bank_context_ids,
     text_voice_mode:
       snapshot.input_mode === "text"
         ? "text"

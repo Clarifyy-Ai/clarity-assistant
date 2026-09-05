@@ -1,7 +1,7 @@
 ================================================================================
 CLARIFY AI — POST-DEPLOY FULL TEST (AGENT CONTINUATION RUN)
 ================================================================================
-Site       : https://clarify.ai.sltfinanceindia.com/
+Site       : https://trycareerpilot.com/
 Generated  : 2026-08-06 (continuation via parallel agents)
 Prior run  : CLARIFY_AI_POST_DEPLOY_FULL_TEST_REPORT.txt
 New JSON   : docs/qa/audits/post-deploy-full-2026-08-05T20-05-30-617Z.json

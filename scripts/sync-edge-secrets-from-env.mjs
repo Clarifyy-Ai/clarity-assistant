@@ -147,10 +147,6 @@ function isUsable(value) {
 const PRODUCTION_BROWSER_ORIGINS = [
   "https://trycareerpilot.com",
   "https://www.trycareerpilot.com",
-  "https://clarify.ai.sltfinanceindia.com",
-  "https://clarityapp.ai",
-  "https://www.clarityapp.ai",
-  "https://app.clarityapp.ai",
 ];
 
 function isLoopbackOrigin(origin) {

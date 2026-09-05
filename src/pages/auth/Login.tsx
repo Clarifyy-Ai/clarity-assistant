@@ -33,7 +33,7 @@ import { usePageMeta } from "@/hooks/usePageMeta";
 import { debugLog161d95 } from "@/lib/debug/debugLog161d95";
 import { AuthShell } from "@/components/layout/AuthShell";
 import { sanitizeReturnTo } from "@/lib/auth/safeReturnTo";
-import { getAuthenticatedEntryPath } from "@/lib/auth/postAuthRedirect";
+import { getAuthenticatedEntryPath, resolveOnboardingCompletedForRedirect } from "@/lib/auth/postAuthRedirect";
 import { isUserEmailConfirmed } from "@/lib/auth/emailVerification";
 import { supportMailto } from "@/lib/auth/recoveryActions";
 import {
@@ -62,7 +62,7 @@ import {
   MFA_AAL_START_FAILED_MESSAGE,
   MFA_REQUIRED_REASON,
 } from "@/hooks/useAuth";
-import { extractRefCodeFromSearchParams, getStoredRefCode, storeRefCode } from "@/lib/referrals";
+import { extractRefCodeFromSearchParams, getStoredRefCode, referralCodeSavedMessage, storeRefCode } from "@/lib/referrals";
 
 type LocationState = {
   from?: {
@@ -81,7 +81,6 @@ const TESTIMONIAL = {
 
 const LOCK_KEY = "clarify_login_lock";
 const ATTEMPT_KEY = "clarify_login_attempts";
-const REMEMBER_ME_KEY = "clarify_remember_me";
 /**
  * Client-side UX lockout after failed logins (T-0688).
  * This is NOT authoritative — it can be cleared by wiping localStorage.
@@ -158,15 +157,22 @@ export default function Login(): JSX.Element {
     () => extractRefCodeFromSearchParams(searchParams) ?? getStoredRefCode(),
     [searchParams],
   );
-  const signupHref = isPaidSignupPlan(planFromQuery)
-    ? `/signup?plan=${planFromQuery}${
-        intervalFromQuery === "yearly" ? "&interval=yearly" : ""
-      }`
-    : getPendingPlan()
-      ? `/signup?plan=${getPendingPlan()}${
-          getPendingInterval() === "yearly" ? "&interval=yearly" : ""
+  const signupHref = useMemo(() => {
+    let href = isPaidSignupPlan(planFromQuery)
+      ? `/signup?plan=${planFromQuery}${
+          intervalFromQuery === "yearly" ? "&interval=yearly" : ""
         }`
-      : "/signup";
+      : getPendingPlan()
+        ? `/signup?plan=${getPendingPlan()}${
+            getPendingInterval() === "yearly" ? "&interval=yearly" : ""
+          }`
+        : "/signup";
+    const code = extractRefCodeFromSearchParams(searchParams) ?? getStoredRefCode();
+    if (code) {
+      href += `${href.includes("?") ? "&" : "?"}ref=${encodeURIComponent(code)}`;
+    }
+    return href;
+  }, [planFromQuery, intervalFromQuery, searchParams]);
 
   const authStatus = useAuthStore((state) => state.status);
   const authUser = useAuthStore((state) => state.user);
@@ -177,9 +183,6 @@ export default function Login(): JSX.Element {
   const storeError = useAuthStore((state) => state.error);
 
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(
-    () => safeGetLocalStorageItem(REMEMBER_ME_KEY) === "true"
-  );
   const [lockedUntil, setLockedUntil] = useState<number | null>(null);
   const [lockTick, setLockTick] = useState(0);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -381,14 +384,16 @@ export default function Login(): JSX.Element {
 
     const pendingPlan = getPendingPlan();
     const pendingInterval = getPendingInterval();
-    const isOnboarded = profile?.onboarding_completed === true;
     // Honor deep-link returnTo when present; else paid-plan CTAs → billing; else entry path.
     const preferred =
       explicitReturnTo ??
       (pendingPlan ? billingReturnPathForPlan(pendingPlan, pendingInterval) : null);
     const target = getAuthenticatedEntryPath({
       isAdmin,
-      isOnboarded,
+      isOnboarded: resolveOnboardingCompletedForRedirect({
+        profile,
+        isProfileLoaded,
+      }),
       preferredReturnTo: preferred,
     });
     navigate(target, {
@@ -459,16 +464,6 @@ export default function Login(): JSX.Element {
   }, [lockedUntil, lockTick]);
 
   const displayedError = authError ?? storeError;
-
-  function handleRememberMeChange(checked: boolean): void {
-    setRememberMe(checked);
-
-    if (checked) {
-      safeSetLocalStorageItem(REMEMBER_ME_KEY, "true");
-    } else {
-      safeRemoveLocalStorageItem(REMEMBER_ME_KEY);
-    }
-  }
 
   async function handleLogin(
     data: LoginInput,
@@ -753,9 +748,7 @@ export default function Login(): JSX.Element {
           <div>
           {refCode && (
             <div className="mb-4 px-3 py-2.5 bg-primary/10 border border-primary/20 rounded-xl text-xs text-primary text-center">
-              Referral code{" "}
-              <span className="font-mono font-bold">{refCode}</span> applied —
-              you&apos;ll both earn bonus credits!
+              {referralCodeSavedMessage(refCode)}
             </div>
           )}
           <OAuthProviderSection dividerLabel="or sign in with email" />
@@ -807,21 +800,7 @@ export default function Login(): JSX.Element {
                 }
               />
 
-              <div className="flex items-center justify-between pt-2 mt-1">
-                <label className="flex items-center gap-2.5 cursor-pointer select-none min-h-8">
-                  <input
-                    type="checkbox"
-                    checked={rememberMe}
-                    onChange={(event) =>
-                      handleRememberMeChange(event.target.checked)
-                    }
-                    className="h-4 w-4 rounded border-border text-primary focus:ring-2 focus:ring-primary/40 cursor-pointer"
-                  />
-                  <span className="text-xs text-muted-foreground">
-                    Remember me
-                  </span>
-                </label>
-
+              <div className="flex items-center justify-end pt-2 mt-1">
                 <Link
                   to="/forgot-password"
                   className="text-xs text-primary hover:opacity-80 transition-opacity"

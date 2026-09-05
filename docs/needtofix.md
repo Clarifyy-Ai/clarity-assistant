@@ -69,9 +69,9 @@ Your job is to **read the actual files and functions in this repo, not guess**, 
     - Use the `fetchEdge` helper from `src/network/fetchEdge.ts`
     - Return responses with `getCorsHeaders(req)` from `_shared/cors.ts`
     - Accept origins from:
-      - `https://clarify.ai.sltfinanceindia.com`
-      - `https://clarityapp.ai`
-      - `https://www.clarityapp.ai`
+      - `https://trycareerpilot.com`
+      - `https://trycareerpilot.com`
+      - `https://www.trycareerpilot.com`
       - Localhost dev ports
 - Auth:
   - All user-facing Edge Functions should use `requireAuth(req)` and read `auth.userId` instead of trusting `user_id` from the client.

@@ -1,6 +1,11 @@
 import { buildResumeContextForAI } from "@/lib/documents/interviewContext";
 import { answerBankDB, jobDescriptionsDB } from "@/lib/supabase/database";
 import type { ParsedResume } from "@/types/ai.types";
+import {
+  formatAnswerBankBlock,
+  selectRelevantAnswerBankEntries,
+  type AnswerBankEntryForContext,
+} from "@/lib/ai/answerBankRelevance";
 
 export type SessionAiContext = {
   fingerprint: string;
@@ -30,12 +35,22 @@ export type SessionAiContextInput = {
   frozenResumeText?: string | null;
   /** Prefer frozen JD text / keywords snippet when provided. */
   frozenJdText?: string | null;
+  /** When set, score Answer Bank entries by relevance to this question. */
+  questionForAnswerBank?: string | null;
+  /** Selected Answer Bank IDs to boost in relevance scoring. */
+  answerBankPreferIds?: string[];
+  /** Operation name for cache key differentiation. */
+  operation?: string | null;
 };
 
 export type SessionAiContextLoaders = {
   buildResumeBlock: typeof buildResumeContextForAI;
   loadJdKeywords: (jdId: string) => Promise<string[]>;
-  loadStarStories: (userId: string) => Promise<string>;
+  loadStarStories: (
+    userId: string,
+    question?: string | null,
+    preferIds?: string[],
+  ) => Promise<string>;
 };
 
 const cache = new Map<string, SessionAiContext>();
@@ -46,14 +61,19 @@ export function sessionAiContextFingerprint(input: {
   jdId?: string | null;
   instructions?: string | null;
   contextChecksum?: string | null;
+  operation?: string | null;
+  questionForAnswerBank?: string | null;
 }): string {
   const instructionsKey = (input.instructions ?? "").trim().slice(0, 120);
+  const questionKey = (input.questionForAnswerBank ?? "").trim().slice(0, 80);
   return [
     input.userId,
     input.resumeId ?? "",
     input.jdId ?? "",
     instructionsKey,
     input.contextChecksum ?? "",
+    input.operation ?? "",
+    questionKey,
   ].join("|");
 }
 
@@ -77,30 +97,30 @@ async function defaultJdKeywords(jdId: string): Promise<string[]> {
   return kw.filter((s): s is string => typeof s === "string");
 }
 
-async function defaultStarStories(userId: string): Promise<string> {
+async function defaultStarStories(
+  userId: string,
+  question?: string | null,
+  preferIds: string[] = [],
+): Promise<string> {
   const entries = await answerBankDB.listByUserId(userId);
-  const lines = entries.slice(0, 5).map((entry) => {
-    const enriched = entry as typeof entry & {
-      star_situation?: string | null;
-      star_task?: string | null;
-      star_action?: string | null;
-      star_result?: string | null;
-      summary?: string | null;
-    };
-    const starParts = [
-      enriched.star_situation,
-      enriched.star_task,
-      enriched.star_action,
-      enriched.star_result,
-    ].filter(Boolean);
-    const starText =
-      starParts.length > 0
-        ? starParts.join(" → ")
-        : (enriched.summary ?? enriched.answer_text?.slice(0, 240) ?? "");
-    return `Q: ${entry.question_text}\nSTAR: ${starText}`;
-  });
-  if (!lines.length) return "";
-  return `\n\nRelevant saved STAR stories:\n${lines.join("\n\n")}`;
+  const mapped: AnswerBankEntryForContext[] = entries.map((entry) => ({
+    id: entry.id,
+    question_text: entry.question_text,
+    answer_text: entry.answer_text,
+    star_situation: (entry as { star_situation?: string }).star_situation,
+    star_task: (entry as { star_task?: string }).star_task,
+    star_action: (entry as { star_action?: string }).star_action,
+    star_result: (entry as { star_result?: string }).star_result,
+    summary: (entry as { summary?: string }).summary,
+    tags: (entry as { tags?: string[] }).tags,
+    category: (entry as { category?: string }).category,
+  }));
+
+  const selected = question?.trim()
+    ? selectRelevantAnswerBankEntries(mapped, question, { max: 5, preferIds })
+    : mapped.slice(0, 5);
+
+  return formatAnswerBankBlock(selected);
 }
 
 export const defaultSessionAiContextLoaders: SessionAiContextLoaders = {
@@ -145,7 +165,11 @@ export async function getOrBuildSessionAiContext(
   // Frozen snapshots already embed selected Answer Bank snippets in preference_block.
   if (!input.contextChecksum) {
     try {
-      starStoriesBlock = await loaders.loadStarStories(input.userId);
+      starStoriesBlock = await loaders.loadStarStories(
+        input.userId,
+        input.questionForAnswerBank,
+        input.answerBankPreferIds ?? [],
+      );
     } catch {
       starStoriesBlock = "";
     }

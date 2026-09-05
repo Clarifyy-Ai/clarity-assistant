@@ -181,6 +181,8 @@ export async function routeAnswerGeneration(opts: RouteAnswerGenerationOptions):
       interviewType,
       opts.context.hint_style,
       "offline",
+      undefined,
+      { mode: opts.mode, isLive: opts.mode === "rehearsal" },
     );
     networkStore.setQueuedHintRequest(true);
     return;
@@ -221,7 +223,7 @@ export async function routeAnswerGeneration(opts: RouteAnswerGenerationOptions):
           opts.context.hint_style,
           "ai_unavailable",
           err instanceof Error ? err.message : String(err),
-          { mode: opts.mode },
+          { mode: opts.mode, isLive: opts.mode === "rehearsal" },
         );
         opts.onError?.(err);
       },
@@ -235,7 +237,7 @@ export async function routeAnswerGeneration(opts: RouteAnswerGenerationOptions):
       opts.context.hint_style,
       "ai_unavailable",
       error.message,
-      { mode: opts.mode },
+      { mode: opts.mode, isLive: opts.mode === "rehearsal" },
     );
     opts.onError?.(error);
   }

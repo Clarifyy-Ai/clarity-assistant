@@ -78,7 +78,7 @@ node scripts/deploy-all-edge-functions.mjs
 
 **Recommended `ALLOWED_ORIGINS`:**
 ```
-https://clarify.ai.sltfinanceindia.com,https://clarityapp.ai,https://www.clarityapp.ai,http://localhost:5173
+https://trycareerpilot.com,https://trycareerpilot.com,https://www.trycareerpilot.com,http://localhost:5173
 ```
 
 ### 2. Frontend deploy (30 min)
@@ -90,7 +90,7 @@ VITE_SUPABASE_URL=https://qzgvjrvtkwlzxpmlddkx.supabase.co
 VITE_SUPABASE_ANON_KEY=<anon>
 VITE_SUPABASE_PUBLISHABLE_KEY=<anon>
 VITE_APP_ENV=production
-VITE_APP_URL=https://clarify.ai.sltfinanceindia.com
+VITE_APP_URL=https://trycareerpilot.com
 VITE_DESKTOP_DOWNLOAD_URL_WIN=<after installer upload>
 VITE_STRIPE_PUBLIC_KEY=<pk_live_...>
 # Stripe price IDs — all VITE_STRIPE_PRICE_* vars

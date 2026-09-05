@@ -58,12 +58,8 @@ function getCreditStatus(current: number, limit: number): CreditStatus {
   if (percentage > 95) status = 'critical';
   else if (percentage > 70) status = 'warning';
 
-  // Calculate days until reset (assuming monthly billing)
-  const now = new Date();
-  const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-  const daysUntilReset = Math.ceil(
-    (nextMonth.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
-  );
+  // Wallet balance — no automatic monthly reset (free = one-time signup grant).
+  const daysUntilReset = 0;
 
   return {
     current,
@@ -202,7 +198,7 @@ export function CreditBalance({
               </div>
 
               <span className={cn('text-muted-foreground', textSizes[size].detail)}>
-                Resets in {creditStatus.daysUntilReset}d
+                One-time balance
               </span>
             </div>
           )}

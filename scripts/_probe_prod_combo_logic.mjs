@@ -1,4 +1,4 @@
-const base = "https://clarify.ai.sltfinanceindia.com";
+const base = "https://trycareerpilot.com";
 const js = await (
   await fetch(base + "/assets/ExamSearchCombobox-L2YcOPMO.js")
 ).text();

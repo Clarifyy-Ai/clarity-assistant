@@ -5,11 +5,12 @@
 
 import {
   AI_CREDIT_COSTS,
+  LIVE_ANSWER_LONG_CREDITS,
   type AICreditCostKey,
 } from "@/lib/constants/creditEconomics";
 
 /** Long-answer premium must match Edge `LIVE_ANSWER_LONG_PREMIUM`. */
-const LIVE_ANSWER_LONG_PREMIUM = 4;
+const LIVE_ANSWER_LONG_PREMIUM = LIVE_ANSWER_LONG_CREDITS - AI_CREDIT_COSTS.live_answer;
 
 /** Client aliases → catalogue keys (subset of Edge ACTION_TO_CANONICAL). */
 const ACTION_TO_CANONICAL: Record<string, AICreditCostKey> = {
@@ -18,6 +19,7 @@ const ACTION_TO_CANONICAL: Record<string, AICreditCostKey> = {
   live_feedback: "live_feedback",
   screenshot_answer: "screenshot_answer",
   session_debrief: "session_debrief",
+  generate_debrief: "session_debrief",
   generate_scorecard: "generate_scorecard",
   scorecard_generate: "generate_scorecard",
   ai_coach_message: "ai_coach_message",

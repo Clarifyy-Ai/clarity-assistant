@@ -74,7 +74,7 @@ async function invoke(name, token, body) {
       Authorization: `Bearer ${token}`,
       apikey: anon,
       "Content-Type": "application/json",
-      Origin: "https://clarityapp.ai",
+      Origin: "https://trycareerpilot.com",
     },
     body: JSON.stringify(body ?? {}),
   });

@@ -3,6 +3,7 @@
 // and deep-link construction for the app.
 // ─────────────────────────────────────────────────────────────────────────────
 import { SUPABASE_URL, ENV } from "@/lib/env";
+import { resolvePublicAppOrigin } from "@/lib/auth/redirectUrl";
 
 // ─── Query String ─────────────────────────────────────────────────────────────
 
@@ -166,12 +167,15 @@ export function getBasename(url: string): string {
 
 /**
  * Build an app deep-link URL for sharing.
- * @example buildDeepLink("/session/abc123") → "https://app.clarity.ai/session/abc123"
+ * @example buildDeepLink("/session/abc123") → "https://trycareerpilot.com/session/abc123"
  */
 export function buildDeepLink(path: string, params?: QueryParams): string {
-  const base = typeof window !== "undefined"
-    ? window.location.origin
-    : ENV.APP_URL;
+  const base = resolvePublicAppOrigin({
+    configuredAppUrl: ENV.APP_URL,
+    appEnv: ENV.APP_ENV,
+    windowOrigin:
+      typeof window !== "undefined" ? window.location.origin : null,
+  });
 
   const url = `${base}${path.startsWith("/") ? "" : "/"}${path}`;
   return params ? appendQuery(url, params) : url;

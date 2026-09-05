@@ -39,6 +39,8 @@ import {
   getOrBuildSessionAiContext,
   lastTranscriptSlice,
 } from "@/lib/ai/sessionAiContext";
+import { sanitizeCoachTone } from "@/lib/ai/practiceCoachContract";
+import { loadCompanyResearchBriefBlock } from "@/lib/company/loadCompanyResearchBrief";
 import {
   buildPracticeCoachContextSnapshot,
   frozenResumePromptFromSnapshot,
@@ -111,6 +113,7 @@ import {
   markOverlayProductSessionTerminal,
   teardownOverlayProductSession,
 } from "@/lib/session/overlayProductSession";
+import { hintStyleForStartSession } from "@/lib/session/hintStyleContract";
 import { practiceCoachStartIdempotencyKey } from "@/lib/network/idempotency";
 import { getOverlaySessionAuthority } from "@/store/overlaySessionAuthorityStore";
 import { getLatestInterviewerQuestion } from "@/lib/audio/interviewerQuestions";
@@ -246,7 +249,7 @@ export function useLiveCopilot({
         null,
       years_of_experience: profile?.experience_years ?? null,
       target_company: cfg.company ?? "",
-      coach_tone: ((profile as any)?.coach_tone as any) ?? "supportive",
+      coach_tone: sanitizeCoachTone((profile as { coach_tone?: string })?.coach_tone, "encouraging"),
       hint_style: (cfg.hint_style as any) ?? "short_hints",
       resume_skills: overlay.resume_context?.top_skills ?? [],
       resume_projects: [],
@@ -347,9 +350,29 @@ export function useLiveCopilot({
       const preferenceBlock =
         frozen?.preference_block ||
         buildLivePreferencePromptBlock(cfg, answerBankSnippets);
+
+      let companyResearchBlock = "";
+      const targetCompany = frozen?.company ?? cfg.company ?? base.target_company ?? null;
+      if (targetCompany) {
+        try {
+          const brief = await loadCompanyResearchBriefBlock(userId, targetCompany);
+          if (brief?.promptBlock) companyResearchBlock = brief.promptBlock;
+        } catch {
+          // optional enrichment
+        }
+      }
+
       const resumeWithPrefs = frozen
-        ? resumeBlock
-        : [resumeBlock, preferenceBlock].filter(Boolean).join("\n\n");
+        ? [resumeBlock, companyResearchBlock ? `Company research:\n${companyResearchBlock}` : ""]
+            .filter(Boolean)
+            .join("\n\n")
+        : [
+            resumeBlock,
+            preferenceBlock,
+            companyResearchBlock ? `Company research:\n${companyResearchBlock}` : "",
+          ]
+            .filter(Boolean)
+            .join("\n\n");
 
       return {
         ...base,
@@ -371,6 +394,7 @@ export function useLiveCopilot({
         skills_to_emphasize: frozen?.skills_to_emphasize ?? cfg.skills_to_emphasize ?? [],
         skills_not_to_claim: frozen?.skills_not_to_claim ?? cfg.skills_not_to_claim ?? [],
         answer_bank_context_ids: bankIds,
+        jd_text: frozen?.jd_text ?? docs.jd ?? null,
         ai_context_snapshot_id: frozen?.snapshot_id ?? null,
         ai_context_checksum: frozen?.checksum ?? null,
       };
@@ -504,7 +528,7 @@ export function useLiveCopilot({
           null,
         years_of_experience: profile.experience_years ?? null,
         target_company: cfg.company ?? null,
-        coach_tone: ((profile as any).coach_tone as any) ?? "supportive",
+        coach_tone: sanitizeCoachTone((profile as { coach_tone?: string }).coach_tone, "encouraging"),
         hint_style: (cfg.hint_style as any) ?? "short_hints",
         resume_skills: parsed?.skills ?? [],
         resume_projects: parsed?.projects?.map((p) => p.name).filter(Boolean) ?? [],
@@ -1009,6 +1033,12 @@ export function useLiveCopilot({
       chatAbortRef.current = controller;
 
       try {
+        const frozenSnap = getPracticeCoachContextSnapshot(sessionId);
+        const jdText =
+          frozenSnap?.jd_text?.trim() ||
+          String((context as { jd_text?: string }).jd_text ?? "").trim() ||
+          "";
+
         const { submitCoachChatMessage } = await import("@/lib/ai/coachChatSession");
         return submitCoachChatMessage({
           message: question,
@@ -1018,12 +1048,25 @@ export function useLiveCopilot({
             String(context.session_type ?? "behavioral"),
           recentTranscript: String(context.last_transcript ?? ""),
           resumeContext: String(context.resume_experience_summary ?? ""),
-          jobDescription: Array.isArray(context.jd_required_skills)
-            ? (context.jd_required_skills as string[]).join(", ")
-            : "",
+          jobDescription:
+            jdText ||
+            (Array.isArray(context.jd_required_skills)
+              ? (context.jd_required_skills as string[]).join(", ")
+              : ""),
           recentAnswers: Array.isArray(context.last_3_answer_summaries)
-            ? (context.last_3_answer_summaries as Array<{ summary?: string }>)
-                .map((s) => s.summary ?? "")
+            ? (
+                context.last_3_answer_summaries as Array<{
+                  summary?: string;
+                  question?: string;
+                  key_weakness?: string;
+                  score?: number;
+                }>
+              )
+                .map(
+                  (s) =>
+                    s.summary ??
+                    [s.question, s.key_weakness].filter(Boolean).join(" — "),
+                )
                 .filter(Boolean)
             : [],
           signal: controller.signal,
@@ -1083,7 +1126,7 @@ export function useLiveCopilot({
         sessionIdRef.current = reusableSessionId;
         await activateSession(reusableSessionId);
       } else if (!privateMode) {
-        const apiSessionType = sessionType === "live" ? "rehearsal" : sessionType;
+        const apiSessionType = sessionType;
         if (!startAttemptKeyRef.current) {
           try {
             startAttemptKeyRef.current = crypto.randomUUID().slice(0, 8);
@@ -1103,6 +1146,7 @@ export function useLiveCopilot({
             resume_id: cfg.resume_id ?? null,
             jd_id: cfg.jd_id ?? null,
             model: useOverlayStore.getState().active_model,
+            hint_style: hintStyleForStartSession(cfg.hint_style),
             duration_minutes: cfg.duration_minutes ?? 30,
             practice_context_id: cfg.practice_context_id ?? null,
             source_type: cfg.source_type ?? null,
@@ -1522,8 +1566,10 @@ export function useLiveCopilot({
           /* streak update is best-effort */
         }
 
-        // Populate Analytics scorecards when answers exist (non-blocking).
-        if (answersRecorded > 0 && session.session_id) {
+        // Populate Analytics scorecards when answers or transcript evidence exist.
+        const hasTranscriptEvidence =
+          Boolean(fullTranscript.trim()) && fullTranscript.trim().length >= 40;
+        if ((answersRecorded > 0 || hasTranscriptEvidence) && session.session_id) {
           const sid = session.session_id;
           void enqueueSessionScorecard(sid).then(({ error }) => {
             if (error) {

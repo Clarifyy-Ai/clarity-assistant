@@ -1,8 +1,5 @@
 import { ENV } from "@/lib/env";
-import {
-  PRODUCTION_APP_URL,
-  isLocalhostUrl,
-} from "@/lib/auth/redirectUrl";
+import { resolvePublicAppOrigin } from "@/lib/auth/redirectUrl";
 import { isElectronApp } from "@/lib/platform/isElectron";
 
 type ElectronOpenExternal = {
@@ -15,17 +12,12 @@ type ElectronOpenExternal = {
  * must not hand users a dead localhost resource URL).
  */
 export function getWebAppUrl(path = ""): string {
-  const configured = (ENV.APP_URL ?? "").replace(/\/$/, "");
-  const isProduction = (ENV.APP_ENV ?? "").toLowerCase() === "production";
-  const windowOrigin =
-    typeof window !== "undefined" ? window.location.origin.replace(/\/$/, "") : "";
-
-  let base = configured;
-  if (!base || (isProduction && isLocalhostUrl(base))) {
-    base = isProduction
-      ? PRODUCTION_APP_URL
-      : windowOrigin || PRODUCTION_APP_URL;
-  }
+  const base = resolvePublicAppOrigin({
+    configuredAppUrl: ENV.APP_URL,
+    appEnv: ENV.APP_ENV,
+    windowOrigin:
+      typeof window !== "undefined" ? window.location.origin : null,
+  });
 
   if (!path) return base;
 

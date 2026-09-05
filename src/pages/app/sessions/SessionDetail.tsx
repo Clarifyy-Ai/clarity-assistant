@@ -12,6 +12,7 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import { EmptyState } from "@/components/common/EmptyState";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
+import { AiFormattedOutput } from "@/components/common/AiFormattedOutput";
 import { Modal } from "@/components/ui/Modal";
 import { toast } from "sonner";
 import {
@@ -660,9 +661,7 @@ export default function SessionDetail() {
                 <Brain className="w-4 h-4 text-primary" />
                 Report
               </h3>
-              <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
-                {debriefSummary}
-              </p>
+              <AiFormattedOutput text={debriefSummary} className="text-sm text-foreground leading-relaxed" />
             </Card>
           )}
         </div>
@@ -675,9 +674,7 @@ export default function SessionDetail() {
             <Brain className="w-4 h-4 text-primary" />
             <h3 className="text-sm font-semibold text-foreground">AI Feedback Summary</h3>
           </div>
-          <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
-            {session.ai_feedback}
-          </p>
+          <AiFormattedOutput text={session.ai_feedback} className="text-sm text-foreground leading-relaxed" />
           {session.strengths?.length > 0 && (
             <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>

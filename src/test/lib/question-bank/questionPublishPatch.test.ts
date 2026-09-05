@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   assertPublishableForTrigger,
+  buildQuestionApprovePatch,
   buildQuestionPublishPatch,
   type PublishableQuestionRow,
 } from "@/lib/question-bank/questionPublishPatch";
@@ -21,6 +22,16 @@ const readyMcq: PublishableQuestionRow = {
   topic: "Arithmetic",
   license_type: "ORIGINAL",
 };
+
+describe("buildQuestionApprovePatch", () => {
+  it("sets verify and validation fields required for publish trigger", () => {
+    expect(buildQuestionApprovePatch()).toEqual({
+      review_status: "approved",
+      is_verified: true,
+      validation_status: "valid",
+    });
+  });
+});
 
 describe("buildQuestionPublishPatch", () => {
   it("builds full admin publish patch matching validate_question_publication", () => {

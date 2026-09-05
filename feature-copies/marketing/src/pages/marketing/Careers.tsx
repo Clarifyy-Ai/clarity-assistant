@@ -6,7 +6,7 @@ import { SALES_EMAIL, SUPPORT_EMAIL } from "@/lib/constants/contact";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 import { useEffect } from "react";
 
-const SITE_URL = "https://clarify.ai.sltfinanceindia.com";
+const SITE_URL = "https://trycareerpilot.com";
 
 /**
  * Honest careers surface for TC-PUB-014 — no fake open roles or broken "Apply" CTAs.

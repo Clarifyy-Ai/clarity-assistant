@@ -66,7 +66,7 @@ export function sessionMatchesTypeFilter(
     return type === "practice" || type === "rehearsal" || type === "warmup" || type === "practice_coach";
   }
   if (filter === "live" || filter === "live_copilot") {
-    return type === "live" || type === "live_copilot";
+    return type === "live" || type === "live_copilot" || type === "rehearsal";
   }
   if (filter === "mock" || filter === "mock_interview") {
     return type === "mock" || type === "mock_interview";

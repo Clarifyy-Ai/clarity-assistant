@@ -63,6 +63,31 @@ type BillingSettings = {
   razorpay_enabled: boolean;
 };
 
+type PromoRow = {
+  id: string;
+  code: string;
+  discount_percent: number | null;
+  valid_until: string | null;
+  max_redemptions: number | null;
+  redemption_count: number | null;
+  is_active: boolean;
+};
+
+function isPromoEligible(promo: PromoRow): boolean {
+  if (!promo.is_active) return false;
+  const validUntil = promo.valid_until ? new Date(promo.valid_until) : null;
+  if (validUntil && validUntil <= new Date()) return false;
+  const max = promo.max_redemptions;
+  const used = promo.redemption_count ?? 0;
+  if (max != null && used >= max) return false;
+  return true;
+}
+
+function applyPromoDiscount(amount: number, promo: PromoRow): number {
+  const pct = promo.discount_percent ?? 0;
+  return Math.max(100, Math.round(amount * (1 - pct / 100)));
+}
+
 function json(req: Request, payload: unknown, status: number) {
   return new Response(JSON.stringify(payload), {
     status,
@@ -278,18 +303,10 @@ Deno.serve(async (req: Request) => {
       .ilike("code", code)
       .maybeSingle();
 
-    if (promo) {
-      const validUntil = promo.valid_until ? new Date(promo.valid_until) : null;
-      if (!validUntil || validUntil > new Date()) {
-        const max = promo.max_redemptions;
-        const used = promo.redemption_count ?? 0;
-        if (max == null || used < max) {
-          const pct = promo.discount_percent ?? 0;
-          amount = Math.max(100, Math.round(amount * (1 - pct / 100)));
-          promoId = promo.id;
-          appliedPromo = promo.code;
-        }
-      }
+    if (promo && isPromoEligible(promo as PromoRow)) {
+      amount = applyPromoDiscount(amount, promo as PromoRow);
+      promoId = promo.id;
+      appliedPromo = promo.code;
     }
   } else {
     const { data: profile } = await db
@@ -298,15 +315,19 @@ Deno.serve(async (req: Request) => {
       .eq("id", userId)
       .single();
     if (profile?.pending_promo_code) {
+      const pendingCode = profile.pending_promo_code.toUpperCase();
       const { data: promo } = await db
         .from("promo_codes")
         .select("*")
-        .ilike("code", profile.pending_promo_code)
+        .ilike("code", pendingCode)
         .eq("is_active", true)
         .maybeSingle();
-      if (promo) {
-        const pct = promo.discount_percent ?? 0;
-        amount = Math.max(100, Math.round(amount * (1 - pct / 100)));
+      if (
+        promo &&
+        promo.code.toUpperCase() === pendingCode &&
+        isPromoEligible(promo as PromoRow)
+      ) {
+        amount = applyPromoDiscount(amount, promo as PromoRow);
         promoId = promo.id;
         appliedPromo = promo.code;
       }

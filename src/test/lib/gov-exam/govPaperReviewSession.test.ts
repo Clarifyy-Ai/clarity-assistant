@@ -6,6 +6,8 @@ import {
   availabilityResult,
   beginAvailabilityCheck,
   beginGenerationSession,
+  beginGenerationSessionFromJob,
+  resolveGenerationStartTimeMs,
   completeAvailabilityCheck,
   completeGenerationSession,
   failAvailabilityCheck,
@@ -189,5 +191,16 @@ describe("govPaperReviewSession generation", () => {
     const active = beginGenerationSession(jobId, { nowMs: 1_000 });
     const other = completeGenerationSession(active, "other-job", "x", 2_000);
     expect(other).toBe(active);
+  });
+
+  it("uses server started_at for generation timer origin", () => {
+    const startedAt = "2026-09-05T10:00:00.000Z";
+    const startMs = resolveGenerationStartTimeMs({ startedAt, createdAt: null });
+    const session = beginGenerationSessionFromJob(
+      { jobId, startedAt, createdAt: null },
+      { nowMs: startMs + 45_000 },
+    );
+    expect(session.phase).toBe("active");
+    expect(generationElapsedSeconds(session, startMs + 45_000)).toBe(45);
   });
 });

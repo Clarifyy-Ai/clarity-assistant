@@ -148,7 +148,7 @@ function LiveOverlaySession() {
 
   const call = useCallSession({
     config,
-    sessionType: "rehearsal",
+    sessionType: "live",
     existingSessionId: restoreSessionId,
   });
   const copilot = call.copilot;
@@ -275,7 +275,7 @@ function LiveOverlaySession() {
     if (restoreAttemptedRef.current) return;
     restoreAttemptedRef.current = true;
     let cancelled = false;
-    void restoreOwnedSession({ session_type: "rehearsal" })
+    void restoreOwnedSession({ session_type: "live" })
       .then((restored) => {
         if (cancelled || didEndRef.current) return;
         const outcome = classifyPracticeLeaseResult(restored);

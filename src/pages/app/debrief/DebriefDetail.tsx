@@ -15,6 +15,7 @@ import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/common/EmptyState";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
+import { AiFormattedOutput } from "@/components/common/AiFormattedOutput";
 import {
   Brain, TrendingUp,
   AlertTriangle, CheckCircle, Target,
@@ -485,9 +486,10 @@ export default function DebriefDetail() {
               </p>
             )}
             {debrief.summary && (
-              <p className="text-sm text-foreground leading-relaxed mt-3">
-                {debrief.summary}
-              </p>
+              <AiFormattedOutput
+                text={debrief.summary}
+                className="text-sm text-foreground leading-relaxed mt-3"
+              />
             )}
             {!debrief.summary && (
               <p className="text-sm text-muted-foreground mt-3">

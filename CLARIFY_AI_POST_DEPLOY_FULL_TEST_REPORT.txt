@@ -1,7 +1,7 @@
 ================================================================================
 CLARIFY AI — POST-DEPLOY FULL TEST REPORT
 ================================================================================
-Site      : https://clarify.ai.sltfinanceindia.com
+Site      : https://trycareerpilot.com
 Generated : 2026-08-05T20:17:20.522Z
 Summary   : PASS=61 FAIL=2 WARN=2 BLOCKED=0
 Decision  : CONDITIONAL GO
@@ -89,39 +89,39 @@ PHASE: AUTH
 [PASS] Admin admin role
   isAdmin=true
 [PASS] invalid password UI
-  url=https://clarify.ai.sltfinanceindia.com/login
+  url=https://trycareerpilot.com/login
 [PASS] anon /app/dashboard → login
-  url=https://clarify.ai.sltfinanceindia.com/login?returnTo=%2Fapp%2Fdashboard
+  url=https://trycareerpilot.com/login?returnTo=%2Fapp%2Fdashboard
 [PASS] returnTo present
-  url=https://clarify.ai.sltfinanceindia.com/login?returnTo=%2Fapp%2Fdashboard
+  url=https://trycareerpilot.com/login?returnTo=%2Fapp%2Fdashboard
 [PASS] Pro UI login
-  ms=4240 url=https://clarify.ai.sltfinanceindia.com/app/dashboard profileErr=false
+  ms=4240 url=https://trycareerpilot.com/app/dashboard profileErr=false
 [PASS] Pro hard refresh session
-  url=https://clarify.ai.sltfinanceindia.com/app/dashboard
+  url=https://trycareerpilot.com/app/dashboard
 [PASS] Pro /app/live
-  url=https://clarify.ai.sltfinanceindia.com/app/live
+  url=https://trycareerpilot.com/app/live
 [PASS] Pro /app/mock
-  url=https://clarify.ai.sltfinanceindia.com/app/mock
+  url=https://trycareerpilot.com/app/mock
 [PASS] Pro /app/prep
-  url=https://clarify.ai.sltfinanceindia.com/app/prep
+  url=https://trycareerpilot.com/app/prep
 [PASS] Pro /app/answers
-  url=https://clarify.ai.sltfinanceindia.com/app/answers
+  url=https://trycareerpilot.com/app/answers
 [PASS] Pro /app/sessions
-  url=https://clarify.ai.sltfinanceindia.com/app/sessions
+  url=https://trycareerpilot.com/app/sessions
 [PASS] Pro /app/settings/profile
-  url=https://clarify.ai.sltfinanceindia.com/app/settings/profile
+  url=https://trycareerpilot.com/app/settings/profile
 [PASS] Pro /app/usage
-  url=https://clarify.ai.sltfinanceindia.com/app/usage
+  url=https://trycareerpilot.com/app/usage
 [PASS] Pro admin denied
   Access Denied You don't have admin privileges to access this page. Go to Dashboard Cookie Notice We use essential co
 [PASS] logout clears /app access
-  url=https://clarify.ai.sltfinanceindia.com/login?returnTo=%2Fapp%2Fdashboard
+  url=https://trycareerpilot.com/login?returnTo=%2Fapp%2Fdashboard
 [PASS] Free UI shell
   ms=3936 shell=Career Pilot PRACTICE Dashboard Practice Coach Mock Interview Prep Lab Gov Exam Mock Tests PROGRESS Session History Skills Analytics Credits & Usage Debrief Referrals Documents Answer Bank PLANNER 
 [PASS] Admin UI portal
   ms=3766 snip=Admin Career Pilot control panel USERS & SUPPORT Users Live Chat Support Audit Log CONTENT Questions Bulk Upload Seed / Import QA Checklist GOV EXAMS Sourc
 [PASS] Max UI login
-  ms=3922 url=https://clarify.ai.sltfinanceindia.com/app/dashboard
+  ms=3922 url=https://trycareerpilot.com/app/dashboard
 --------------------------------------------------------------------------------
 PHASE: SECURITY
 --------------------------------------------------------------------------------
@@ -140,13 +140,13 @@ PHASE: SECURITY
 PHASE: RESPONSIVE
 --------------------------------------------------------------------------------
 [PASS] dashboard iphone-ish 375x812
-  hang=false overflowX=false url=https://clarify.ai.sltfinanceindia.com/app/dashboard
+  hang=false overflowX=false url=https://trycareerpilot.com/app/dashboard
 [PASS] dashboard pixel-ish 390x844
-  hang=false overflowX=false url=https://clarify.ai.sltfinanceindia.com/app/dashboard
+  hang=false overflowX=false url=https://trycareerpilot.com/app/dashboard
 [PASS] dashboard tablet 768x1024
-  hang=false overflowX=false url=https://clarify.ai.sltfinanceindia.com/app/dashboard
+  hang=false overflowX=false url=https://trycareerpilot.com/app/dashboard
 [PASS] dashboard desktop 1440x900
-  hang=false overflowX=false url=https://clarify.ai.sltfinanceindia.com/app/dashboard
+  hang=false overflowX=false url=https://trycareerpilot.com/app/dashboard
 --------------------------------------------------------------------------------
 PHASE: UX
 --------------------------------------------------------------------------------

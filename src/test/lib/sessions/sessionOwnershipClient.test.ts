@@ -14,7 +14,7 @@ describe("session ownership — client defense in depth", () => {
     const hook = read("src/hooks/useScorecard.ts");
     expect(hook).toContain("getBySessionIdForUser(sessionId, userId)");
     expect(hook).toContain("listBySessionIdForUser(sessionId, userId)");
-    expect(hook).toContain("scorecardsDB.createShare(sessionId)");
+    expect(hook).toContain("issueShareToken(sessionId, \"issue\")");
     expect(hook).not.toContain("markShared(sessionId, userId, token)");
     expect(hook).not.toContain("getBySessionId(sessionId)");
     expect(hook).not.toContain("listBySessionId(sessionId)");

@@ -53,14 +53,14 @@
       "Tester": "Anushka",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login PRO_USER_01.\n2. Navigate to https://clarify.ai.sltfinanceindia.com/app/live via sidebar or URL.\n3. Wait up to 15s.\n4. Classify: Fully Working UI load / Plan gate / Feature flag / Error / Empty.",
+      "Exact Steps": "1. Login PRO_USER_01.\n2. Navigate to https://trycareerpilot.com/app/live via sidebar or URL.\n3. Wait up to 15s.\n4. Classify: Fully Working UI load / Plan gate / Feature flag / Error / Empty.",
       "Expected Result (per step)": "1. Authenticated.\n2. Route resolves.\n3. Page shows real UI, plan upgrade, disabled feature message, or clear error — not infinite spinner.\n4. Classification recorded in Notes + Application Inventory.",
       "Final Expected Result": "Practice Coach surface is reachable and classifiable from user perspective.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/live"
+          "url": "https://trycareerpilot.com/app/live"
         }
       ]
     },
@@ -83,14 +83,14 @@
       "Tester": "Anushka",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login PRO_USER_01.\n2. Navigate to https://clarify.ai.sltfinanceindia.com/app/mock via sidebar or URL.\n3. Wait up to 15s.\n4. Classify: Fully Working UI load / Plan gate / Feature flag / Error / Empty.",
+      "Exact Steps": "1. Login PRO_USER_01.\n2. Navigate to https://trycareerpilot.com/app/mock via sidebar or URL.\n3. Wait up to 15s.\n4. Classify: Fully Working UI load / Plan gate / Feature flag / Error / Empty.",
       "Expected Result (per step)": "1. Authenticated.\n2. Route resolves.\n3. Page shows real UI, plan upgrade, disabled feature message, or clear error — not infinite spinner.\n4. Classification recorded in Notes + Application Inventory.",
       "Final Expected Result": "Mock Interview surface is reachable and classifiable from user perspective.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/mock"
+          "url": "https://trycareerpilot.com/app/mock"
         }
       ]
     },
@@ -113,14 +113,14 @@
       "Tester": "Anushka",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login PRO_USER_01.\n2. Navigate to https://clarify.ai.sltfinanceindia.com/app/mock-test via sidebar or URL.\n3. Wait up to 15s.\n4. Classify: Fully Working UI load / Plan gate / Feature flag / Error / Empty.",
+      "Exact Steps": "1. Login PRO_USER_01.\n2. Navigate to https://trycareerpilot.com/app/mock-test via sidebar or URL.\n3. Wait up to 15s.\n4. Classify: Fully Working UI load / Plan gate / Feature flag / Error / Empty.",
       "Expected Result (per step)": "1. Authenticated.\n2. Route resolves.\n3. Page shows real UI, plan upgrade, disabled feature message, or clear error — not infinite spinner.\n4. Classification recorded in Notes + Application Inventory.",
       "Final Expected Result": "Gov Exams hub surface is reachable and classifiable from user perspective.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/mock-test"
+          "url": "https://trycareerpilot.com/app/mock-test"
         }
       ]
     },
@@ -143,14 +143,14 @@
       "Tester": "Anushka",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login PRO_USER_01.\n2. Navigate to https://clarify.ai.sltfinanceindia.com/app/prep via sidebar or URL.\n3. Wait up to 15s.\n4. Classify: Fully Working UI load / Plan gate / Feature flag / Error / Empty.",
+      "Exact Steps": "1. Login PRO_USER_01.\n2. Navigate to https://trycareerpilot.com/app/prep via sidebar or URL.\n3. Wait up to 15s.\n4. Classify: Fully Working UI load / Plan gate / Feature flag / Error / Empty.",
       "Expected Result (per step)": "1. Authenticated.\n2. Route resolves.\n3. Page shows real UI, plan upgrade, disabled feature message, or clear error — not infinite spinner.\n4. Classification recorded in Notes + Application Inventory.",
       "Final Expected Result": "Prep Lab surface is reachable and classifiable from user perspective.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/prep"
+          "url": "https://trycareerpilot.com/app/prep"
         }
       ]
     },
@@ -173,14 +173,14 @@
       "Tester": "Anushka",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login PRO_USER_01.\n2. Navigate to https://clarify.ai.sltfinanceindia.com/app/sessions via sidebar or URL.\n3. Wait up to 15s.\n4. Classify: Fully Working UI load / Plan gate / Feature flag / Error / Empty.",
+      "Exact Steps": "1. Login PRO_USER_01.\n2. Navigate to https://trycareerpilot.com/app/sessions via sidebar or URL.\n3. Wait up to 15s.\n4. Classify: Fully Working UI load / Plan gate / Feature flag / Error / Empty.",
       "Expected Result (per step)": "1. Authenticated.\n2. Route resolves.\n3. Page shows real UI, plan upgrade, disabled feature message, or clear error — not infinite spinner.\n4. Classification recorded in Notes + Application Inventory.",
       "Final Expected Result": "Sessions surface is reachable and classifiable from user perspective.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/sessions"
+          "url": "https://trycareerpilot.com/app/sessions"
         }
       ]
     },
@@ -203,14 +203,14 @@
       "Tester": "Anushka",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login PRO_USER_01.\n2. Navigate to https://clarify.ai.sltfinanceindia.com/app/documents via sidebar or URL.\n3. Wait up to 15s.\n4. Classify: Fully Working UI load / Plan gate / Feature flag / Error / Empty.",
+      "Exact Steps": "1. Login PRO_USER_01.\n2. Navigate to https://trycareerpilot.com/app/documents via sidebar or URL.\n3. Wait up to 15s.\n4. Classify: Fully Working UI load / Plan gate / Feature flag / Error / Empty.",
       "Expected Result (per step)": "1. Authenticated.\n2. Route resolves.\n3. Page shows real UI, plan upgrade, disabled feature message, or clear error — not infinite spinner.\n4. Classification recorded in Notes + Application Inventory.",
       "Final Expected Result": "Documents surface is reachable and classifiable from user perspective.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/documents"
+          "url": "https://trycareerpilot.com/app/documents"
         }
       ]
     },
@@ -233,14 +233,14 @@
       "Tester": "Anushka",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login PRO_USER_01.\n2. Navigate to https://clarify.ai.sltfinanceindia.com/app/answers via sidebar or URL.\n3. Wait up to 15s.\n4. Classify: Fully Working UI load / Plan gate / Feature flag / Error / Empty.",
+      "Exact Steps": "1. Login PRO_USER_01.\n2. Navigate to https://trycareerpilot.com/app/answers via sidebar or URL.\n3. Wait up to 15s.\n4. Classify: Fully Working UI load / Plan gate / Feature flag / Error / Empty.",
       "Expected Result (per step)": "1. Authenticated.\n2. Route resolves.\n3. Page shows real UI, plan upgrade, disabled feature message, or clear error — not infinite spinner.\n4. Classification recorded in Notes + Application Inventory.",
       "Final Expected Result": "Answer Bank surface is reachable and classifiable from user perspective.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/answers"
+          "url": "https://trycareerpilot.com/app/answers"
         }
       ]
     },
@@ -263,14 +263,14 @@
       "Tester": "Anushka",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login PRO_USER_01.\n2. Navigate to https://clarify.ai.sltfinanceindia.com/app/interviews via sidebar or URL.\n3. Wait up to 15s.\n4. Classify: Fully Working UI load / Plan gate / Feature flag / Error / Empty.",
+      "Exact Steps": "1. Login PRO_USER_01.\n2. Navigate to https://trycareerpilot.com/app/interviews via sidebar or URL.\n3. Wait up to 15s.\n4. Classify: Fully Working UI load / Plan gate / Feature flag / Error / Empty.",
       "Expected Result (per step)": "1. Authenticated.\n2. Route resolves.\n3. Page shows real UI, plan upgrade, disabled feature message, or clear error — not infinite spinner.\n4. Classification recorded in Notes + Application Inventory.",
       "Final Expected Result": "Interviews scheduler surface is reachable and classifiable from user perspective.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/interviews"
+          "url": "https://trycareerpilot.com/app/interviews"
         }
       ]
     },
@@ -293,14 +293,14 @@
       "Tester": "Anushka",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login PRO_USER_01.\n2. Navigate to https://clarify.ai.sltfinanceindia.com/app/companies via sidebar or URL.\n3. Wait up to 15s.\n4. Classify: Fully Working UI load / Plan gate / Feature flag / Error / Empty.",
+      "Exact Steps": "1. Login PRO_USER_01.\n2. Navigate to https://trycareerpilot.com/app/companies via sidebar or URL.\n3. Wait up to 15s.\n4. Classify: Fully Working UI load / Plan gate / Feature flag / Error / Empty.",
       "Expected Result (per step)": "1. Authenticated.\n2. Route resolves.\n3. Page shows real UI, plan upgrade, disabled feature message, or clear error — not infinite spinner.\n4. Classification recorded in Notes + Application Inventory.",
       "Final Expected Result": "Companies surface is reachable and classifiable from user perspective.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/companies"
+          "url": "https://trycareerpilot.com/app/companies"
         }
       ]
     },
@@ -323,14 +323,14 @@
       "Tester": "Anushka",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login PRO_USER_01.\n2. Navigate to https://clarify.ai.sltfinanceindia.com/app/analytics via sidebar or URL.\n3. Wait up to 15s.\n4. Classify: Fully Working UI load / Plan gate / Feature flag / Error / Empty.",
+      "Exact Steps": "1. Login PRO_USER_01.\n2. Navigate to https://trycareerpilot.com/app/analytics via sidebar or URL.\n3. Wait up to 15s.\n4. Classify: Fully Working UI load / Plan gate / Feature flag / Error / Empty.",
       "Expected Result (per step)": "1. Authenticated.\n2. Route resolves.\n3. Page shows real UI, plan upgrade, disabled feature message, or clear error — not infinite spinner.\n4. Classification recorded in Notes + Application Inventory.",
       "Final Expected Result": "Analytics surface is reachable and classifiable from user perspective.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/analytics"
+          "url": "https://trycareerpilot.com/app/analytics"
         }
       ]
     },
@@ -353,14 +353,14 @@
       "Tester": "Anushka",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login PRO_USER_01.\n2. Navigate to https://clarify.ai.sltfinanceindia.com/app/debriefs via sidebar or URL.\n3. Wait up to 15s.\n4. Classify: Fully Working UI load / Plan gate / Feature flag / Error / Empty.",
+      "Exact Steps": "1. Login PRO_USER_01.\n2. Navigate to https://trycareerpilot.com/app/debriefs via sidebar or URL.\n3. Wait up to 15s.\n4. Classify: Fully Working UI load / Plan gate / Feature flag / Error / Empty.",
       "Expected Result (per step)": "1. Authenticated.\n2. Route resolves.\n3. Page shows real UI, plan upgrade, disabled feature message, or clear error — not infinite spinner.\n4. Classification recorded in Notes + Application Inventory.",
       "Final Expected Result": "Debriefs surface is reachable and classifiable from user perspective.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/debriefs"
+          "url": "https://trycareerpilot.com/app/debriefs"
         }
       ]
     },
@@ -383,14 +383,14 @@
       "Tester": "Anushka",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login PRO_USER_01.\n2. Navigate to https://clarify.ai.sltfinanceindia.com/app/learn via sidebar or URL.\n3. Wait up to 15s.\n4. Classify: Fully Working UI load / Plan gate / Feature flag / Error / Empty.",
+      "Exact Steps": "1. Login PRO_USER_01.\n2. Navigate to https://trycareerpilot.com/app/learn via sidebar or URL.\n3. Wait up to 15s.\n4. Classify: Fully Working UI load / Plan gate / Feature flag / Error / Empty.",
       "Expected Result (per step)": "1. Authenticated.\n2. Route resolves.\n3. Page shows real UI, plan upgrade, disabled feature message, or clear error — not infinite spinner.\n4. Classification recorded in Notes + Application Inventory.",
       "Final Expected Result": "Learning Hub surface is reachable and classifiable from user perspective.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/learn"
+          "url": "https://trycareerpilot.com/app/learn"
         }
       ]
     },
@@ -413,14 +413,14 @@
       "Tester": "Anushka",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login PRO_USER_01.\n2. Navigate to https://clarify.ai.sltfinanceindia.com/app/community via sidebar or URL.\n3. Wait up to 15s.\n4. Classify: Fully Working UI load / Plan gate / Feature flag / Error / Empty.",
+      "Exact Steps": "1. Login PRO_USER_01.\n2. Navigate to https://trycareerpilot.com/app/community via sidebar or URL.\n3. Wait up to 15s.\n4. Classify: Fully Working UI load / Plan gate / Feature flag / Error / Empty.",
       "Expected Result (per step)": "1. Authenticated.\n2. Route resolves.\n3. Page shows real UI, plan upgrade, disabled feature message, or clear error — not infinite spinner.\n4. Classification recorded in Notes + Application Inventory.",
       "Final Expected Result": "Community surface is reachable and classifiable from user perspective.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/community"
+          "url": "https://trycareerpilot.com/app/community"
         }
       ]
     },
@@ -443,14 +443,14 @@
       "Tester": "Anushka",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login PRO_USER_01.\n2. Navigate to https://clarify.ai.sltfinanceindia.com/app/coding via sidebar or URL.\n3. Wait up to 15s.\n4. Classify: Fully Working UI load / Plan gate / Feature flag / Error / Empty.",
+      "Exact Steps": "1. Login PRO_USER_01.\n2. Navigate to https://trycareerpilot.com/app/coding via sidebar or URL.\n3. Wait up to 15s.\n4. Classify: Fully Working UI load / Plan gate / Feature flag / Error / Empty.",
       "Expected Result (per step)": "1. Authenticated.\n2. Route resolves.\n3. Page shows real UI, plan upgrade, disabled feature message, or clear error — not infinite spinner.\n4. Classification recorded in Notes + Application Inventory.",
       "Final Expected Result": "Coding Lab surface is reachable and classifiable from user perspective.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/coding"
+          "url": "https://trycareerpilot.com/app/coding"
         }
       ]
     },
@@ -473,14 +473,14 @@
       "Tester": "Anushka",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login PRO_USER_01.\n2. Navigate to https://clarify.ai.sltfinanceindia.com/app/practice-workspace via sidebar or URL.\n3. Wait up to 15s.\n4. Classify: Fully Working UI load / Plan gate / Feature flag / Error / Empty.",
+      "Exact Steps": "1. Login PRO_USER_01.\n2. Navigate to https://trycareerpilot.com/app/practice-workspace via sidebar or URL.\n3. Wait up to 15s.\n4. Classify: Fully Working UI load / Plan gate / Feature flag / Error / Empty.",
       "Expected Result (per step)": "1. Authenticated.\n2. Route resolves.\n3. Page shows real UI, plan upgrade, disabled feature message, or clear error — not infinite spinner.\n4. Classification recorded in Notes + Application Inventory.",
       "Final Expected Result": "Practice workspace surface is reachable and classifiable from user perspective.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/practice-workspace"
+          "url": "https://trycareerpilot.com/app/practice-workspace"
         }
       ]
     },
@@ -503,14 +503,14 @@
       "Tester": "Anushka",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login PRO_USER_01.\n2. Navigate to https://clarify.ai.sltfinanceindia.com/app/plan via sidebar or URL.\n3. Wait up to 15s.\n4. Classify: Fully Working UI load / Plan gate / Feature flag / Error / Empty.",
+      "Exact Steps": "1. Login PRO_USER_01.\n2. Navigate to https://trycareerpilot.com/app/plan via sidebar or URL.\n3. Wait up to 15s.\n4. Classify: Fully Working UI load / Plan gate / Feature flag / Error / Empty.",
       "Expected Result (per step)": "1. Authenticated.\n2. Route resolves.\n3. Page shows real UI, plan upgrade, disabled feature message, or clear error — not infinite spinner.\n4. Classification recorded in Notes + Application Inventory.",
       "Final Expected Result": "Practice plan surface is reachable and classifiable from user perspective.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/plan"
+          "url": "https://trycareerpilot.com/app/plan"
         }
       ]
     },
@@ -533,14 +533,14 @@
       "Tester": "Anushka",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login PRO_USER_01.\n2. Navigate to https://clarify.ai.sltfinanceindia.com/app/question-bank via sidebar or URL.\n3. Wait up to 15s.\n4. Classify: Fully Working UI load / Plan gate / Feature flag / Error / Empty.",
+      "Exact Steps": "1. Login PRO_USER_01.\n2. Navigate to https://trycareerpilot.com/app/question-bank via sidebar or URL.\n3. Wait up to 15s.\n4. Classify: Fully Working UI load / Plan gate / Feature flag / Error / Empty.",
       "Expected Result (per step)": "1. Authenticated.\n2. Route resolves.\n3. Page shows real UI, plan upgrade, disabled feature message, or clear error — not infinite spinner.\n4. Classification recorded in Notes + Application Inventory.",
       "Final Expected Result": "Question bank surface is reachable and classifiable from user perspective.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/question-bank"
+          "url": "https://trycareerpilot.com/app/question-bank"
         }
       ]
     },
@@ -563,14 +563,14 @@
       "Tester": "Anushka",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login PRO_USER_01.\n2. Navigate to https://clarify.ai.sltfinanceindia.com/app/assessments via sidebar or URL.\n3. Wait up to 15s.\n4. Classify: Fully Working UI load / Plan gate / Feature flag / Error / Empty.",
+      "Exact Steps": "1. Login PRO_USER_01.\n2. Navigate to https://trycareerpilot.com/app/assessments via sidebar or URL.\n3. Wait up to 15s.\n4. Classify: Fully Working UI load / Plan gate / Feature flag / Error / Empty.",
       "Expected Result (per step)": "1. Authenticated.\n2. Route resolves.\n3. Page shows real UI, plan upgrade, disabled feature message, or clear error — not infinite spinner.\n4. Classification recorded in Notes + Application Inventory.",
       "Final Expected Result": "Assessments surface is reachable and classifiable from user perspective.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/assessments"
+          "url": "https://trycareerpilot.com/app/assessments"
         }
       ]
     },
@@ -593,14 +593,14 @@
       "Tester": "Anushka",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login PRO_USER_01.\n2. Navigate to https://clarify.ai.sltfinanceindia.com/app/library via sidebar or URL.\n3. Wait up to 15s.\n4. Classify: Fully Working UI load / Plan gate / Feature flag / Error / Empty.",
+      "Exact Steps": "1. Login PRO_USER_01.\n2. Navigate to https://trycareerpilot.com/app/library via sidebar or URL.\n3. Wait up to 15s.\n4. Classify: Fully Working UI load / Plan gate / Feature flag / Error / Empty.",
       "Expected Result (per step)": "1. Authenticated.\n2. Route resolves.\n3. Page shows real UI, plan upgrade, disabled feature message, or clear error — not infinite spinner.\n4. Classification recorded in Notes + Application Inventory.",
       "Final Expected Result": "Document library surface is reachable and classifiable from user perspective.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/library"
+          "url": "https://trycareerpilot.com/app/library"
         }
       ]
     },
@@ -623,14 +623,14 @@
       "Tester": "Anushka",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login PRO_USER_01.\n2. Navigate to https://clarify.ai.sltfinanceindia.com/app/usage via sidebar or URL.\n3. Wait up to 15s.\n4. Classify: Fully Working UI load / Plan gate / Feature flag / Error / Empty.",
+      "Exact Steps": "1. Login PRO_USER_01.\n2. Navigate to https://trycareerpilot.com/app/usage via sidebar or URL.\n3. Wait up to 15s.\n4. Classify: Fully Working UI load / Plan gate / Feature flag / Error / Empty.",
       "Expected Result (per step)": "1. Authenticated.\n2. Route resolves.\n3. Page shows real UI, plan upgrade, disabled feature message, or clear error — not infinite spinner.\n4. Classification recorded in Notes + Application Inventory.",
       "Final Expected Result": "Usage surface is reachable and classifiable from user perspective.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/usage"
+          "url": "https://trycareerpilot.com/app/usage"
         }
       ]
     },
@@ -654,7 +654,7 @@
       "Tester": "Anushka",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login PRO_USER_01.\n2. Navigate to https://clarify.ai.sltfinanceindia.com/app/settings/profile via sidebar or URL.\n3. Wait up to 15s.\n4. Classify: Fully Working UI load / Plan gate / Feature flag / Error / Empty.",
+      "Exact Steps": "1. Login PRO_USER_01.\n2. Navigate to https://trycareerpilot.com/app/settings/profile via sidebar or URL.\n3. Wait up to 15s.\n4. Classify: Fully Working UI load / Plan gate / Feature flag / Error / Empty.",
       "Expected Result (per step)": "1. Authenticated.\n2. Route resolves.\n3. Page shows real UI, plan upgrade, disabled feature message, or clear error — not infinite spinner.\n4. Classification recorded in Notes + Application Inventory.",
       "Final Expected Result": "Settings surface is reachable and classifiable from user perspective.",
       "Screenshot / Evidence Requirement": "#VALUE!",
@@ -668,7 +668,7 @@
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/settings/profile"
+          "url": "https://trycareerpilot.com/app/settings/profile"
         }
       ]
     },
@@ -691,14 +691,14 @@
       "Tester": "Anushka",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login PRO_USER_01.\n2. Navigate to https://clarify.ai.sltfinanceindia.com/app/guide via sidebar or URL.\n3. Wait up to 15s.\n4. Classify: Fully Working UI load / Plan gate / Feature flag / Error / Empty.",
+      "Exact Steps": "1. Login PRO_USER_01.\n2. Navigate to https://trycareerpilot.com/app/guide via sidebar or URL.\n3. Wait up to 15s.\n4. Classify: Fully Working UI load / Plan gate / Feature flag / Error / Empty.",
       "Expected Result (per step)": "1. Authenticated.\n2. Route resolves.\n3. Page shows real UI, plan upgrade, disabled feature message, or clear error — not infinite spinner.\n4. Classification recorded in Notes + Application Inventory.",
       "Final Expected Result": "Guide surface is reachable and classifiable from user perspective.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/guide"
+          "url": "https://trycareerpilot.com/app/guide"
         }
       ]
     },
@@ -722,9 +722,9 @@
       "Account ID": "GUEST",
       "Tester": "Venkat",
       "Preconditions": "Logged out. Incognito. No extensions blocking scripts.",
-      "Test Data": "URL=https://clarify.ai.sltfinanceindia.com/ | Login email/password: see sheet 03 Test Accounts for Account ID GUEST",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/ in a logged-out Incognito window.\n2. Wait for page load (max 15s).\n3. Scroll full page; click primary nav/footer links that stay on-site.\n4. Note any console red errors (ignore 3rd-party noise).",
-      "Expected Result (per step)": "1. URL is https://clarify.ai.sltfinanceindia.com/ (or intentional redirect).\n2. Page content renders; no infinite spinner/blank screen.\n3. Links navigate correctly; no broken chrome.\n4. No app-breaking console errors.",
+      "Test Data": "URL=https://trycareerpilot.com/ | Login email/password: see sheet 03 Test Accounts for Account ID GUEST",
+      "Exact Steps": "1. Open https://trycareerpilot.com/ in a logged-out Incognito window.\n2. Wait for page load (max 15s).\n3. Scroll full page; click primary nav/footer links that stay on-site.\n4. Note any console red errors (ignore 3rd-party noise).",
+      "Expected Result (per step)": "1. URL is https://trycareerpilot.com/ (or intentional redirect).\n2. Page content renders; no infinite spinner/blank screen.\n3. Links navigate correctly; no broken chrome.\n4. No app-breaking console errors.",
       "Final Expected Result": "Landing loads with brand, headline, primary CTA",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_hyperlinks": [
@@ -737,15 +737,15 @@
       "_urls_in_text": [
         {
           "col": "Test Data",
-          "url": "https://clarify.ai.sltfinanceindia.com/"
+          "url": "https://trycareerpilot.com/"
         },
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/"
+          "url": "https://trycareerpilot.com/"
         },
         {
           "col": "Expected Result (per step)",
-          "url": "https://clarify.ai.sltfinanceindia.com/"
+          "url": "https://trycareerpilot.com/"
         }
       ]
     },
@@ -779,7 +779,7 @@
       "Actual Result": "User Can see and feel the CTA which is clearly identify where as the Start Free,Get Started,Get Max",
       "Pass / Fail": "Pass",
       "Execution Date": "2026-08-24 00:00:00",
-      "Notes": "User can click there recommend account it gives the correct page url https://clarify.ai.sltfinanceindia.com/signup?plan=pro\nhttps://clarify.ai.sltfinanceindia.com/signup?plan=enterprise\nhttps://clarify.ai.sltfinanceindia.com/signup",
+      "Notes": "User can click there recommend account it gives the correct page url https://trycareerpilot.com/signup?plan=pro\nhttps://trycareerpilot.com/signup?plan=enterprise\nhttps://trycareerpilot.com/signup",
       "Module": "Public Pages",
       "Sub-Module": "Marketing",
       "Feature": "Pricing",
@@ -791,35 +791,35 @@
       "Account ID": "GUEST",
       "Tester": "Venkat",
       "Preconditions": "Logged out. Incognito. No extensions blocking scripts.",
-      "Test Data": "URL=https://clarify.ai.sltfinanceindia.com/pricing | Login email/password: see sheet 03 Test Accounts for Account ID GUEST",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/pricing in a logged-out Incognito window.\n2. Wait for page load (max 15s).\n3. Scroll full page; click primary nav/footer links that stay on-site.\n4. Note any console red errors (ignore 3rd-party noise).",
-      "Expected Result (per step)": "1. URL is https://clarify.ai.sltfinanceindia.com/pricing (or intentional redirect).\n2. Page content renders; no infinite spinner/blank screen.\n3. Links navigate correctly; no broken chrome.\n4. No app-breaking console errors.",
+      "Test Data": "URL=https://trycareerpilot.com/pricing | Login email/password: see sheet 03 Test Accounts for Account ID GUEST",
+      "Exact Steps": "1. Open https://trycareerpilot.com/pricing in a logged-out Incognito window.\n2. Wait for page load (max 15s).\n3. Scroll full page; click primary nav/footer links that stay on-site.\n4. Note any console red errors (ignore 3rd-party noise).",
+      "Expected Result (per step)": "1. URL is https://trycareerpilot.com/pricing (or intentional redirect).\n2. Page content renders; no infinite spinner/blank screen.\n3. Links navigate correctly; no broken chrome.\n4. No app-breaking console errors.",
       "Final Expected Result": "Pricing plans and CTAs visible",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Notes",
-          "url": "https://clarify.ai.sltfinanceindia.com/signup?plan=pro"
+          "url": "https://trycareerpilot.com/signup?plan=pro"
         },
         {
           "col": "Notes",
-          "url": "https://clarify.ai.sltfinanceindia.com/signup?plan=enterprise"
+          "url": "https://trycareerpilot.com/signup?plan=enterprise"
         },
         {
           "col": "Notes",
-          "url": "https://clarify.ai.sltfinanceindia.com/signup"
+          "url": "https://trycareerpilot.com/signup"
         },
         {
           "col": "Test Data",
-          "url": "https://clarify.ai.sltfinanceindia.com/pricing"
+          "url": "https://trycareerpilot.com/pricing"
         },
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/pricing"
+          "url": "https://trycareerpilot.com/pricing"
         },
         {
           "col": "Expected Result (per step)",
-          "url": "https://clarify.ai.sltfinanceindia.com/pricing"
+          "url": "https://trycareerpilot.com/pricing"
         }
       ]
     },
@@ -841,23 +841,23 @@
       "Account ID": "GUEST",
       "Tester": "Venkat",
       "Preconditions": "Logged out. Incognito. No extensions blocking scripts.",
-      "Test Data": "URL=https://clarify.ai.sltfinanceindia.com/gov-exams | Login email/password: see sheet 03 Test Accounts for Account ID GUEST",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/gov-exams in a logged-out Incognito window.\n2. Wait for page load (max 15s).\n3. Scroll full page; click primary nav/footer links that stay on-site.\n4. Note any console red errors (ignore 3rd-party noise).",
-      "Expected Result (per step)": "1. URL is https://clarify.ai.sltfinanceindia.com/gov-exams (or intentional redirect).\n2. Page content renders; no infinite spinner/blank screen.\n3. Links navigate correctly; no broken chrome.\n4. No app-breaking console errors.",
+      "Test Data": "URL=https://trycareerpilot.com/gov-exams | Login email/password: see sheet 03 Test Accounts for Account ID GUEST",
+      "Exact Steps": "1. Open https://trycareerpilot.com/gov-exams in a logged-out Incognito window.\n2. Wait for page load (max 15s).\n3. Scroll full page; click primary nav/footer links that stay on-site.\n4. Note any console red errors (ignore 3rd-party noise).",
+      "Expected Result (per step)": "1. URL is https://trycareerpilot.com/gov-exams (or intentional redirect).\n2. Page content renders; no infinite spinner/blank screen.\n3. Links navigate correctly; no broken chrome.\n4. No app-breaking console errors.",
       "Final Expected Result": "Gov exam marketing content loads",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Test Data",
-          "url": "https://clarify.ai.sltfinanceindia.com/gov-exams"
+          "url": "https://trycareerpilot.com/gov-exams"
         },
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/gov-exams"
+          "url": "https://trycareerpilot.com/gov-exams"
         },
         {
           "col": "Expected Result (per step)",
-          "url": "https://clarify.ai.sltfinanceindia.com/gov-exams"
+          "url": "https://trycareerpilot.com/gov-exams"
         }
       ]
     },
@@ -880,23 +880,23 @@
       "Account ID": "GUEST",
       "Tester": "Venkat",
       "Preconditions": "Logged out. Incognito. No extensions blocking scripts.",
-      "Test Data": "URL=https://clarify.ai.sltfinanceindia.com/help | Login email/password: see sheet 03 Test Accounts for Account ID GUEST",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/help in a logged-out Incognito window.\n2. Wait for page load (max 15s).\n3. Scroll full page; click primary nav/footer links that stay on-site.\n4. Note any console red errors (ignore 3rd-party noise).",
-      "Expected Result (per step)": "1. URL is https://clarify.ai.sltfinanceindia.com/help (or intentional redirect).\n2. Page content renders; no infinite spinner/blank screen.\n3. Links navigate correctly; no broken chrome.\n4. No app-breaking console errors.",
+      "Test Data": "URL=https://trycareerpilot.com/help | Login email/password: see sheet 03 Test Accounts for Account ID GUEST",
+      "Exact Steps": "1. Open https://trycareerpilot.com/help in a logged-out Incognito window.\n2. Wait for page load (max 15s).\n3. Scroll full page; click primary nav/footer links that stay on-site.\n4. Note any console red errors (ignore 3rd-party noise).",
+      "Expected Result (per step)": "1. URL is https://trycareerpilot.com/help (or intentional redirect).\n2. Page content renders; no infinite spinner/blank screen.\n3. Links navigate correctly; no broken chrome.\n4. No app-breaking console errors.",
       "Final Expected Result": "Help center lists articles or empty-state",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Test Data",
-          "url": "https://clarify.ai.sltfinanceindia.com/help"
+          "url": "https://trycareerpilot.com/help"
         },
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/help"
+          "url": "https://trycareerpilot.com/help"
         },
         {
           "col": "Expected Result (per step)",
-          "url": "https://clarify.ai.sltfinanceindia.com/help"
+          "url": "https://trycareerpilot.com/help"
         }
       ]
     },
@@ -918,23 +918,23 @@
       "Account ID": "GUEST",
       "Tester": "Venkat",
       "Preconditions": "Logged out. Incognito. No extensions blocking scripts.",
-      "Test Data": "URL=https://clarify.ai.sltfinanceindia.com/shortcuts | Login email/password: see sheet 03 Test Accounts for Account ID GUEST",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/shortcuts in a logged-out Incognito window.\n2. Wait for page load (max 15s).\n3. Scroll full page; click primary nav/footer links that stay on-site.\n4. Note any console red errors (ignore 3rd-party noise).",
-      "Expected Result (per step)": "1. URL is https://clarify.ai.sltfinanceindia.com/shortcuts (or intentional redirect).\n2. Page content renders; no infinite spinner/blank screen.\n3. Links navigate correctly; no broken chrome.\n4. No app-breaking console errors.",
+      "Test Data": "URL=https://trycareerpilot.com/shortcuts | Login email/password: see sheet 03 Test Accounts for Account ID GUEST",
+      "Exact Steps": "1. Open https://trycareerpilot.com/shortcuts in a logged-out Incognito window.\n2. Wait for page load (max 15s).\n3. Scroll full page; click primary nav/footer links that stay on-site.\n4. Note any console red errors (ignore 3rd-party noise).",
+      "Expected Result (per step)": "1. URL is https://trycareerpilot.com/shortcuts (or intentional redirect).\n2. Page content renders; no infinite spinner/blank screen.\n3. Links navigate correctly; no broken chrome.\n4. No app-breaking console errors.",
       "Final Expected Result": "Shortcuts page loads",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Test Data",
-          "url": "https://clarify.ai.sltfinanceindia.com/shortcuts"
+          "url": "https://trycareerpilot.com/shortcuts"
         },
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/shortcuts"
+          "url": "https://trycareerpilot.com/shortcuts"
         },
         {
           "col": "Expected Result (per step)",
-          "url": "https://clarify.ai.sltfinanceindia.com/shortcuts"
+          "url": "https://trycareerpilot.com/shortcuts"
         }
       ]
     },
@@ -956,23 +956,23 @@
       "Account ID": "GUEST",
       "Tester": "Venkat",
       "Preconditions": "Logged out. Incognito. No extensions blocking scripts.",
-      "Test Data": "URL=https://clarify.ai.sltfinanceindia.com/blog | Login email/password: see sheet 03 Test Accounts for Account ID GUEST",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/blog in a logged-out Incognito window.\n2. Wait for page load (max 15s).\n3. Scroll full page; click primary nav/footer links that stay on-site.\n4. Note any console red errors (ignore 3rd-party noise).",
-      "Expected Result (per step)": "1. URL is https://clarify.ai.sltfinanceindia.com/blog (or intentional redirect).\n2. Page content renders; no infinite spinner/blank screen.\n3. Links navigate correctly; no broken chrome.\n4. No app-breaking console errors.",
+      "Test Data": "URL=https://trycareerpilot.com/blog | Login email/password: see sheet 03 Test Accounts for Account ID GUEST",
+      "Exact Steps": "1. Open https://trycareerpilot.com/blog in a logged-out Incognito window.\n2. Wait for page load (max 15s).\n3. Scroll full page; click primary nav/footer links that stay on-site.\n4. Note any console red errors (ignore 3rd-party noise).",
+      "Expected Result (per step)": "1. URL is https://trycareerpilot.com/blog (or intentional redirect).\n2. Page content renders; no infinite spinner/blank screen.\n3. Links navigate correctly; no broken chrome.\n4. No app-breaking console errors.",
       "Final Expected Result": "Blog list loads",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Test Data",
-          "url": "https://clarify.ai.sltfinanceindia.com/blog"
+          "url": "https://trycareerpilot.com/blog"
         },
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/blog"
+          "url": "https://trycareerpilot.com/blog"
         },
         {
           "col": "Expected Result (per step)",
-          "url": "https://clarify.ai.sltfinanceindia.com/blog"
+          "url": "https://trycareerpilot.com/blog"
         }
       ]
     },
@@ -996,9 +996,9 @@
       "Account ID": "GUEST",
       "Tester": "Venkat",
       "Preconditions": "Logged out. Incognito. No extensions blocking scripts.",
-      "Test Data": "URL=https://clarify.ai.sltfinanceindia.com/terms | Login email/password: see sheet 03 Test Accounts for Account ID GUEST",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/terms in a logged-out Incognito window.\n2. Wait for page load (max 15s).\n3. Scroll full page; click primary nav/footer links that stay on-site.\n4. Note any console red errors (ignore 3rd-party noise).",
-      "Expected Result (per step)": "1. URL is https://clarify.ai.sltfinanceindia.com/terms (or intentional redirect).\n2. Page content renders; no infinite spinner/blank screen.\n3. Links navigate correctly; no broken chrome.\n4. No app-breaking console errors.",
+      "Test Data": "URL=https://trycareerpilot.com/terms | Login email/password: see sheet 03 Test Accounts for Account ID GUEST",
+      "Exact Steps": "1. Open https://trycareerpilot.com/terms in a logged-out Incognito window.\n2. Wait for page load (max 15s).\n3. Scroll full page; click primary nav/footer links that stay on-site.\n4. Note any console red errors (ignore 3rd-party noise).",
+      "Expected Result (per step)": "1. URL is https://trycareerpilot.com/terms (or intentional redirect).\n2. Page content renders; no infinite spinner/blank screen.\n3. Links navigate correctly; no broken chrome.\n4. No app-breaking console errors.",
       "Final Expected Result": "Terms content loads",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_hyperlinks": [
@@ -1011,15 +1011,15 @@
       "_urls_in_text": [
         {
           "col": "Test Data",
-          "url": "https://clarify.ai.sltfinanceindia.com/terms"
+          "url": "https://trycareerpilot.com/terms"
         },
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/terms"
+          "url": "https://trycareerpilot.com/terms"
         },
         {
           "col": "Expected Result (per step)",
-          "url": "https://clarify.ai.sltfinanceindia.com/terms"
+          "url": "https://trycareerpilot.com/terms"
         }
       ]
     },
@@ -1043,9 +1043,9 @@
       "Account ID": "GUEST",
       "Tester": "Venkat",
       "Preconditions": "Logged out. Incognito. No extensions blocking scripts.",
-      "Test Data": "URL=https://clarify.ai.sltfinanceindia.com/privacy | Login email/password: see sheet 03 Test Accounts for Account ID GUEST",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/privacy in a logged-out Incognito window.\n2. Wait for page load (max 15s).\n3. Scroll full page; click primary nav/footer links that stay on-site.\n4. Note any console red errors (ignore 3rd-party noise).",
-      "Expected Result (per step)": "1. URL is https://clarify.ai.sltfinanceindia.com/privacy (or intentional redirect).\n2. Page content renders; no infinite spinner/blank screen.\n3. Links navigate correctly; no broken chrome.\n4. No app-breaking console errors.",
+      "Test Data": "URL=https://trycareerpilot.com/privacy | Login email/password: see sheet 03 Test Accounts for Account ID GUEST",
+      "Exact Steps": "1. Open https://trycareerpilot.com/privacy in a logged-out Incognito window.\n2. Wait for page load (max 15s).\n3. Scroll full page; click primary nav/footer links that stay on-site.\n4. Note any console red errors (ignore 3rd-party noise).",
+      "Expected Result (per step)": "1. URL is https://trycareerpilot.com/privacy (or intentional redirect).\n2. Page content renders; no infinite spinner/blank screen.\n3. Links navigate correctly; no broken chrome.\n4. No app-breaking console errors.",
       "Final Expected Result": "Privacy content loads",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_hyperlinks": [
@@ -1058,15 +1058,15 @@
       "_urls_in_text": [
         {
           "col": "Test Data",
-          "url": "https://clarify.ai.sltfinanceindia.com/privacy"
+          "url": "https://trycareerpilot.com/privacy"
         },
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/privacy"
+          "url": "https://trycareerpilot.com/privacy"
         },
         {
           "col": "Expected Result (per step)",
-          "url": "https://clarify.ai.sltfinanceindia.com/privacy"
+          "url": "https://trycareerpilot.com/privacy"
         }
       ]
     },
@@ -1089,14 +1089,14 @@
       "Tester": "Venkat",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/verify-certificate/invalid-test-id-000.\n2. Observe message.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/verify-certificate/invalid-test-id-000.\n2. Observe message.",
       "Expected Result (per step)": "1. Page loads without crash.\n2. Clear invalid/not-found message; no other users' data shown.",
       "Final Expected Result": "Invalid certificate ID fails safely with no data leak.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/verify-certificate/invalid-test-id-000."
+          "url": "https://trycareerpilot.com/verify-certificate/invalid-test-id-000."
         }
       ]
     },
@@ -1119,14 +1119,14 @@
       "Tester": "Venkat",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/share/not-a-real-token.\n2. Observe UI.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/share/not-a-real-token.\n2. Observe UI.",
       "Expected Result (per step)": "1. Safe error or not-found.\n2. No private debrief content exposed.",
       "Final Expected Result": "Invalid share token does not leak session content.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/share/not-a-real-token."
+          "url": "https://trycareerpilot.com/share/not-a-real-token."
         }
       ]
     },
@@ -1150,14 +1150,14 @@
       "Tester": "Venkat",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/help and click the first available article (or open a known slug).\n2. Verify title, body, and back/nav.\n3. Refresh the article URL.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/help and click the first available article (or open a known slug).\n2. Verify title, body, and back/nav.\n3. Refresh the article URL.",
       "Expected Result (per step)": "1. Article opens.\n2. Content readable; nav works.\n3. Same article still loads after refresh.",
       "Final Expected Result": "Help article deep links work and persist on refresh.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/help"
+          "url": "https://trycareerpilot.com/help"
         }
       ]
     },
@@ -1180,14 +1180,14 @@
       "Tester": "Venkat",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/blog; open first post if any.\n2. If empty, record CONTENT_NOT_AVAILABLE (not a defect unless content is required).\n3. Refresh post URL if opened.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/blog; open first post if any.\n2. If empty, record CONTENT_NOT_AVAILABLE (not a defect unless content is required).\n3. Refresh post URL if opened.",
       "Expected Result (per step)": "1. Post opens or empty state is clear.\n2. Empty ≠ crash.\n3. Refresh keeps content.",
       "Final Expected Result": "Blog post loads or honest empty state.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/blog;"
+          "url": "https://trycareerpilot.com/blog;"
         }
       ]
     },
@@ -1210,14 +1210,14 @@
       "Tester": "Venkat",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/this-page-does-not-exist-qa.\n2. Observe not-found UI and navigation home.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/this-page-does-not-exist-qa.\n2. Observe not-found UI and navigation home.",
       "Expected Result (per step)": "1. Friendly 404 (not blank/crash).\n2. User can navigate back to a valid page.",
       "Final Expected Result": "Unknown routes show safe 404.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/this-page-does-not-exist-qa."
+          "url": "https://trycareerpilot.com/this-page-does-not-exist-qa."
         }
       ]
     },
@@ -1265,13 +1265,13 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged out. Valid FREE_USER_01 credentials available.",
       "Test Data": "Email/password from credential store only (do not write password in Actual Result).",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/login.\n2. Enter FREE_USER_01 email + password from credential store.\n3. Submit Login.\n4. Observe landing destination.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/login.\n2. Enter FREE_USER_01 email + password from credential store.\n3. Submit Login.\n4. Observe landing destination.",
       "Expected Result (per step)": "1. Login form visible.\n2. Fields accept input; password masked.\n3. No unexplained error.\n4. Lands on dashboard or onboarding as appropriate.",
       "Final Expected Result": "Valid credentials sign the user in and reach the correct post-login page.",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/login."
+          "url": "https://trycareerpilot.com/login."
         }
       ]
     },
@@ -1295,13 +1295,13 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/login.\n2. Enter FREE_USER_01 email with wrong password.\n3. Submit.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/login.\n2. Enter FREE_USER_01 email with wrong password.\n3. Submit.",
       "Expected Result (per step)": "1. Form loads.\n2. Input accepted.\n3. Clear error; user not signed in; no stack trace.",
       "Final Expected Result": "Invalid password is rejected with a safe user-visible error.",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/login."
+          "url": "https://trycareerpilot.com/login."
         }
       ]
     },
@@ -1325,13 +1325,13 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Fresh disposable email + strong password from QA playbook. | Login email/password: see sheet 03 Test Accounts for Account ID NEW_USER_01",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/signup.\n2. Register with a new approved disposable email.\n3. Submit.\n4. Observe next screen (verify email / onboarding).",
+      "Exact Steps": "1. Open https://trycareerpilot.com/signup.\n2. Register with a new approved disposable email.\n3. Submit.\n4. Observe next screen (verify email / onboarding).",
       "Expected Result (per step)": "1. Signup form loads.\n2. Validation passes for valid data.\n3. Success path (no silent fail).\n4. User directed to verification or next step.",
       "Final Expected Result": "New user can register and reach verification/onboarding.",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/signup."
+          "url": "https://trycareerpilot.com/signup."
         }
       ]
     },
@@ -1427,13 +1427,13 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/login.\n2. Login as BANNED_USER_01.\n3. Observe result.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/login.\n2. Login as BANNED_USER_01.\n3. Observe result.",
       "Expected Result (per step)": "1. Form loads.\n2. Credentials submitted.\n3. Access denied/ban message; no dashboard access.",
       "Final Expected Result": "Banned users cannot access the application.",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/login."
+          "url": "https://trycareerpilot.com/login."
         }
       ]
     },
@@ -1457,13 +1457,13 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/login.\n2. Enter 'not-an-email' and any password.\n3. Submit.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/login.\n2. Enter 'not-an-email' and any password.\n3. Submit.",
       "Expected Result (per step)": "1. Form loads.\n2. Client validation or server error.\n3. Not signed in.",
       "Final Expected Result": "Malformed email blocked with clear feedback.",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/login."
+          "url": "https://trycareerpilot.com/login."
         }
       ]
     },
@@ -1487,13 +1487,13 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/login.\n2. Leave email and password empty.\n3. Click Login.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/login.\n2. Leave email and password empty.\n3. Click Login.",
       "Expected Result (per step)": "1. Form loads.\n2. Empty fields.\n3. Inline validation; no request storm; not signed in.",
       "Final Expected Result": "Empty login fields show required-field validation.",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/login."
+          "url": "https://trycareerpilot.com/login."
         }
       ]
     },
@@ -1517,13 +1517,13 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/signup.\n2. Attempt signup with FREE_USER_01 existing email.\n3. Submit.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/signup.\n2. Attempt signup with FREE_USER_01 existing email.\n3. Submit.",
       "Expected Result (per step)": "1. Form loads.\n2. Existing email entered.\n3. Clear duplicate/exists error; no second account created silently.",
       "Final Expected Result": "Duplicate email signup is rejected clearly.",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/signup."
+          "url": "https://trycareerpilot.com/signup."
         }
       ]
     },
@@ -1548,7 +1548,7 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/forgot-password (or Login → Forgot).\n2. Submit FREE_USER_01 email.\n3. Observe confirmation message (do not expose whether email exists beyond product rules).",
+      "Exact Steps": "1. Open https://trycareerpilot.com/forgot-password (or Login → Forgot).\n2. Submit FREE_USER_01 email.\n3. Observe confirmation message (do not expose whether email exists beyond product rules).",
       "Expected Result (per step)": "1. Form loads.\n2. Request accepted.\n3. User-facing confirmation; no crash.",
       "Final Expected Result": "Forgot-password request completes with clear confirmation.",
       "_hyperlinks": [
@@ -1561,7 +1561,7 @@
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/forgot-password"
+          "url": "https://trycareerpilot.com/forgot-password"
         }
       ]
     },
@@ -1609,13 +1609,13 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. On https://clarify.ai.sltfinanceindia.com/login, if Google/OAuth button is shown, click it.\n2. Complete or cancel provider consent with approved test identity.\n3. If button absent, mark Requires Configuration / N/A.",
+      "Exact Steps": "1. On https://trycareerpilot.com/login, if Google/OAuth button is shown, click it.\n2. Complete or cancel provider consent with approved test identity.\n3. If button absent, mark Requires Configuration / N/A.",
       "Expected Result (per step)": "1. OAuth control visible or absent honestly.\n2. Success returns to app; cancel returns safely.\n3. N/A recorded if not configured — not a Pass.",
       "Final Expected Result": "OAuth works when configured; otherwise classified Requires Configuration.",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/login,"
+          "url": "https://trycareerpilot.com/login,"
         }
       ]
     },
@@ -1687,13 +1687,13 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/login.\n2. Type a password.\n3. Toggle show/hide if control exists.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/login.\n2. Type a password.\n3. Toggle show/hide if control exists.",
       "Expected Result (per step)": "1. Form loads.\n2. Password masked by default.\n3. Toggle reveals/hides; does not clear value unexpectedly.",
       "Final Expected Result": "Password visibility control works if present.",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/login."
+          "url": "https://trycareerpilot.com/login."
         }
       ]
     },
@@ -1741,13 +1741,13 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. As incomplete onboarding user, paste https://clarify.ai.sltfinanceindia.com/app/live.\n2. Observe gate.",
+      "Exact Steps": "1. As incomplete onboarding user, paste https://trycareerpilot.com/app/live.\n2. Observe gate.",
       "Expected Result (per step)": "1. Forced back to onboarding or blocked with message.\n2. Live module not usable.",
       "Final Expected Result": "App modules blocked until onboarding complete.",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/live."
+          "url": "https://trycareerpilot.com/app/live."
         }
       ]
     },
@@ -1827,13 +1827,13 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login as FREE_USER_01 (fully onboarded).\n2. Open https://clarify.ai.sltfinanceindia.com/onboarding if linked.\n3. Confirm behavior is redirect or completed state.",
+      "Exact Steps": "1. Login as FREE_USER_01 (fully onboarded).\n2. Open https://trycareerpilot.com/onboarding if linked.\n3. Confirm behavior is redirect or completed state.",
       "Expected Result (per step)": "1. Lands on app.\n2. Onboarding not forced again.\n3. No broken wizard.",
       "Final Expected Result": "Completed onboarding is not re-forced on normal login.",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/onboarding"
+          "url": "https://trycareerpilot.com/onboarding"
         }
       ]
     },
@@ -1928,14 +1928,14 @@
       "Tester": "Sultana",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login FREE_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/dashboard.\n3. Wait for widgets.",
+      "Exact Steps": "1. Login FREE_USER_01.\n2. Open https://trycareerpilot.com/app/dashboard.\n3. Wait for widgets.",
       "Expected Result (per step)": "1. Authenticated.\n2. Dashboard route loads.\n3. Widgets/KPIs/shortcuts visible or honest empty states.",
       "Final Expected Result": "Dashboard renders without infinite loading.",
       "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/1YiO_OEbjl3WTE67OzU1ZEjS7vhgPVmMP/view?usp=drive_linkhttps://drive.google.com/file/d/1mOMO2H43gOdN2hh7xRqGn7bfssp1n3Mg/view?usp=drive_link",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/dashboard."
+          "url": "https://trycareerpilot.com/app/dashboard."
         },
         {
           "col": "Screenshot / Evidence Requirement",
@@ -2118,7 +2118,7 @@
       "Tester": "Sultana",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/interview-day.\n2. Verify layout and any scheduled items/empty state.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/interview-day.\n2. Verify layout and any scheduled items/empty state.",
       "Expected Result (per step)": "1. Page loads.\n2. Content or empty state; no crash.",
       "Final Expected Result": "Interview Day page is usable.",
       "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/1EtoqSahOO-iCNc_Uit5hIszo5NVhd9w_/view?usp=drive_link",
@@ -2133,7 +2133,7 @@
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/interview-day."
+          "url": "https://trycareerpilot.com/app/interview-day."
         },
         {
           "col": "Screenshot / Evidence Requirement",
@@ -2206,7 +2206,7 @@
       "Tester": "Sultana",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/referrals.\n2. Copy referral code/link if shown.\n3. Refresh; confirm code persists.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/referrals.\n2. Copy referral code/link if shown.\n3. Refresh; confirm code persists.",
       "Expected Result (per step)": "1. Page loads.\n2. Code/link usable.\n3. Persists after refresh.",
       "Final Expected Result": "Referrals page works and persists codes.",
       "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/10w2LeiYkwhkqMHW3Zb_RafR0HegVc52n/view?usp=drive_link",
@@ -2221,7 +2221,7 @@
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/referrals."
+          "url": "https://trycareerpilot.com/app/referrals."
         },
         {
           "col": "Screenshot / Evidence Requirement",
@@ -2252,14 +2252,14 @@
       "Tester": "Anushka",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/live.\n2. Leave required fields empty; try Start.\n3. Fill required fields with valid data.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/live.\n2. Leave required fields empty; try Start.\n3. Fill required fields with valid data.",
       "Expected Result (per step)": "1. Setup loads.\n2. Validation blocks start.\n3. Valid data enables start.",
       "Final Expected Result": "Setup validates required fields before start.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/live."
+          "url": "https://trycareerpilot.com/app/live."
         }
       ]
     },
@@ -2626,7 +2626,7 @@
     {
       "excel_row": 90,
       "Test Case ID": "TC-LIVE-001",
-      "Actual Result": "Navigated via Practice Coach start route to live overlay (https://clarify.ai.sltfinanceindia.com/app/live/overlay). Overlay UI loaded immediately with full chrome structure visible: session context header, live latency indicators, question listening area, Hints, and action controls without blank screen or layout collapse.",
+      "Actual Result": "Navigated via Practice Coach start route to live overlay (https://trycareerpilot.com/app/live/overlay). Overlay UI loaded immediately with full chrome structure visible: session context header, live latency indicators, question listening area, Hints, and action controls without blank screen or layout collapse.",
       "Pass / Fail": "Pass",
       "Execution Date": "2026-08-24 00:00:00",
       "Notes": "Live overlay route loads reliably and displays all required chrome, panels, and control elements.",
@@ -2642,18 +2642,18 @@
       "Tester": "Anushka",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. From Practice Coach start path, open overlay (https://clarify.ai.sltfinanceindia.com/app/live/overlay if routed).\n2. Confirm overlay chrome (question, hints, controls).",
+      "Exact Steps": "1. From Practice Coach start path, open overlay (https://trycareerpilot.com/app/live/overlay if routed).\n2. Confirm overlay chrome (question, hints, controls).",
       "Expected Result (per step)": "1. Overlay route/UI opens.\n2. Core panels visible; not blank.",
       "Final Expected Result": "Live overlay UI loads.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Actual Result",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/live/overlay"
+          "url": "https://trycareerpilot.com/app/live/overlay"
         },
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/live/overlay"
+          "url": "https://trycareerpilot.com/app/live/overlay"
         }
       ]
     },
@@ -2772,14 +2772,14 @@
       "Tester": "Anushka",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/mock.\n2. Complete setup.\n3. Start mock (warmup if shown).",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/mock.\n2. Complete setup.\n3. Start mock (warmup if shown).",
       "Expected Result (per step)": "1. Setup loads.\n2. Valid config accepted.\n3. Session starts.",
       "Final Expected Result": "Mock interview can be configured and started.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/mock."
+          "url": "https://trycareerpilot.com/app/mock."
         }
       ]
     },
@@ -3019,13 +3019,13 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login PRO_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/mock-test.\n3. Observe search/selector.",
+      "Exact Steps": "1. Login PRO_USER_01.\n2. Open https://trycareerpilot.com/app/mock-test.\n3. Observe search/selector.",
       "Expected Result (per step)": "1. Auth ok.\n2. Hub loads (or India region gate message).\n3. Search/exam list usable.",
       "Final Expected Result": "Gov exam hub is reachable and usable.",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/mock-test."
+          "url": "https://trycareerpilot.com/app/mock-test."
         }
       ]
     },
@@ -3073,13 +3073,13 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open configure (https://clarify.ai.sltfinanceindia.com/app/mock-test/configure) for a selected exam.\n2. Set stage, paper, language.\n3. Continue.",
+      "Exact Steps": "1. Open configure (https://trycareerpilot.com/app/mock-test/configure) for a selected exam.\n2. Set stage, paper, language.\n3. Continue.",
       "Expected Result (per step)": "1. Config UI loads.\n2. Options apply.\n3. Proceeds to availability/generate.",
       "Final Expected Result": "Exam configuration options apply correctly.",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/mock-test/configure"
+          "url": "https://trycareerpilot.com/app/mock-test/configure"
         }
       ]
     },
@@ -3511,13 +3511,13 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Visit https://clarify.ai.sltfinanceindia.com/app/mock-test/my-questions, /upload, /revision, /analytics.\n2. Perform one smoke action on each (list load / upload UI / revision item / chart).",
+      "Exact Steps": "1. Visit https://trycareerpilot.com/app/mock-test/my-questions, /upload, /revision, /analytics.\n2. Perform one smoke action on each (list load / upload UI / revision item / chart).",
       "Expected Result (per step)": "1. Pages open.\n2. Each shows real UI or honest empty — classify Partial if non-functional controls.",
       "Final Expected Result": "Secondary gov-exam pages are reachable and classifiable.",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/mock-test/my-questions,"
+          "url": "https://trycareerpilot.com/app/mock-test/my-questions,"
         }
       ]
     },
@@ -3752,7 +3752,7 @@
       "Tester": "Sultana",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/prep/star-builder.\n2. Enter only: Situation='Led a 2-person bugfix for login timeout'. Leave other fields minimal.\n3. Generate STAR.\n4. Verify output does not invent employers, metrics, or tech not supplied.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/prep/star-builder.\n2. Enter only: Situation='Led a 2-person bugfix for login timeout'. Leave other fields minimal.\n3. Generate STAR.\n4. Verify output does not invent employers, metrics, or tech not supplied.",
       "Expected Result (per step)": "1. Form opens.\n2. Sparse input entered.\n3. Output generated or error.\n4. No fabricated facts beyond user input (flag hallucinations).",
       "Final Expected Result": "STAR AI does not invent unsourced facts.",
       "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/11hLmBc8dQYStnSPcxaoxBKwaptHAeNKY/view?usp=drive_link",
@@ -3767,7 +3767,7 @@
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/prep/star-builder."
+          "url": "https://trycareerpilot.com/app/prep/star-builder."
         },
         {
           "col": "Screenshot / Evidence Requirement",
@@ -3828,7 +3828,7 @@
       "Tester": "Sultana",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/prep.\n2. Open each tool card (STAR, Project, Rephraser, Coding hints, System design).",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/prep.\n2. Open each tool card (STAR, Project, Rephraser, Coding hints, System design).",
       "Expected Result (per step)": "1. Hub loads.\n2. Each tool opens or shows gate — classify honestly.",
       "Final Expected Result": "Prep Lab tools are reachable.",
       "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/1TvJ36338r29l6BPhIJ4mHP7Ap3KfAEU4/view?usp=drive_link",
@@ -3843,7 +3843,7 @@
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/prep."
+          "url": "https://trycareerpilot.com/app/prep."
         },
         {
           "col": "Screenshot / Evidence Requirement",
@@ -3875,14 +3875,14 @@
       "Tester": "Sultana",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/prep/rephraser.\n2. Paste a short answer.\n3. Rephrase.\n4. Refresh and check history if any.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/prep/rephraser.\n2. Paste a short answer.\n3. Rephrase.\n4. Refresh and check history if any.",
       "Expected Result (per step)": "1. Opens.\n2. Input accepted.\n3. Improved text or clear error.\n4. Persistence per product.",
       "Final Expected Result": "Rephraser returns improved text or honest failure.",
       "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/1G34rdmDnuxbLpVcey6oxW6pdBwGNhXHY/view?usp=drive_linkhttps://drive.google.com/file/d/1aQDIJu7p4LR4oy3Csby49mc99bxyZASq/view?usp=drive_link",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/prep/rephraser."
+          "url": "https://trycareerpilot.com/app/prep/rephraser."
         },
         {
           "col": "Screenshot / Evidence Requirement",
@@ -4055,14 +4055,14 @@
       "Tester": "Anushka",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Approved QA sample resume PDF | Login email/password: see sheet 03 Test Accounts for Account ID PRO_USER_01",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/documents.\n2. Upload approved sample PDF resume.\n3. Wait for processing status.\n4. Refresh; reopen.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/documents.\n2. Upload approved sample PDF resume.\n3. Wait for processing status.\n4. Refresh; reopen.",
       "Expected Result (per step)": "1. Page loads.\n2. Upload accepted.\n3. Status progresses to ready/error clearly.\n4. Persists after refresh.",
       "Final Expected Result": "Supported PDF upload processes and persists.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/documents."
+          "url": "https://trycareerpilot.com/app/documents."
         }
       ]
     },
@@ -4277,14 +4277,14 @@
       "Tester": "Anushka",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/library.\n2. Verify list/filters.\n3. Open an item.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/library.\n2. Verify list/filters.\n3. Open an item.",
       "Expected Result (per step)": "1. Library loads.\n2. Controls work or empty.\n3. Item opens.",
       "Final Expected Result": "Document library is usable.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/library."
+          "url": "https://trycareerpilot.com/app/library."
         }
       ]
     },
@@ -4433,7 +4433,7 @@
       "Tester": "Sultana",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/answers.\n2. Create new answer with title+body.\n3. Save.\n4. Refresh list.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/answers.\n2. Create new answer with title+body.\n3. Save.\n4. Refresh list.",
       "Expected Result (per step)": "1. List loads (or feature-flag message).\n2. Form works.\n3. Saved.\n4. Appears after refresh.",
       "Final Expected Result": "Create answer persists.",
       "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/1SVQqeMk7WZvIW8uttruKHlEok2s2diuv/view?usp=drive_link",
@@ -4448,7 +4448,7 @@
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/answers."
+          "url": "https://trycareerpilot.com/app/answers."
         },
         {
           "col": "Screenshot / Evidence Requirement",
@@ -4624,14 +4624,14 @@
       "Tester": "Venkat",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/interviews/new (or note feature flag).\n2. Fill required date/time/title.\n3. Save.\n4. Refresh list.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/interviews/new (or note feature flag).\n2. Fill required date/time/title.\n3. Save.\n4. Refresh list.",
       "Expected Result (per step)": "1. Form opens or flagged.\n2. Validation works.\n3. Saved.\n4. Persists.",
       "Final Expected Result": "Create interview persists.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/interviews/new"
+          "url": "https://trycareerpilot.com/app/interviews/new"
         }
       ]
     },
@@ -4753,14 +4753,14 @@
       "Tester": "Sultana",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/sessions as HISTORY_USER_01.\n2. Apply status filter if present.\n3. Search if present.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/sessions as HISTORY_USER_01.\n2. Apply status filter if present.\n3. Search if present.",
       "Expected Result (per step)": "1. List shows sessions.\n2. Filters work.\n3. Search works or N/A.",
       "Final Expected Result": "Session list/filter/search usable.",
       "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/17bs19gECGh2rg7tl8yYx0Sz6FP5BMbnr/view?usp=drive_linkhttps://drive.google.com/file/d/1ikn1NePIA0hOB_6KSKKSNpPKuGECjPsn/view?usp=drive_linkhttps://drive.google.com/file/d/1zufQ84a9QNUnby_gVJQkCXk5A5fLrpfE/view?usp=drive_link",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/sessions"
+          "url": "https://trycareerpilot.com/app/sessions"
         },
         {
           "col": "Screenshot / Evidence Requirement",
@@ -4903,7 +4903,7 @@
       "Tester": "Sultana",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. As FREE_USER_02 open https://clarify.ai.sltfinanceindia.com/app/sessions.\n2. Confirm empty state CTA.",
+      "Exact Steps": "1. As FREE_USER_02 open https://trycareerpilot.com/app/sessions.\n2. Confirm empty state CTA.",
       "Expected Result (per step)": "1. Opens.\n2. Empty state — not error.",
       "Final Expected Result": "Empty sessions state is clear.",
       "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/1pV5VV2rKBFEGjlteORYhbxNsr178VPQm/view?usp=drive_link",
@@ -4918,7 +4918,7 @@
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/sessions."
+          "url": "https://trycareerpilot.com/app/sessions."
         },
         {
           "col": "Screenshot / Evidence Requirement",
@@ -4949,7 +4949,7 @@
       "Tester": "Sultana",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/debriefs.\n2. Open a debrief.\n3. Refresh detail.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/debriefs.\n2. Open a debrief.\n3. Refresh detail.",
       "Expected Result (per step)": "1. List loads.\n2. Detail shows scorecard/insights or generating/error.\n3. Persists.",
       "Final Expected Result": "Debriefs list/detail work.",
       "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/1vRtW-blWOGpIudeYb3AP816SIAqj3yKP/view?usp=drive_link",
@@ -4964,7 +4964,7 @@
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/debriefs."
+          "url": "https://trycareerpilot.com/app/debriefs."
         },
         {
           "col": "Screenshot / Evidence Requirement",
@@ -5139,14 +5139,14 @@
       "Tester": "Sultana",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/analytics.\n2. Switch 7d, 30d, 90d, all-time if offered.\n3. Observe chart updates.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/analytics.\n2. Switch 7d, 30d, 90d, all-time if offered.\n3. Observe chart updates.",
       "Expected Result (per step)": "1. Page loads (or flag).\n2. Ranges switch.\n3. Charts/empty update without crash.",
       "Final Expected Result": "Analytics ranges switch correctly.",
       "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/15UxISyPF7gXaXAWHctFINDIhs5ONT1QN/view?usp=drive_linkhttps://drive.google.com/file/d/1owcMXVtH3unvhPwcEdrEqYRhv1pcycZQ/view?usp=drive_linkhttps://drive.google.com/file/d/1cKcArMrYmnO8b6T8H2lSZFuw8ioOY7wa/view?usp=drive_linkhttps://drive.google.com/file/d/11XgzoRaNOci2njMRZHwcWXQOH7f3sbU0/view?usp=drive_link",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/analytics."
+          "url": "https://trycareerpilot.com/app/analytics."
         },
         {
           "col": "Screenshot / Evidence Requirement",
@@ -5300,13 +5300,13 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/settings/billing.\n2. Note plan, credits, purchase CTAs.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/settings/billing.\n2. Note plan, credits, purchase CTAs.",
       "Expected Result (per step)": "1. Page loads.\n2. Plan/credits/CTAs visible.",
       "Final Expected Result": "Billing settings page usable.",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/settings/billing."
+          "url": "https://trycareerpilot.com/app/settings/billing."
         }
       ]
     },
@@ -5442,13 +5442,13 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Logged in as FREE_USER_01 open https://clarify.ai.sltfinanceindia.com/pricing.\n2. Click Pro CTA.\n3. Land on upgrade/checkout.",
+      "Exact Steps": "1. Logged in as FREE_USER_01 open https://trycareerpilot.com/pricing.\n2. Click Pro CTA.\n3. Land on upgrade/checkout.",
       "Expected Result (per step)": "1. Pricing loads.\n2. CTA works.\n3. Upgrade path correct.",
       "Final Expected Result": "Pricing CTAs reach upgrade/checkout.",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/pricing."
+          "url": "https://trycareerpilot.com/pricing."
         }
       ]
     },
@@ -5488,13 +5488,13 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/usage and billing.\n2. Record displayed balance.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/usage and billing.\n2. Record displayed balance.",
       "Expected Result (per step)": "1. Pages load.\n2. Balance visible and consistent across surfaces.",
       "Final Expected Result": "Credit balance is visible and consistent.",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/usage"
+          "url": "https://trycareerpilot.com/app/usage"
         }
       ]
     },
@@ -5618,14 +5618,14 @@
       "Tester": "Venkat",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/settings/profile.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/settings/profile.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
       "Expected Result (per step)": "1. Page loads.\n2. Controls editable or clearly read-only.\n3. Save succeeds or validates.\n4. Values persist.\n5. Destructive actions require confirm.",
       "Final Expected Result": "Settings/profile works with save→refresh persistence where editable.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/settings/profile."
+          "url": "https://trycareerpilot.com/app/settings/profile."
         }
       ]
     },
@@ -5649,14 +5649,14 @@
       "Tester": "Venkat",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/settings/security.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/settings/security.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
       "Expected Result (per step)": "1. Page loads.\n2. Controls editable or clearly read-only.\n3. Save succeeds or validates.\n4. Values persist.\n5. Destructive actions require confirm.",
       "Final Expected Result": "Settings/security works with save→refresh persistence where editable.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/settings/security."
+          "url": "https://trycareerpilot.com/app/settings/security."
         }
       ]
     },
@@ -5680,14 +5680,14 @@
       "Tester": "Venkat",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/settings/danger.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/settings/danger.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
       "Expected Result (per step)": "1. Page loads.\n2. Controls editable or clearly read-only.\n3. Save succeeds or validates.\n4. Values persist.\n5. Destructive actions require confirm.",
       "Final Expected Result": "Settings/danger works with save→refresh persistence where editable.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/settings/danger."
+          "url": "https://trycareerpilot.com/app/settings/danger."
         }
       ]
     },
@@ -5711,14 +5711,14 @@
       "Tester": "Venkat",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/settings/billing.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/settings/billing.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
       "Expected Result (per step)": "1. Page loads.\n2. Controls editable or clearly read-only.\n3. Save succeeds or validates.\n4. Values persist.\n5. Destructive actions require confirm.",
       "Final Expected Result": "Settings/billing works with save→refresh persistence where editable.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/settings/billing."
+          "url": "https://trycareerpilot.com/app/settings/billing."
         }
       ]
     },
@@ -5741,14 +5741,14 @@
       "Tester": "Venkat",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/settings/appearance.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/settings/appearance.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
       "Expected Result (per step)": "1. Page loads.\n2. Controls editable or clearly read-only.\n3. Save succeeds or validates.\n4. Values persist.\n5. Destructive actions require confirm.",
       "Final Expected Result": "Settings/appearance works with save→refresh persistence where editable.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/settings/appearance."
+          "url": "https://trycareerpilot.com/app/settings/appearance."
         }
       ]
     },
@@ -5772,14 +5772,14 @@
       "Tester": "Venkat",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/settings/notifications.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/settings/notifications.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
       "Expected Result (per step)": "1. Page loads.\n2. Controls editable or clearly read-only.\n3. Save succeeds or validates.\n4. Values persist.\n5. Destructive actions require confirm.",
       "Final Expected Result": "Settings/notifications works with save→refresh persistence where editable.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/settings/notifications."
+          "url": "https://trycareerpilot.com/app/settings/notifications."
         }
       ]
     },
@@ -5803,14 +5803,14 @@
       "Tester": "Venkat",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/settings/audio.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/settings/audio.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
       "Expected Result (per step)": "1. Page loads.\n2. Controls editable or clearly read-only.\n3. Save succeeds or validates.\n4. Values persist.\n5. Destructive actions require confirm.",
       "Final Expected Result": "Settings/audio works with save→refresh persistence where editable.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/settings/audio."
+          "url": "https://trycareerpilot.com/app/settings/audio."
         }
       ]
     },
@@ -5834,14 +5834,14 @@
       "Tester": "Venkat",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/settings/practice-coach.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/settings/practice-coach.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
       "Expected Result (per step)": "1. Page loads.\n2. Controls editable or clearly read-only.\n3. Save succeeds or validates.\n4. Values persist.\n5. Destructive actions require confirm.",
       "Final Expected Result": "Settings/practice-coach works with save→refresh persistence where editable.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/settings/practice-coach."
+          "url": "https://trycareerpilot.com/app/settings/practice-coach."
         }
       ]
     },
@@ -5865,14 +5865,14 @@
       "Tester": "Venkat",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/settings/hotkeys.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/settings/hotkeys.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
       "Expected Result (per step)": "1. Page loads.\n2. Controls editable or clearly read-only.\n3. Save succeeds or validates.\n4. Values persist.\n5. Destructive actions require confirm.",
       "Final Expected Result": "Settings/hotkeys works with save→refresh persistence where editable.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/settings/hotkeys."
+          "url": "https://trycareerpilot.com/app/settings/hotkeys."
         }
       ]
     },
@@ -5895,14 +5895,14 @@
       "Tester": "Venkat",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/settings/privacy.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/settings/privacy.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
       "Expected Result (per step)": "1. Page loads.\n2. Controls editable or clearly read-only.\n3. Save succeeds or validates.\n4. Values persist.\n5. Destructive actions require confirm.",
       "Final Expected Result": "Settings/privacy works with save→refresh persistence where editable.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/settings/privacy."
+          "url": "https://trycareerpilot.com/app/settings/privacy."
         }
       ]
     },
@@ -5925,14 +5925,14 @@
       "Tester": "Venkat",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/settings/models.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/settings/models.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
       "Expected Result (per step)": "1. Page loads.\n2. Controls editable or clearly read-only.\n3. Save succeeds or validates.\n4. Values persist.\n5. Destructive actions require confirm.",
       "Final Expected Result": "Settings/models works with save→refresh persistence where editable.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/settings/models."
+          "url": "https://trycareerpilot.com/app/settings/models."
         }
       ]
     },
@@ -5956,14 +5956,14 @@
       "Tester": "Venkat",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/settings/integrations.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/settings/integrations.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
       "Expected Result (per step)": "1. Page loads.\n2. Controls editable or clearly read-only.\n3. Save succeeds or validates.\n4. Values persist.\n5. Destructive actions require confirm.",
       "Final Expected Result": "Settings/integrations works with save→refresh persistence where editable.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/settings/integrations."
+          "url": "https://trycareerpilot.com/app/settings/integrations."
         }
       ]
     },
@@ -5986,14 +5986,14 @@
       "Tester": "Venkat",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/settings/data.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/settings/data.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
       "Expected Result (per step)": "1. Page loads.\n2. Controls editable or clearly read-only.\n3. Save succeeds or validates.\n4. Values persist.\n5. Destructive actions require confirm.",
       "Final Expected Result": "Settings/data works with save→refresh persistence where editable.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/settings/data."
+          "url": "https://trycareerpilot.com/app/settings/data."
         }
       ]
     },
@@ -6017,14 +6017,14 @@
       "Tester": "Venkat",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/settings/polish.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/settings/polish.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
       "Expected Result (per step)": "1. Page loads.\n2. Controls editable or clearly read-only.\n3. Save succeeds or validates.\n4. Values persist.\n5. Destructive actions require confirm.",
       "Final Expected Result": "Settings/polish works with save→refresh persistence where editable.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/settings/polish."
+          "url": "https://trycareerpilot.com/app/settings/polish."
         }
       ]
     },
@@ -6068,14 +6068,14 @@
       "Tester": "Sultana",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/notifications.\n2. Mark read if control exists.\n3. Refresh.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/notifications.\n2. Mark read if control exists.\n3. Refresh.",
       "Expected Result (per step)": "1. List/empty.\n2. Read state updates.\n3. Persists.",
       "Final Expected Result": "Notification read state persists.",
       "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/1ueQzjbpkpmW9NxNaMMJMtkUGY35JFIcU/view?usp=drive_linkhttps://drive.google.com/file/d/18cRDd4lrGx3Q_U8oLBEFv440gfU3zYPE/view?usp=drive_link",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/notifications."
+          "url": "https://trycareerpilot.com/app/notifications."
         },
         {
           "col": "Screenshot / Evidence Requirement",
@@ -6219,14 +6219,14 @@
       "Tester": "Venkat",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/settings/integrations.\n2. Inventory each card (Google Calendar, etc.).\n3. Classify configured vs not.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/settings/integrations.\n2. Inventory each card (Google Calendar, etc.).\n3. Classify configured vs not.",
       "Expected Result (per step)": "1. Page loads.\n2. Cards listed.\n3. Status honest.",
       "Final Expected Result": "Integrations inventory completed from UI.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/settings/integrations."
+          "url": "https://trycareerpilot.com/app/settings/integrations."
         }
       ]
     },
@@ -6345,14 +6345,14 @@
       "Tester": "Sultana",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/learn.\n2. If no courses, record CONTENT_NOT_AVAILABLE (not auto-defect).\n3. Open a course if present.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/learn.\n2. If no courses, record CONTENT_NOT_AVAILABLE (not auto-defect).\n3. Open a course if present.",
       "Expected Result (per step)": "1. Hub loads.\n2. Empty content noted OR courses listed.\n3. Course detail opens.",
       "Final Expected Result": "Learning Hub loads; empty content classified CONTENT_NOT_AVAILABLE.",
       "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/13LV7Wvom10kNXOKHRvHQPyOEFBk4OKRQ/view?usp=drive_linkhttps://drive.google.com/file/d/1ZeuY2LMZFDpwF5RvkDukcDekW-cskRvJ/view?usp=drive_link",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/learn."
+          "url": "https://trycareerpilot.com/app/learn."
         },
         {
           "col": "Screenshot / Evidence Requirement",
@@ -6452,7 +6452,7 @@
       "Tester": "Sultana",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/community.\n2. Observe list/empty.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/community.\n2. Observe list/empty.",
       "Expected Result (per step)": "1. Loads.\n2. Posts or empty — empty not defect unless content required.",
       "Final Expected Result": "Community list loads.",
       "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/1pBMYkXfxbIhGhfhxDWzIpYgCD-WWrK8j/view?usp=drive_link",
@@ -6467,7 +6467,7 @@
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/community."
+          "url": "https://trycareerpilot.com/app/community."
         },
         {
           "col": "Screenshot / Evidence Requirement",
@@ -6670,14 +6670,14 @@
       "Tester": "Sultana",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/coding.\n2. Open a question (or CONTENT_NOT_AVAILABLE).",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/coding.\n2. Open a question (or CONTENT_NOT_AVAILABLE).",
       "Expected Result (per step)": "1. Lab loads.\n2. Editor opens or empty content noted.",
       "Final Expected Result": "Coding Lab reachable.",
       "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/1chE9QI9LvH__eYzzgAY3q1Cptn6R5ktj/view?usp=drive_linkhttps://drive.google.com/file/d/19JLQGCSD1x3WfrcZ0_ktVlQgiJMBEX74/view?usp=drive_link",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/coding."
+          "url": "https://trycareerpilot.com/app/coding."
         },
         {
           "col": "Screenshot / Evidence Requirement",
@@ -6821,13 +6821,13 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
       "Expected Result (per step)": "1. Admin auth works.\n2. Page loads without 403.\n3. Data/controls visible or honest empty.\n4. Writes only if safe.\n5. Classification recorded.",
       "Final Expected Result": "Admin dashboard KPIs load",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/admin."
+          "url": "https://trycareerpilot.com/app/admin."
         }
       ]
     },
@@ -6851,13 +6851,13 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/users.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/users.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
       "Expected Result (per step)": "1. Admin auth works.\n2. Page loads without 403.\n3. Data/controls visible or honest empty.\n4. Writes only if safe.\n5. Classification recorded.",
       "Final Expected Result": "Users table loads; search works",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/admin/users."
+          "url": "https://trycareerpilot.com/app/admin/users."
         }
       ]
     },
@@ -6881,13 +6881,13 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/feature-flags.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/feature-flags.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
       "Expected Result (per step)": "1. Admin auth works.\n2. Page loads without 403.\n3. Data/controls visible or honest empty.\n4. Writes only if safe.\n5. Classification recorded.",
       "Final Expected Result": "Flags list/toggle UI present",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/admin/feature-flags."
+          "url": "https://trycareerpilot.com/app/admin/feature-flags."
         }
       ]
     },
@@ -6911,17 +6911,17 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login FREE_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin.\n3. Open https://clarify.ai.sltfinanceindia.com/app/admin/users.",
+      "Exact Steps": "1. Login FREE_USER_01.\n2. Open https://trycareerpilot.com/app/admin.\n3. Open https://trycareerpilot.com/app/admin/users.",
       "Expected Result (per step)": "1. Free user.\n2. Redirect/denied — no admin data.\n3. Denied — no user PII table.",
       "Final Expected Result": "Non-admin cannot access Admin portal.",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/admin."
+          "url": "https://trycareerpilot.com/app/admin."
         },
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/admin/users."
+          "url": "https://trycareerpilot.com/app/admin/users."
         }
       ]
     },
@@ -6969,13 +6969,13 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/analytics.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/analytics.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
       "Expected Result (per step)": "1. Admin auth works.\n2. Page loads without 403.\n3. Data/controls visible or honest empty.\n4. Writes only if safe.\n5. Classification recorded.",
       "Final Expected Result": "Admin analytics loads",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/admin/analytics."
+          "url": "https://trycareerpilot.com/app/admin/analytics."
         }
       ]
     },
@@ -6999,13 +6999,13 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/revenue.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/revenue.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
       "Expected Result (per step)": "1. Admin auth works.\n2. Page loads without 403.\n3. Data/controls visible or honest empty.\n4. Writes only if safe.\n5. Classification recorded.",
       "Final Expected Result": "Revenue page loads",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/admin/revenue."
+          "url": "https://trycareerpilot.com/app/admin/revenue."
         }
       ]
     },
@@ -7029,13 +7029,13 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/model-costs.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/model-costs.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
       "Expected Result (per step)": "1. Admin auth works.\n2. Page loads without 403.\n3. Data/controls visible or honest empty.\n4. Writes only if safe.\n5. Classification recorded.",
       "Final Expected Result": "Model costs load",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/admin/model-costs."
+          "url": "https://trycareerpilot.com/app/admin/model-costs."
         }
       ]
     },
@@ -7059,13 +7059,13 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/ai-hub.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/ai-hub.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
       "Expected Result (per step)": "1. Admin auth works.\n2. Page loads without 403.\n3. Data/controls visible or honest empty.\n4. Writes only if safe.\n5. Classification recorded.",
       "Final Expected Result": "AI Hub loads",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/admin/ai-hub."
+          "url": "https://trycareerpilot.com/app/admin/ai-hub."
         }
       ]
     },
@@ -7089,13 +7089,13 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/seed-questions.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/seed-questions.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
       "Expected Result (per step)": "1. Admin auth works.\n2. Page loads without 403.\n3. Data/controls visible or honest empty.\n4. Writes only if safe.\n5. Classification recorded.",
       "Final Expected Result": "Seed questions UI loads",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/admin/seed-questions."
+          "url": "https://trycareerpilot.com/app/admin/seed-questions."
         }
       ]
     },
@@ -7119,13 +7119,13 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/bulk-upload.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/bulk-upload.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
       "Expected Result (per step)": "1. Admin auth works.\n2. Page loads without 403.\n3. Data/controls visible or honest empty.\n4. Writes only if safe.\n5. Classification recorded.",
       "Final Expected Result": "Bulk upload UI loads",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/admin/bulk-upload."
+          "url": "https://trycareerpilot.com/app/admin/bulk-upload."
         }
       ]
     },
@@ -7149,13 +7149,13 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/live-chat.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/live-chat.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
       "Expected Result (per step)": "1. Admin auth works.\n2. Page loads without 403.\n3. Data/controls visible or honest empty.\n4. Writes only if safe.\n5. Classification recorded.",
       "Final Expected Result": "Live chat/support inbox loads",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/admin/live-chat."
+          "url": "https://trycareerpilot.com/app/admin/live-chat."
         }
       ]
     },
@@ -7179,13 +7179,13 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/questions.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/questions.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
       "Expected Result (per step)": "1. Admin auth works.\n2. Page loads without 403.\n3. Data/controls visible or honest empty.\n4. Writes only if safe.\n5. Classification recorded.",
       "Final Expected Result": "Question editor loads",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/admin/questions."
+          "url": "https://trycareerpilot.com/app/admin/questions."
         }
       ]
     },
@@ -7209,13 +7209,13 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/audit-log.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/audit-log.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
       "Expected Result (per step)": "1. Admin auth works.\n2. Page loads without 403.\n3. Data/controls visible or honest empty.\n4. Writes only if safe.\n5. Classification recorded.",
       "Final Expected Result": "Audit log loads",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/admin/audit-log."
+          "url": "https://trycareerpilot.com/app/admin/audit-log."
         }
       ]
     },
@@ -7239,13 +7239,13 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/diagnostics.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/diagnostics.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
       "Expected Result (per step)": "1. Admin auth works.\n2. Page loads without 403.\n3. Data/controls visible or honest empty.\n4. Writes only if safe.\n5. Classification recorded.",
       "Final Expected Result": "Diagnostics loads",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/admin/diagnostics."
+          "url": "https://trycareerpilot.com/app/admin/diagnostics."
         }
       ]
     },
@@ -7269,13 +7269,13 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/blog.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/blog.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
       "Expected Result (per step)": "1. Admin auth works.\n2. Page loads without 403.\n3. Data/controls visible or honest empty.\n4. Writes only if safe.\n5. Classification recorded.",
       "Final Expected Result": "Blog CMS loads",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/admin/blog."
+          "url": "https://trycareerpilot.com/app/admin/blog."
         }
       ]
     },
@@ -7299,13 +7299,13 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/help-articles.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/help-articles.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
       "Expected Result (per step)": "1. Admin auth works.\n2. Page loads without 403.\n3. Data/controls visible or honest empty.\n4. Writes only if safe.\n5. Classification recorded.",
       "Final Expected Result": "Help CMS loads",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/admin/help-articles."
+          "url": "https://trycareerpilot.com/app/admin/help-articles."
         }
       ]
     },
@@ -7329,13 +7329,13 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/support.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/support.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
       "Expected Result (per step)": "1. Admin auth works.\n2. Page loads without 403.\n3. Data/controls visible or honest empty.\n4. Writes only if safe.\n5. Classification recorded.",
       "Final Expected Result": "Support page loads",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/admin/support."
+          "url": "https://trycareerpilot.com/app/admin/support."
         }
       ]
     },
@@ -7359,13 +7359,13 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/promo-codes.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/promo-codes.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
       "Expected Result (per step)": "1. Admin auth works.\n2. Page loads without 403.\n3. Data/controls visible or honest empty.\n4. Writes only if safe.\n5. Classification recorded.",
       "Final Expected Result": "Promo codes UI loads",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/admin/promo-codes."
+          "url": "https://trycareerpilot.com/app/admin/promo-codes."
         }
       ]
     },
@@ -7389,13 +7389,13 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/billing-settings.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/billing-settings.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
       "Expected Result (per step)": "1. Admin auth works.\n2. Page loads without 403.\n3. Data/controls visible or honest empty.\n4. Writes only if safe.\n5. Classification recorded.",
       "Final Expected Result": "Billing settings load",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/admin/billing-settings."
+          "url": "https://trycareerpilot.com/app/admin/billing-settings."
         }
       ]
     },
@@ -7419,13 +7419,13 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/gov/sources.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/gov/sources.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
       "Expected Result (per step)": "1. Admin auth works.\n2. Page loads without 403.\n3. Data/controls visible or honest empty.\n4. Writes only if safe.\n5. Classification recorded.",
       "Final Expected Result": "Gov sources load",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/admin/gov/sources."
+          "url": "https://trycareerpilot.com/app/admin/gov/sources."
         }
       ]
     },
@@ -7449,13 +7449,13 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/gov/ingest.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/gov/ingest.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
       "Expected Result (per step)": "1. Admin auth works.\n2. Page loads without 403.\n3. Data/controls visible or honest empty.\n4. Writes only if safe.\n5. Classification recorded.",
       "Final Expected Result": "Gov ingest load",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/admin/gov/ingest."
+          "url": "https://trycareerpilot.com/app/admin/gov/ingest."
         }
       ]
     },
@@ -7479,13 +7479,13 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/gov/exams.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/gov/exams.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
       "Expected Result (per step)": "1. Admin auth works.\n2. Page loads without 403.\n3. Data/controls visible or honest empty.\n4. Writes only if safe.\n5. Classification recorded.",
       "Final Expected Result": "Exam registry loads",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/admin/gov/exams."
+          "url": "https://trycareerpilot.com/app/admin/gov/exams."
         }
       ]
     },
@@ -7509,13 +7509,13 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/gov/question-review.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/gov/question-review.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
       "Expected Result (per step)": "1. Admin auth works.\n2. Page loads without 403.\n3. Data/controls visible or honest empty.\n4. Writes only if safe.\n5. Classification recorded.",
       "Final Expected Result": "Question review loads",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/admin/gov/question-review."
+          "url": "https://trycareerpilot.com/app/admin/gov/question-review."
         }
       ]
     },
@@ -7539,13 +7539,13 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/gov/paper-review.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/gov/paper-review.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
       "Expected Result (per step)": "1. Admin auth works.\n2. Page loads without 403.\n3. Data/controls visible or honest empty.\n4. Writes only if safe.\n5. Classification recorded.",
       "Final Expected Result": "Paper review loads",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/admin/gov/paper-review."
+          "url": "https://trycareerpilot.com/app/admin/gov/paper-review."
         }
       ]
     },
@@ -7569,13 +7569,13 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/gov/translations.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/gov/translations.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
       "Expected Result (per step)": "1. Admin auth works.\n2. Page loads without 403.\n3. Data/controls visible or honest empty.\n4. Writes only if safe.\n5. Classification recorded.",
       "Final Expected Result": "Translations review loads",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/admin/gov/translations."
+          "url": "https://trycareerpilot.com/app/admin/gov/translations."
         }
       ]
     },
@@ -7599,13 +7599,13 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/community.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/community.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
       "Expected Result (per step)": "1. Admin auth works.\n2. Page loads without 403.\n3. Data/controls visible or honest empty.\n4. Writes only if safe.\n5. Classification recorded.",
       "Final Expected Result": "Community admin loads",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/admin/community."
+          "url": "https://trycareerpilot.com/app/admin/community."
         }
       ]
     },
@@ -7629,13 +7629,13 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/learning.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+      "Exact Steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/learning.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
       "Expected Result (per step)": "1. Admin auth works.\n2. Page loads without 403.\n3. Data/controls visible or honest empty.\n4. Writes only if safe.\n5. Classification recorded.",
       "Final Expected Result": "Learning admin loads",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/admin/learning."
+          "url": "https://trycareerpilot.com/app/admin/learning."
         }
       ]
     },
@@ -7659,17 +7659,17 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Logout.\n2. Open https://clarify.ai.sltfinanceindia.com/app/dashboard.\n3. Open https://clarify.ai.sltfinanceindia.com/app/sessions.",
+      "Exact Steps": "1. Logout.\n2. Open https://trycareerpilot.com/app/dashboard.\n3. Open https://trycareerpilot.com/app/sessions.",
       "Expected Result (per step)": "1. Logged out.\n2. Redirect login.\n3. Redirect login — no data flash.",
       "Final Expected Result": "Protected routes require authentication.",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/dashboard."
+          "url": "https://trycareerpilot.com/app/dashboard."
         },
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/sessions."
+          "url": "https://trycareerpilot.com/app/sessions."
         }
       ]
     },
@@ -7809,13 +7809,13 @@
       "Tester": "Anushka",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/login.\n2. Tab through fields.\n3. Submit with Enter.\n4. Confirm visible focus styles.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/login.\n2. Tab through fields.\n3. Submit with Enter.\n4. Confirm visible focus styles.",
       "Expected Result (per step)": "1. Page.\n2. Logical tab order.\n3. Submit works.\n4. Focus visible.",
       "Final Expected Result": "Login is keyboard operable.",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/login."
+          "url": "https://trycareerpilot.com/login."
         }
       ]
     },
@@ -9001,8 +9001,8 @@
           "Reproducibility": "Always",
           "Environment": "Production(web/chrome)",
           "Account ID": "Pro_USER_01",
-          "Steps to Reproduce": "1. Login as PRO_USER_01.\n2. Navigate to https://clarify.ai.sltfinanceindia.com/app/mock-test.\n3. Observe the search bar and DevTools Console.\n4. Type any search keyword (e.g., \"ssc\") into the search box.",
-          "Steps to Reproduce__hyperlink": "https://clarify.ai.sltfinanceindia.com/app/mock-test.",
+          "Steps to Reproduce": "1. Login as PRO_USER_01.\n2. Navigate to https://trycareerpilot.com/app/mock-test.\n3. Observe the search bar and DevTools Console.\n4. Type any search keyword (e.g., \"ssc\") into the search box.",
+          "Steps to Reproduce__hyperlink": "https://trycareerpilot.com/app/mock-test.",
           "Expected": "Profile data loads cleanly without errors, the search bar finishes initializing, and entering a keyword filters/returns relevant exam test papers.",
           "Actual": "Search bar shows an infinite loading spinner and gets stuck displaying \"Searching...\". DevTools Console throws multiple errors: \"[clarify:auth:profile:load_timed_out]\" and \"[authStore] Failed to load profile\".",
           "Evidence Links": "#VALUE!",
@@ -9018,8 +9018,8 @@
           "Reproducibility": "Always",
           "Environment": "Production(web/chrome)",
           "Account ID": "Pro_USER_01",
-          "Steps to Reproduce": "1. Login as PRO_USER_01.\n2. Navigate to any page (e.g., https://clarify.ai.sltfinanceindia.com/app/guide/practice-coach).\n3. Open DevTools Console panel.\n4. Click on the global search input bar (\"Search pages, actions, settings...\").\n5. Observe the DevTools Console.",
-          "Steps to Reproduce__hyperlink": "https://clarify.ai.sltfinanceindia.com/app/guide/practice-coach).",
+          "Steps to Reproduce": "1. Login as PRO_USER_01.\n2. Navigate to any page (e.g., https://trycareerpilot.com/app/guide/practice-coach).\n3. Open DevTools Console panel.\n4. Click on the global search input bar (\"Search pages, actions, settings...\").\n5. Observe the DevTools Console.",
+          "Steps to Reproduce__hyperlink": "https://trycareerpilot.com/app/guide/practice-coach).",
           "Expected": "Global search modal overlay opens cleanly with full screen reader accessibility support and zero console errors.",
           "Actual": "Search modal opens, but DevTools console immediately logs repeated Radix UI runtime errors: \"`DialogContent` requires a `DialogTitle` for the component to be accessible for screen reader users\" along with missing `aria-describedby` warnings.",
           "Evidence Links": "#VALUE!"
@@ -9034,8 +9034,8 @@
           "Reproducibility": "Always",
           "Environment": "Production(web/chrome)",
           "Account ID": "Pro_USER_01",
-          "Steps to Reproduce": "1. Login as PRO_USER_01.\n2. Navigate to https://clarify.ai.sltfinanceindia.com/app/settings/billing.\n3. Open DevTools Console panel.\n4. Click on 'Buy Max (one-time)' button to trigger checkout.\n5. Observe DevTools Console.",
-          "Steps to Reproduce__hyperlink": "https://clarify.ai.sltfinanceindia.com/app/settings/billing.",
+          "Steps to Reproduce": "1. Login as PRO_USER_01.\n2. Navigate to https://trycareerpilot.com/app/settings/billing.\n3. Open DevTools Console panel.\n4. Click on 'Buy Max (one-time)' button to trigger checkout.\n5. Observe DevTools Console.",
+          "Steps to Reproduce__hyperlink": "https://trycareerpilot.com/app/settings/billing.",
           "Expected": "Payment modal opens and all third-party vendor dependencies (Razorpay scripts) load cleanly without CSP or header access violations.",
           "Actual": "Console throws CSP violation error: Loading script 'https://cdn.razorpay.com/static/cx/razorpay-risk-detection/bundle.js' violates directive 'script-src'. Action blocked along with unsafe header errors.",
           "Evidence Links": "#VALUE!"

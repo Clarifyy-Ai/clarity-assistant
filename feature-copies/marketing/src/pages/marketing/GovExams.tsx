@@ -67,7 +67,7 @@ export default function GovExams() {
     title: `${PRODUCT_NAMES.govExams} — UPSC, SSC, IBPS & more | ${PRODUCT_NAMES.brand}`,
     description:
       "Timed MCQ mock tests for UPSC CSE, SSC CGL, IBPS PO, JEE, NEET, and PSU exams. Official previous year papers, question palette, and performance analytics.",
-    canonical: "https://clarify.ai.sltfinanceindia.com/gov-exams",
+    canonical: "https://trycareerpilot.com/gov-exams",
   });
 
   return (

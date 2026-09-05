@@ -55,6 +55,7 @@ import { selectApprovedFallbackQuestions } from "../_shared/mockQuestionBank.ts"
 import { executeHybridOperation } from "../_shared/hybridExecute.ts";
 import { isAiForceUnavailable } from "../_shared/operationRouter.ts";
 import { callPythonProcess, pythonExecuteOperation } from "../_shared/pythonClient.ts";
+import { resolveGenerateQuestionsCreditCharge } from "../_shared/generateQuestionsBilling.ts";
 
 const FUNCTION_NAME = "generate-questions";
 const CREDIT_COST = creditCost("generate_questions");
@@ -245,6 +246,9 @@ const generateQuestionsSchema = z
     skills_to_emphasize: z.array(z.string().max(80)).max(20).optional().default([]),
     skills_not_to_claim: z.array(z.string().max(80)).max(20).optional().default([]),
     language: z.string().max(16).optional().default("en"),
+    seniority: z.string().max(80).optional().default(""),
+    industry: z.string().max(80).optional().default(""),
+    topics_to_avoid: z.array(z.string().max(80)).max(20).optional().default([]),
   })
   .transform((data) => ({
     // Canonical wins; legacy fills in only if canonical is absent; final default "behavioral"
@@ -270,6 +274,9 @@ const generateQuestionsSchema = z
     skills_to_emphasize: data.skills_to_emphasize ?? [],
     skills_not_to_claim: data.skills_not_to_claim ?? [],
     language: data.language ?? "en",
+    seniority: data.seniority ?? "",
+    industry: data.industry ?? "",
+    topics_to_avoid: data.topics_to_avoid ?? [],
   }));
 
 type GenerateQuestionsRequest = z.infer<typeof generateQuestionsSchema>;
@@ -481,6 +488,12 @@ function buildPrompt(input: GenerateQuestionsRequest): string {
     .map((s) => sanitizeText(s, 80))
     .filter(Boolean)
     .join(", ");
+  const topicsAvoid = (input.topics_to_avoid ?? [])
+    .map((s) => sanitizeText(s, 80))
+    .filter(Boolean)
+    .join(", ");
+  const seniority = sanitizeText(input.seniority || input.experience_level || "", 80);
+  const industry = sanitizeText(input.industry || "", 80);
 
   const followUpBlock = input.is_follow_up
     ? `
@@ -506,11 +519,14 @@ Context:
 - Company: ${company}
 - Role: ${role}
 - Experience level: ${sanitizeText(input.experience_level || "", 80) || "not specified"}
+- Seniority: ${seniority || "not specified"}
+- Industry: ${industry || "not specified"}
 - Language: ${sanitizeText(input.language || "en", 16)}
 - Follow-up depth policy: ${input.follow_up_depth}
 - Focus areas: ${focusAreas || "not specified"}
 - Skills to emphasize: ${skillsEmph || "not specified"}
 - Skills not to claim: ${skillsAvoid || "none"}
+- Topics to avoid: ${topicsAvoid || "none"}
 - Resume context: ${resumeCtx}
 - Job description: ${jobDesc}
 ${prevAnswers ? `- Prior Q&A in this session (adapt; do not repeat):\n${prevAnswers}` : ""}
@@ -920,6 +936,16 @@ Deno.serve(async (req: Request) => {
       phase: body.phase ?? "",
       competency: body.competency ?? "",
       experience_level: body.experience_level ?? "",
+      previous_answers_digest: await sha256Hex(
+        JSON.stringify(body.previous_answers ?? []).slice(0, 8_000),
+      ),
+      is_follow_up: body.is_follow_up ?? false,
+      parent_question_id: body.parent_question_id ?? "",
+      follow_up_depth: body.follow_up_depth ?? "",
+      language: body.language ?? "",
+      topics_to_avoid: body.topics_to_avoid ?? [],
+      seniority: body.seniority ?? "",
+      industry: body.industry ?? "",
     }),
   );
 
@@ -948,7 +974,18 @@ Deno.serve(async (req: Request) => {
   }
 
   const prompt = buildPrompt(body);
-  const creditCharge = body.free_session ? 0 : CREDIT_COST;
+  const billing = await resolveGenerateQuestionsCreditCharge(
+    db,
+    user.id,
+    body.session_id,
+    CREDIT_COST,
+  );
+  const creditCharge = billing.creditCharge;
+  if (body.free_session && creditCharge > 0) {
+    console.warn(
+      `[generate-questions] Ignored client free_session for user=${user.id} session=${body.session_id ?? "none"} reason=${billing.reason}`,
+    );
+  }
 
   const hybridResult = await executeHybridOperation<QuestionsHybridData>({
     req,
@@ -1028,6 +1065,15 @@ Deno.serve(async (req: Request) => {
             interview_type: body.interviewType,
             count: body.questionCount,
             difficulty: body.difficulty,
+            company: body.company,
+            role: body.role,
+            resume_context: body.resume_context,
+            job_description: body.job_description,
+            experience_level: body.experience_level,
+            seniority: body.seniority,
+            industry: body.industry,
+            topics_to_avoid: body.topics_to_avoid,
+            previous_answers: body.previous_answers,
             excludeTexts: body.exclude_questions,
             exclude_texts: body.exclude_questions,
           },

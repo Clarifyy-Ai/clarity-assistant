@@ -166,7 +166,7 @@ export function getBasename(url: string): string {
 
 /**
  * Build an app deep-link URL for sharing.
- * @example buildDeepLink("/session/abc123") → "https://app.clarity.ai/session/abc123"
+ * @example buildDeepLink("/session/abc123") → "https://trycareerpilot.com/session/abc123"
  */
 export function buildDeepLink(path: string, params?: QueryParams): string {
   const base = typeof window !== "undefined"

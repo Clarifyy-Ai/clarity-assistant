@@ -3,13 +3,19 @@
 // and internal route constants. Single source of truth for every endpoint.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { resolvePublicAppOrigin } from "@/lib/auth/redirectUrl";
 import { ENV } from "@/lib/env";
 
 // ─── Environment Base URLs ────────────────────────────────────────────────────
 
 export const BASE_URLS = {
   SUPABASE:   ENV.SUPABASE_URL,
-  APP:        ENV.APP_URL || window.location.origin,
+  APP:        resolvePublicAppOrigin({
+                configuredAppUrl: ENV.APP_URL,
+                appEnv: ENV.APP_ENV,
+                windowOrigin:
+                  typeof window !== "undefined" ? window.location.origin : null,
+              }),
   API:        ENV.API_URL,
 } as const;
 

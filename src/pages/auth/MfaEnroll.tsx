@@ -13,7 +13,7 @@ import {
   isFriendlyNameConflictError,
 } from "@/lib/auth/mfaFactors";
 import { completeMfaReenrollment, recoveryErrorMessage } from "@/lib/auth/mfaRecoveryClient";
-import { getAuthenticatedEntryPath } from "@/lib/auth/postAuthRedirect";
+import { getAuthenticatedEntryPath, resolveOnboardingCompletedForRedirect } from "@/lib/auth/postAuthRedirect";
 import { preferredReturnToFromNavigation } from "@/lib/auth/safeReturnTo";
 import { AUTH_PATHS } from "@/lib/auth/appOrigin";
 import { usePageMeta } from "@/hooks/usePageMeta";
@@ -109,7 +109,10 @@ export default function MfaEnroll(): JSX.Element {
       navigate(
         getAuthenticatedEntryPath({
           isAdmin: latest.isAdmin,
-          isOnboarded: latest.isOnboarded,
+          isOnboarded: resolveOnboardingCompletedForRedirect({
+            profile: latest.profile,
+            isProfileLoaded: latest.isProfileLoaded,
+          }),
           preferredReturnTo,
         }),
         preferredReturnTo

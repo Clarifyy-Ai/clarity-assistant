@@ -74,13 +74,13 @@ export const HELP_PAID_PLANS_ANSWER =
   `Pro is ${HELP_PLAN_PRICES.pro} one-time (${HELP_PLAN_CREDITS.pro.toLocaleString("en-IN")} credits). Max is ${HELP_PLAN_PRICES.max} one-time (${HELP_PLAN_CREDITS.max.toLocaleString("en-IN")} credits). Pay in INR with Razorpay — checkout does not auto-renew.`;
 
 export const HELP_CREDITS_OVERVIEW_ANSWER =
-  `Credits are the currency for AI-powered features. Free includes ${HELP_PLAN_CREDITS.free} credits per month. Pro includes ${HELP_PLAN_CREDITS.pro.toLocaleString("en-IN")} credits (one-time). Max includes ${HELP_PLAN_CREDITS.max.toLocaleString("en-IN")} credits (one-time). Extra packs (${HELP_PACK_LIST} credits) are sold from Settings → Billing.`;
+  `Credits are the currency for AI-powered features. Free includes ${HELP_PLAN_CREDITS.free} credits at signup (one-time balance). Pro includes ${HELP_PLAN_CREDITS.pro.toLocaleString("en-IN")} credits (one-time). Max includes ${HELP_PLAN_CREDITS.max.toLocaleString("en-IN")} credits (one-time). Extra packs (${HELP_PACK_LIST} credits) are sold from Settings → Billing.`;
 
 export const HELP_EXTRA_CREDITS_ANSWER =
   `Yes. Buy extra credit packs (${HELP_PACK_LIST} credits) from Settings → Billing, or upgrade to Pro (${HELP_PLAN_CREDITS.pro.toLocaleString("en-IN")} credits) or Max (${HELP_PLAN_CREDITS.max.toLocaleString("en-IN")} credits).`;
 
 export const HELP_FREE_PLAN_ANSWER =
-  `Yes. The Free plan includes ${HELP_PLAN_CREDITS.free} credits per month — enough to try Practice Coach and a mock session. Pro is ${HELP_PLAN_PRICES.pro} one-time. Max is ${HELP_PLAN_PRICES.max} one-time.`;
+  `Yes. The Free plan includes ${HELP_PLAN_CREDITS.free} credits at signup (one-time balance) — enough to try Practice Coach and a mock session. Pro is ${HELP_PLAN_PRICES.pro} one-time. Max is ${HELP_PLAN_PRICES.max} one-time.`;
 
 export const HELP_PUBLIC_PATHS = {
   pricing: "/pricing",
@@ -91,11 +91,12 @@ export const HELP_PUBLIC_PATHS = {
 
 /**
  * Detects USD-subscription / pre-India credit copy that must not be shown.
- * Free-plan "credits per month" is current and is not matched here.
+ * Also flags incorrect "free credits per month" (free tier is one-time at signup).
  */
 const STALE_HELP_PATTERNS: RegExp[] = [
   /\$\s*\d/,
   /\bUSD\b/i,
+  /\$\d+\/mo/i,
   /\$29/,
   /\$79/,
   /unlimited credits/i,
@@ -104,6 +105,8 @@ const STALE_HELP_PATTERNS: RegExp[] = [
   /\$\d+\s*\/\s*month/i,
   /2,000 credits/i,
   /\b200 credits\b/i,
+  /free[^.\n]{0,40}credits per month/i,
+  /refresh each calendar month/i,
   /packs are not available/i,
   /À\s*la carte/i,
   /A la carte credit packs are not available/i,
@@ -144,14 +147,14 @@ export const HELP_CATALOG_SNIPPETS: Record<string, HelpCatalogSnippet> = {
 3. Verify your email address
 4. Complete the quick onboarding flow (role, experience, target companies)
 
-No credit card is required. You'll start on the Free plan with ${HELP_PLAN_CREDITS.free} credits per month.`,
+No credit card is required. You'll start on the Free plan with ${HELP_PLAN_CREDITS.free} credits at signup (one-time balance).`,
   },
   "gs-3": {
     question: "Is there a free plan?",
     answer: HELP_FREE_PLAN_ANSWER,
     body_md: `Yes. The Free plan includes:
 
-- **${HELP_PLAN_CREDITS.free} credits** per month
+- **${HELP_PLAN_CREDITS.free} credits** at signup (one-time balance)
 - Practice sessions with the live AI coach (limited)
 - STAR builder and answer bank (limited)
 
@@ -189,7 +192,7 @@ Until then, use solo mock interviews and practice sessions. Check Help again whe
 
 ${HELP_CREDIT_COST_LINES}
 
-Free credits refresh each calendar month and do not roll over. Pro and Max credits are a one-time balance. Extra packs (${HELP_PACK_LIST} credits) are available from **Settings → Billing**.`,
+Free credits are granted once at signup and stay in your balance until used. Pro and Max credits are a one-time balance. Extra packs (${HELP_PACK_LIST} credits) are available from **Settings → Billing**.`,
   },
   "bi-2": {
     question: "How much do paid plans cost?",
@@ -212,10 +215,10 @@ You keep any remaining credits until you use them. If you were charged in error,
   "bi-4": {
     question: "Do unused credits roll over?",
     answer:
-      "Free-plan credits refresh each calendar month and do not roll over. Pro and Max credits are a one-time balance and stay until used. Extra packs add to the same balance.",
+      "Free-plan credits are granted once at signup and stay until used. Pro and Max credits are a one-time balance. Extra packs add to the same balance.",
     body_md: `**${HELP_COPY_KIND.current}:**
 
-- **Free** credits refresh each calendar month and do **not** roll over
+- **Free** credits are granted once at signup — they stay in your balance until used
 - **Pro** and **Max** credits are a one-time balance — they stay until you use them
 - Extra packs add to the same balance and do not expire on a billing cycle (there is no subscription cycle)`,
   },

@@ -20,6 +20,10 @@ Authenticated claim after referred signup (email verified). Credits grant immedi
 
 First successful paid Razorpay fulfill sets `converted_at` / status progression via `mark_referral_converted`. **No second credit** under v1.
 
+## Refunds and chargebacks (v1)
+
+Referral signup credits and conversion status are **not reversed** on payment refund or chargeback in v1. Admin review is required for any manual adjustment.
+
 ## Rejects (typed reasons)
 
 | Reason | Meaning |
@@ -37,7 +41,7 @@ No email enumeration: `code_not_found` and `invalid_code` map to the same public
 - `clarify_ref` cleared on logout and on terminal claim outcomes.
 - `pending_referral_code` in Auth metadata is set at signup; claim prefers it when localStorage is empty.
 - Kept on network/temporary failures so ProtectedRoute/onboarding can retry.
-- OAuth: code must be stored before redirect; deep-link state is assistive only (OAuth does not set metadata unless signup path does).
+- OAuth: code stored before redirect; Auth callback persists storage/URL code to `user_metadata.pending_referral_code` after session is established.
 
 ## Auth verification email
 

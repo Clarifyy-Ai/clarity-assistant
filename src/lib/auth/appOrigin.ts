@@ -2,9 +2,10 @@ import {
   buildAuthRedirectUrl,
   isLocalhostUrl,
   PRODUCTION_APP_URL,
+  resolvePublicAppOrigin,
 } from "@/lib/auth/redirectUrl";
 
-export { PRODUCTION_APP_URL, isLocalhostUrl, buildAuthRedirectUrl };
+export { PRODUCTION_APP_URL, isLocalhostUrl, buildAuthRedirectUrl, resolvePublicAppOrigin };
 
 /** Canonical auth paths — do not scatter these across pages. */
 export const AUTH_PATHS = {
@@ -23,6 +24,7 @@ function redirectEnv(windowOrigin?: string | null) {
   return {
     configuredAppUrl: import.meta.env.VITE_APP_URL,
     appEnv: import.meta.env.VITE_APP_ENV,
+    productionBuild: import.meta.env.PROD,
     windowOrigin:
       windowOrigin ??
       (typeof window !== "undefined" ? window.location.origin : null),

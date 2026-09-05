@@ -11,6 +11,9 @@ import type { CoachingContext } from "@/types/ai.types";
 // that is attached to every AI call.
 // ─────────────────────────────────────────────────────────────────
 
+/**
+ * @deprecated Prefer `buildFeatureContext()` and coach store updates at session start.
+ */
 export function useSessionContext() {
   const coachStore  = useCoachStore();
   const authStore   = useAuthStore();

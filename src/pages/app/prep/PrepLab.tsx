@@ -23,6 +23,7 @@ import { PAGE_SHELL } from "@/lib/ui/responsivePage";
 import { answerBankDB } from "@/lib/supabase/database";
 import { refreshCredits } from "@/lib/billing/creditsManager";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
+import { withPrepToolContext } from "@/lib/prep/prepToolContext";
 import { generateCompanyBrief, userFacingCompanyBriefError, cancelCompanyResearchJob, isCompanyBriefInFlight, type CompanyBriefJob } from "@/lib/company/companyResearchJob";
 import { saveActiveCompanyJob, clearActiveCompanyJob } from "@/lib/company/companyResearchSession";
 import { normalizeCompanyName } from "@/lib/company/normalizeCompanyName";
@@ -238,10 +239,10 @@ function STARBuilder() {
     generateKeyRef.current = idempotencyKey;
 
     try {
-      const data = await fetchEdgeJson<Record<string, unknown>>("prep-tool", {
+      const data = await fetchEdgeJson<Record<string, unknown>>("prep-tool", withPrepToolContext({
         tool_id: "star_method",
         input,
-      }, {
+      }), {
         headers: {
           "x-idempotency-key": idempotencyKey,
         },
@@ -718,10 +719,10 @@ function AIToolModal({
 
     try {
 
-      const data = await fetchEdgeJson<{ result?: string }>("prep-tool", {
+      const data = await fetchEdgeJson<{ result?: string }>("prep-tool", withPrepToolContext({
         tool_id: toolId,
         input,
-      }, {
+      }), {
         headers: {
           "Idempotency-Key": createIdempotencyKey("prep-tool"),
         },

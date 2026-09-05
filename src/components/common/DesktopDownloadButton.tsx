@@ -25,7 +25,8 @@ export function DesktopDownloadButton({
   compact = false,
   webCoachHref = "/app/live",
 }: DesktopDownloadButtonProps) {
-  const { osLabel, url, loading, download, installGuidePath } = useDesktopDownload();
+  const { osLabel, url, loading, download, installGuidePath, unavailableReason, hasEnvUrl } =
+    useDesktopDownload();
 
   return (
     <div
@@ -87,6 +88,15 @@ export function DesktopDownloadButton({
                 temporary outage — use web Practice Coach above. Download appears only when a real
                 installer artifact is configured.
               </p>
+              {!loading && unavailableReason && (
+                <p
+                  className="text-[10px] text-muted-foreground/90 leading-relaxed font-mono"
+                  data-testid="desktop-installer-probe-reason"
+                >
+                  Probe: {unavailableReason}
+                  {hasEnvUrl ? " · env URL set but artifact unreachable" : " · no env download URL"}
+                </p>
+              )}
               {import.meta.env.DEV && (
                 <p className="text-[10px] text-muted-foreground/80 leading-relaxed font-mono">
                   Dev: set VITE_DESKTOP_DOWNLOAD_URL_WIN or run npm run publish:desktop-installer.

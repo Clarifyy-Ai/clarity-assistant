@@ -15,7 +15,7 @@ from openpyxl.styles import Alignment, Font, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.datavalidation import DataValidation
 
-BASE = "https://clarify.ai.sltfinanceindia.com"
+BASE = "https://trycareerpilot.com"
 OUT = Path(__file__).resolve().parents[1] / "Clarify_AI_QA_Checklist_Basic.xlsx"
 
 HEADERS = [

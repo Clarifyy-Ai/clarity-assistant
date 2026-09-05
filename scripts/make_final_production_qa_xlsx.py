@@ -16,7 +16,7 @@ from openpyxl.chart import PieChart, Reference
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "Clarify_AI_Final_Production_QA_Workbook.xlsx"
-SITE = "https://clarify.ai.sltfinanceindia.com"
+SITE = "https://trycareerpilot.com"
 TODAY = date(2026, 8, 13)
 
 HEADER_FILL = PatternFill("solid", fgColor="1F4E79")

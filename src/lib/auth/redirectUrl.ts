@@ -14,8 +14,10 @@
  * In that case, fall back to the known production origin instead.
  */
 
+import { PUBLIC_WEBSITE_URL } from "@/lib/constants/contact";
+
 /** Canonical production origin for Career Pilot. Keep in sync with public website. */
-export const PRODUCTION_APP_URL = "https://trycareerpilot.com";
+export const PRODUCTION_APP_URL = PUBLIC_WEBSITE_URL;
 
 const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "0.0.0.0", "::1"]);
 
@@ -49,6 +51,8 @@ export interface BuildAuthRedirectUrlOptions {
   configuredAppUrl?: string | null;
   /** Raw `import.meta.env.VITE_APP_ENV` value (may be undefined/empty). */
   appEnv?: string | null;
+  /** True when `import.meta.env.PROD` — treats build as production even if VITE_APP_ENV is wrong. */
+  productionBuild?: boolean;
   /** Runtime fallback, typically `window.location.origin`. */
   windowOrigin?: string | null;
   /** Override for testing; defaults to {@link PRODUCTION_APP_URL}. */
@@ -78,7 +82,9 @@ export function buildAuthRedirectUrl(
   } = options;
 
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  const isProduction = (appEnv ?? "").trim().toLowerCase() === "production";
+  const isProduction =
+    (appEnv ?? "").trim().toLowerCase() === "production" ||
+    options.productionBuild === true;
 
   const configured = (configuredAppUrl ?? "").trim();
   const configuredParsed = configured ? parseHttpUrl(configured) : null;
@@ -103,4 +109,60 @@ export function buildAuthRedirectUrl(
   }
 
   return `${stripTrailingSlashes(productionFallbackUrl)}${normalizedPath}`;
+}
+
+export interface ResolvePublicAppOriginOptions {
+  /** Raw `import.meta.env.VITE_APP_URL` value (may be undefined/empty). */
+  configuredAppUrl?: string | null;
+  /** Raw `import.meta.env.VITE_APP_ENV` value (may be undefined/empty). */
+  appEnv?: string | null;
+  /** True when `import.meta.env.PROD`. */
+  productionBuild?: boolean;
+  /** Runtime fallback, typically `window.location.origin`. */
+  windowOrigin?: string | null;
+  /** Override for testing; defaults to {@link PRODUCTION_APP_URL}. */
+  productionFallbackUrl?: string;
+}
+
+/**
+ * Resolve the canonical public web-app origin for share links, deep links,
+ * billing return URLs (when no live window origin), and API base URLs.
+ *
+ * Priority mirrors {@link buildAuthRedirectUrl} but returns origin only (no path).
+ */
+export function resolvePublicAppOrigin(
+  options: ResolvePublicAppOriginOptions = {},
+): string {
+  const {
+    configuredAppUrl,
+    appEnv,
+    windowOrigin,
+    productionFallbackUrl = PRODUCTION_APP_URL,
+  } = options;
+
+  const isProduction =
+    (appEnv ?? "").trim().toLowerCase() === "production" ||
+    options.productionBuild === true;
+  const configured = (configuredAppUrl ?? "").trim();
+  const configuredParsed = configured ? parseHttpUrl(configured) : null;
+
+  if (configuredParsed) {
+    const configuredIsLocalhost = isLocalhostUrl(configured);
+    if (isProduction && configuredIsLocalhost) {
+      return stripTrailingSlashes(productionFallbackUrl);
+    }
+    return stripTrailingSlashes(configuredParsed.toString());
+  }
+
+  if (isProduction) {
+    return stripTrailingSlashes(productionFallbackUrl);
+  }
+
+  const origin = (windowOrigin ?? "").trim();
+  const originParsed = origin ? parseHttpUrl(origin) : null;
+  if (originParsed) {
+    return stripTrailingSlashes(originParsed.toString());
+  }
+
+  return stripTrailingSlashes(productionFallbackUrl);
 }

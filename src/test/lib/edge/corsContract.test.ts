@@ -4,7 +4,7 @@ import path from "node:path";
 
 const envStore: Record<string, string> = {
   APP_ENV: "production",
-  ALLOWED_ORIGINS: "https://trycareerpilot.com,https://www.trycareerpilot.com,https://clarityapp.ai,https://www.clarityapp.ai,https://clarify.ai.sltfinanceindia.com",
+  ALLOWED_ORIGINS: "https://trycareerpilot.com,https://www.trycareerpilot.com",
   ALLOW_LOCALHOST_ORIGINS: "true",
   ALLOW_PREVIEW_ORIGINS: "true",
   ALLOW_ELECTRON_NULL_ORIGIN: "true",
@@ -32,7 +32,7 @@ import {
   withBrowserCors,
 } from "../../../../supabase/functions/_shared/cors";
 
-const APPROVED = "https://clarityapp.ai";
+const APPROVED = "https://trycareerpilot.com";
 const LOCALHOST = "http://127.0.0.1:5000";
 const UNAPPROVED = "https://evil.example";
 const PREVIEW = "https://preview-abc.lovable.app";

@@ -67,7 +67,7 @@ function buildMenu({ isDev }) {
       submenu: [
         {
           label: "Open Career Pilot Website",
-          click: () => shell.openExternal("https://clarify.ai.sltfinanceindia.com"),
+          click: () => shell.openExternal("https://trycareerpilot.com"),
         },
         ...(isDev
           ? [{

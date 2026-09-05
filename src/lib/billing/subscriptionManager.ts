@@ -73,8 +73,8 @@ export const PLANS: Record<PlanId, Plan> = {
         key: "live_assist",
         label: "Practice Coach sessions",
         included: true,
-        limit: 2,
-        note: "2 sessions/month",
+        limit: 3,
+        note: "3 sessions/day (server enforced)",
       },
       {
         key: "mock_sessions",

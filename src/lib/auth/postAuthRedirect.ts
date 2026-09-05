@@ -28,3 +28,14 @@ export function getAuthenticatedEntryPath(options: {
 export function getPostOnboardingPath(preferredReturnTo?: string | null): string {
   return sanitizeReturnTo(preferredReturnTo) ?? "/app/dashboard";
 }
+
+/** Prefer profile.onboarding_completed; never trust stale persisted UI hints. */
+export function resolveOnboardingCompletedForRedirect(input: {
+  profile?: { onboarding_completed?: boolean | null } | null;
+  isProfileLoaded?: boolean;
+}): boolean {
+  if (input.isProfileLoaded && input.profile) {
+    return input.profile.onboarding_completed === true;
+  }
+  return false;
+}

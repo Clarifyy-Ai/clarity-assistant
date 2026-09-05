@@ -25,7 +25,7 @@ Workbook Excel artifacts must **never** contain plaintext passwords.
 
 No passwords. Complete in Supabase Dashboard → Authentication:
 
-1. **Site URL** — set to the production app origin (e.g. `https://clarify.ai.sltfinanceindia.com`).
+1. **Site URL** — set to the production app origin (e.g. `https://trycareerpilot.com`).
 2. **Redirect URLs** — include:
    - `{APP_URL}/auth/callback`
    - `{APP_URL}/login`

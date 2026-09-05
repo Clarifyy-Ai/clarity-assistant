@@ -48,8 +48,8 @@ npm run qa:seed-mfa         # TOTP for qa.mfa@ (optional)
 | Env | Base URL | Supabase |
 |-----|----------|----------|
 | Local | http://localhost:5173 | `qzgvjrvtkwlzxpmlddkx` |
-| Staging / closed beta | https://clarify.ai.sltfinanceindia.com | same project |
-| Prod | https://clarify.ai.sltfinanceindia.com | same project |
+| Staging / closed beta | https://trycareerpilot.com | same project |
+| Prod | https://trycareerpilot.com | same project |
 
 There is no separate staging project yet — treat closed beta as the QA target.
 
@@ -80,7 +80,7 @@ this repo, so every deploy must be checked manually:
 1. In the Lovable project dashboard, set (Project Settings → Environment):
    - `VITE_SUPABASE_URL` = `https://qzgvjrvtkwlzxpmlddkx.supabase.co`
    - `VITE_SUPABASE_ANON_KEY` and/or `VITE_SUPABASE_PUBLISHABLE_KEY` (Supabase Dashboard → Project Settings → API)
-   - `VITE_APP_URL` = `https://clarify.ai.sltfinanceindia.com`
+   - `VITE_APP_URL` = `https://trycareerpilot.com`
 2. **Trigger a full rebuild** after saving env vars — Lovable/Cloudflare will
    keep serving the old bundle otherwise. Vite inlines `VITE_*` vars at build
    time; changing them without rebuilding does nothing.
@@ -88,7 +88,7 @@ this repo, so every deploy must be checked manually:
    - Open the deployed site → DevTools → Network → find the largest `assets/*.js` file → search its contents for `qzgvjrvtkwlzxpmlddkx`.
    - Or, if you can run the build step yourself: `npm run build:check` (runs `vite build` then `scripts/verify-dist-env.mjs`, which fails the build if the Supabase project hostname isn't present in `dist/assets/*.js`).
 4. On the Supabase Edge Functions side, `ALLOWED_ORIGINS` **must include**
-   `https://clarify.ai.sltfinanceindia.com` or every Edge Function call (AI
+   `https://trycareerpilot.com` or every Edge Function call (AI
    hints, debrief, billing, etc.) will fail CORS for this domain.
 5. If the app is still stuck on "Loading Career Pilot…": open DevTools console.
    - `Missing required environment variable: VITE_SUPABASE_URL` → step 1/2 above was skipped or the rebuild didn't pick up the new env vars.

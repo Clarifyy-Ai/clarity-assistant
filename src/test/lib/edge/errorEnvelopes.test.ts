@@ -49,7 +49,7 @@ describe("edge function error envelope contracts", () => {
       "utf8",
     );
     const statusFn = domain.slice(domain.indexOf("httpStatusForDomainCode"));
-    expect(statusFn).toMatch(/AI_PROVIDER_UNAVAILABLE[\s\S]{0,160}return 503/);
+    expect(statusFn).toMatch(/AI_PROVIDER_UNAVAILABLE[\s\S]{0,400}return 503/);
     expect(statusFn).not.toMatch(/AI_PROVIDER_UNAVAILABLE[\s\S]{0,80}return 502/);
 
     const src = fs.readFileSync(

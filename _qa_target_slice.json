@@ -50,14 +50,14 @@
       "Tester": "Venkat",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/interviews/new (or note feature flag).\n2. Fill required date/time/title.\n3. Save.\n4. Refresh list.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/interviews/new (or note feature flag).\n2. Fill required date/time/title.\n3. Save.\n4. Refresh list.",
       "Expected Result (per step)": "1. Form opens or flagged.\n2. Validation works.\n3. Saved.\n4. Persists.",
       "Final Expected Result": "Create interview persists.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/interviews/new"
+          "url": "https://trycareerpilot.com/app/interviews/new"
         }
       ]
     },
@@ -180,13 +180,13 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/settings/billing.\n2. Note plan, credits, purchase CTAs.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/settings/billing.\n2. Note plan, credits, purchase CTAs.",
       "Expected Result (per step)": "1. Page loads.\n2. Plan/credits/CTAs visible.",
       "Final Expected Result": "Billing settings page usable.",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/settings/billing."
+          "url": "https://trycareerpilot.com/app/settings/billing."
         }
       ]
     },
@@ -322,13 +322,13 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Logged in as FREE_USER_01 open https://clarify.ai.sltfinanceindia.com/pricing.\n2. Click Pro CTA.\n3. Land on upgrade/checkout.",
+      "Exact Steps": "1. Logged in as FREE_USER_01 open https://trycareerpilot.com/pricing.\n2. Click Pro CTA.\n3. Land on upgrade/checkout.",
       "Expected Result (per step)": "1. Pricing loads.\n2. CTA works.\n3. Upgrade path correct.",
       "Final Expected Result": "Pricing CTAs reach upgrade/checkout.",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/pricing."
+          "url": "https://trycareerpilot.com/pricing."
         }
       ]
     },
@@ -368,13 +368,13 @@
       "Tester": "Raj Balani",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/usage and billing.\n2. Record displayed balance.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/usage and billing.\n2. Record displayed balance.",
       "Expected Result (per step)": "1. Pages load.\n2. Balance visible and consistent across surfaces.",
       "Final Expected Result": "Credit balance is visible and consistent.",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/usage"
+          "url": "https://trycareerpilot.com/app/usage"
         }
       ]
     },
@@ -498,14 +498,14 @@
       "Tester": "Venkat",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/settings/profile.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/settings/profile.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
       "Expected Result (per step)": "1. Page loads.\n2. Controls editable or clearly read-only.\n3. Save succeeds or validates.\n4. Values persist.\n5. Destructive actions require confirm.",
       "Final Expected Result": "Settings/profile works with save→refresh persistence where editable.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/settings/profile."
+          "url": "https://trycareerpilot.com/app/settings/profile."
         }
       ]
     },
@@ -529,14 +529,14 @@
       "Tester": "Venkat",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/settings/security.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/settings/security.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
       "Expected Result (per step)": "1. Page loads.\n2. Controls editable or clearly read-only.\n3. Save succeeds or validates.\n4. Values persist.\n5. Destructive actions require confirm.",
       "Final Expected Result": "Settings/security works with save→refresh persistence where editable.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/settings/security."
+          "url": "https://trycareerpilot.com/app/settings/security."
         }
       ]
     },
@@ -560,14 +560,14 @@
       "Tester": "Venkat",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/settings/danger.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/settings/danger.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
       "Expected Result (per step)": "1. Page loads.\n2. Controls editable or clearly read-only.\n3. Save succeeds or validates.\n4. Values persist.\n5. Destructive actions require confirm.",
       "Final Expected Result": "Settings/danger works with save→refresh persistence where editable.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/settings/danger."
+          "url": "https://trycareerpilot.com/app/settings/danger."
         }
       ]
     },
@@ -591,14 +591,14 @@
       "Tester": "Venkat",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/settings/billing.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/settings/billing.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
       "Expected Result (per step)": "1. Page loads.\n2. Controls editable or clearly read-only.\n3. Save succeeds or validates.\n4. Values persist.\n5. Destructive actions require confirm.",
       "Final Expected Result": "Settings/billing works with save→refresh persistence where editable.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/settings/billing."
+          "url": "https://trycareerpilot.com/app/settings/billing."
         }
       ]
     },
@@ -621,14 +621,14 @@
       "Tester": "Venkat",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/settings/appearance.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/settings/appearance.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
       "Expected Result (per step)": "1. Page loads.\n2. Controls editable or clearly read-only.\n3. Save succeeds or validates.\n4. Values persist.\n5. Destructive actions require confirm.",
       "Final Expected Result": "Settings/appearance works with save→refresh persistence where editable.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/settings/appearance."
+          "url": "https://trycareerpilot.com/app/settings/appearance."
         }
       ]
     },
@@ -652,14 +652,14 @@
       "Tester": "Venkat",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/settings/notifications.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/settings/notifications.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
       "Expected Result (per step)": "1. Page loads.\n2. Controls editable or clearly read-only.\n3. Save succeeds or validates.\n4. Values persist.\n5. Destructive actions require confirm.",
       "Final Expected Result": "Settings/notifications works with save→refresh persistence where editable.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/settings/notifications."
+          "url": "https://trycareerpilot.com/app/settings/notifications."
         }
       ]
     },
@@ -683,14 +683,14 @@
       "Tester": "Venkat",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/settings/audio.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/settings/audio.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
       "Expected Result (per step)": "1. Page loads.\n2. Controls editable or clearly read-only.\n3. Save succeeds or validates.\n4. Values persist.\n5. Destructive actions require confirm.",
       "Final Expected Result": "Settings/audio works with save→refresh persistence where editable.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/settings/audio."
+          "url": "https://trycareerpilot.com/app/settings/audio."
         }
       ]
     },
@@ -714,14 +714,14 @@
       "Tester": "Venkat",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/settings/practice-coach.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/settings/practice-coach.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
       "Expected Result (per step)": "1. Page loads.\n2. Controls editable or clearly read-only.\n3. Save succeeds or validates.\n4. Values persist.\n5. Destructive actions require confirm.",
       "Final Expected Result": "Settings/practice-coach works with save→refresh persistence where editable.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/settings/practice-coach."
+          "url": "https://trycareerpilot.com/app/settings/practice-coach."
         }
       ]
     },
@@ -745,14 +745,14 @@
       "Tester": "Venkat",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/settings/hotkeys.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/settings/hotkeys.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
       "Expected Result (per step)": "1. Page loads.\n2. Controls editable or clearly read-only.\n3. Save succeeds or validates.\n4. Values persist.\n5. Destructive actions require confirm.",
       "Final Expected Result": "Settings/hotkeys works with save→refresh persistence where editable.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/settings/hotkeys."
+          "url": "https://trycareerpilot.com/app/settings/hotkeys."
         }
       ]
     },
@@ -775,14 +775,14 @@
       "Tester": "Venkat",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/settings/privacy.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/settings/privacy.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
       "Expected Result (per step)": "1. Page loads.\n2. Controls editable or clearly read-only.\n3. Save succeeds or validates.\n4. Values persist.\n5. Destructive actions require confirm.",
       "Final Expected Result": "Settings/privacy works with save→refresh persistence where editable.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/settings/privacy."
+          "url": "https://trycareerpilot.com/app/settings/privacy."
         }
       ]
     },
@@ -805,14 +805,14 @@
       "Tester": "Venkat",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/settings/models.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/settings/models.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
       "Expected Result (per step)": "1. Page loads.\n2. Controls editable or clearly read-only.\n3. Save succeeds or validates.\n4. Values persist.\n5. Destructive actions require confirm.",
       "Final Expected Result": "Settings/models works with save→refresh persistence where editable.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/settings/models."
+          "url": "https://trycareerpilot.com/app/settings/models."
         }
       ]
     },
@@ -836,14 +836,14 @@
       "Tester": "Venkat",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/settings/integrations.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/settings/integrations.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
       "Expected Result (per step)": "1. Page loads.\n2. Controls editable or clearly read-only.\n3. Save succeeds or validates.\n4. Values persist.\n5. Destructive actions require confirm.",
       "Final Expected Result": "Settings/integrations works with save→refresh persistence where editable.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/settings/integrations."
+          "url": "https://trycareerpilot.com/app/settings/integrations."
         }
       ]
     },
@@ -866,14 +866,14 @@
       "Tester": "Venkat",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/settings/data.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/settings/data.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
       "Expected Result (per step)": "1. Page loads.\n2. Controls editable or clearly read-only.\n3. Save succeeds or validates.\n4. Values persist.\n5. Destructive actions require confirm.",
       "Final Expected Result": "Settings/data works with save→refresh persistence where editable.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/settings/data."
+          "url": "https://trycareerpilot.com/app/settings/data."
         }
       ]
     },
@@ -897,14 +897,14 @@
       "Tester": "Venkat",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/settings/polish.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/settings/polish.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
       "Expected Result (per step)": "1. Page loads.\n2. Controls editable or clearly read-only.\n3. Save succeeds or validates.\n4. Values persist.\n5. Destructive actions require confirm.",
       "Final Expected Result": "Settings/polish works with save→refresh persistence where editable.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/settings/polish."
+          "url": "https://trycareerpilot.com/app/settings/polish."
         }
       ]
     },
@@ -948,14 +948,14 @@
       "Tester": "Sultana",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/notifications.\n2. Mark read if control exists.\n3. Refresh.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/notifications.\n2. Mark read if control exists.\n3. Refresh.",
       "Expected Result (per step)": "1. List/empty.\n2. Read state updates.\n3. Persists.",
       "Final Expected Result": "Notification read state persists.",
       "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/1ueQzjbpkpmW9NxNaMMJMtkUGY35JFIcU/view?usp=drive_linkhttps://drive.google.com/file/d/18cRDd4lrGx3Q_U8oLBEFv440gfU3zYPE/view?usp=drive_link",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/notifications."
+          "url": "https://trycareerpilot.com/app/notifications."
         },
         {
           "col": "Screenshot / Evidence Requirement",
@@ -1099,14 +1099,14 @@
       "Tester": "Venkat",
       "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
       "Test Data": "Use approved test credentials from Test Accounts sheet.",
-      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/settings/integrations.\n2. Inventory each card (Google Calendar, etc.).\n3. Classify configured vs not.",
+      "Exact Steps": "1. Open https://trycareerpilot.com/app/settings/integrations.\n2. Inventory each card (Google Calendar, etc.).\n3. Classify configured vs not.",
       "Expected Result (per step)": "1. Page loads.\n2. Cards listed.\n3. Status honest.",
       "Final Expected Result": "Integrations inventory completed from UI.",
       "Screenshot / Evidence Requirement": "#VALUE!",
       "_urls_in_text": [
         {
           "col": "Exact Steps",
-          "url": "https://clarify.ai.sltfinanceindia.com/app/settings/integrations."
+          "url": "https://trycareerpilot.com/app/settings/integrations."
         }
       ]
     },
@@ -1338,7 +1338,7 @@
       "Reproducibility": "Always",
       "Environment": "Production(web/chrome)",
       "Account ID": "Pro_USER_01",
-      "Steps to Reproduce": "1. Login as PRO_USER_01.\n2. Navigate to https://clarify.ai.sltfinanceindia.com/app/mock-test.\n3. Observe the search bar and DevTools Console.\n4. Type any search keyword (e.g., \"ssc\") into the search box.",
+      "Steps to Reproduce": "1. Login as PRO_USER_01.\n2. Navigate to https://trycareerpilot.com/app/mock-test.\n3. Observe the search bar and DevTools Console.\n4. Type any search keyword (e.g., \"ssc\") into the search box.",
       "Expected": "Profile data loads cleanly without errors, the search bar finishes initializing, and entering a keyword filters/returns relevant exam test papers.",
       "Actual": "Search bar shows an infinite loading spinner and gets stuck displaying \"Searching...\". DevTools Console throws multiple errors: \"[clarify:auth:profile:load_timed_out]\" and \"[authStore] Failed to load profile\".",
       "Evidence Links": "#VALUE!",
@@ -1354,7 +1354,7 @@
       "Reproducibility": "Always",
       "Environment": "Production(web/chrome)",
       "Account ID": "Pro_USER_01",
-      "Steps to Reproduce": "1. Login as PRO_USER_01.\n2. Navigate to any page (e.g., https://clarify.ai.sltfinanceindia.com/app/guide/practice-coach).\n3. Open DevTools Console panel.\n4. Click on the global search input bar (\"Search pages, actions, settings...\").\n5. Observe the DevTools Console.",
+      "Steps to Reproduce": "1. Login as PRO_USER_01.\n2. Navigate to any page (e.g., https://trycareerpilot.com/app/guide/practice-coach).\n3. Open DevTools Console panel.\n4. Click on the global search input bar (\"Search pages, actions, settings...\").\n5. Observe the DevTools Console.",
       "Expected": "Global search modal overlay opens cleanly with full screen reader accessibility support and zero console errors.",
       "Actual": "Search modal opens, but DevTools console immediately logs repeated Radix UI runtime errors: \"`DialogContent` requires a `DialogTitle` for the component to be accessible for screen reader users\" along with missing `aria-describedby` warnings.",
       "Evidence Links": "#VALUE!",
@@ -1370,7 +1370,7 @@
       "Reproducibility": "Always",
       "Environment": "Production(web/chrome)",
       "Account ID": "Pro_USER_01",
-      "Steps to Reproduce": "1. Login as PRO_USER_01.\n2. Navigate to https://clarify.ai.sltfinanceindia.com/app/settings/billing.\n3. Open DevTools Console panel.\n4. Click on 'Buy Max (one-time)' button to trigger checkout.\n5. Observe DevTools Console.",
+      "Steps to Reproduce": "1. Login as PRO_USER_01.\n2. Navigate to https://trycareerpilot.com/app/settings/billing.\n3. Open DevTools Console panel.\n4. Click on 'Buy Max (one-time)' button to trigger checkout.\n5. Observe DevTools Console.",
       "Expected": "Payment modal opens and all third-party vendor dependencies (Razorpay scripts) load cleanly without CSP or header access violations.",
       "Actual": "Console throws CSP violation error: Loading script 'https://cdn.razorpay.com/static/cx/razorpay-risk-detection/bundle.js' violates directive 'script-src'. Action blocked along with unsafe header errors.",
       "Evidence Links": "#VALUE!",

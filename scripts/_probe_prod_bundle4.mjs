@@ -1,4 +1,4 @@
-const base = "https://clarify.ai.sltfinanceindia.com";
+const base = "https://trycareerpilot.com";
 const html = await (await fetch(`${base}/app/mock-test`)).text();
 const scripts = [...html.matchAll(/\/assets\/[^"']+\.js/g)].map((m) => m[0]);
 const indexPath = scripts.find((p) => p.includes("/assets/index-")) || scripts[0];

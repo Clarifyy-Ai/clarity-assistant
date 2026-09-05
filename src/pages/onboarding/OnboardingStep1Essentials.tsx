@@ -29,7 +29,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { extractRefCodeFromSearchParams, getStoredRefCode } from "@/lib/referrals";
+import { extractRefCodeFromSearchParams, getStoredRefCode, referralCodeSavedMessage } from "@/lib/referrals";
 import type { StepProps } from "@/types/onboarding.types";
 import type { ProfileRow } from "@/types";
 import {
@@ -181,9 +181,7 @@ export default function OnboardingStep1Essentials({ data, onNext, onChange }: St
 
       {refCode && (
         <div className="px-3 py-2.5 bg-primary/10 border border-primary/20 rounded-xl text-xs text-primary text-center">
-          Referral code{" "}
-          <span className="font-mono font-bold">{refCode}</span>{" "}
-          applied — you&apos;ll both earn bonus credits!
+          {referralCodeSavedMessage(refCode)}
         </div>
       )}
 

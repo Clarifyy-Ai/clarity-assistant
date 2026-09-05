@@ -1,7 +1,6 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// auth.ts — High-level auth helpers built on top of the Supabase client.
-// All auth operations in the app go through here — never call supabase.auth
-// directly from components or hooks.
+// auth.ts — Legacy high-level auth helpers. Prefer authStore for app flows.
+// Components should use useAuthStore (signInWithEmail, signOut, OAuth) — not this module.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { supabase } from "@/lib/supabase/client";
@@ -191,11 +190,9 @@ export async function signInWithOAuth(provider: OAuthProvider): Promise<void> {
   }
 }
 
-// ─── Magic Link ───────────────────────────────────────────────────────────────
+// ─── Magic Link (deprecated — no product UI; use email/password or OAuth) ───
 
-/**
- * Send a magic link to the user's email.
- */
+/** @deprecated No login UI calls this. Prefer signInWithEmail or OAuth via authStore. */
 export async function sendMagicLink(email: string): Promise<void> {
   const [, err] = await tryCatch(async () => {
     const { error } = await supabase.auth.signInWithOtp({

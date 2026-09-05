@@ -25,7 +25,7 @@ const PLAN_COLORS: Record<string, string> = {
   emerald: "from-emerald-500 to-teal-500",
 };
 
-const SITE_URL = "https://clarify.ai.sltfinanceindia.com";
+const SITE_URL = "https://trycareerpilot.com";
 
 function paidPlanHref(planId: PlanId): string {
   if (!isPaidSignupPlan(planId)) return "/signup";

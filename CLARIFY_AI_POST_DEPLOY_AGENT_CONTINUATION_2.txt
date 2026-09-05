@@ -1,7 +1,7 @@
 ================================================================================
 CLARIFY AI — AGENT CONTINUATION #2 (ops blockers + re-verify)
 ================================================================================
-Site       : https://clarify.ai.sltfinanceindia.com/
+Site       : https://trycareerpilot.com/
 Generated  : 2026-08-06
 Prior      : CLARIFY_AI_POST_DEPLOY_AGENT_CONTINUATION_REPORT.txt
 Ops runbook: docs/qa/incidents/2026-08-06-csp-flock-theme-ops.md

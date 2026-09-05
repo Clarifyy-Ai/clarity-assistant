@@ -8,7 +8,7 @@ describe("mockSessionCreditCost", () => {
     expect(mockSessionCreditCost(3)).toBe(9);
   });
 
-  it("returns zero for warmup / zero questions", () => {
-    expect(mockSessionCreditCost(0)).toBe(0);
+  it("returns minimum cost for zero questions (clamped to 1)", () => {
+    expect(mockSessionCreditCost(0)).toBe(3);
   });
 });

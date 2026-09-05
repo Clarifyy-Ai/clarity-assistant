@@ -8,20 +8,20 @@
     "actual": "Page Load Successfully But some footer link content should be modify .",
     "defect": "D_ID_1",
     "expected": "Landing loads with brand, headline, primary CTA",
-    "steps": "1. Open https://clarify.ai.sltfinanceindia.com/ in a logged-out Incognito window.\n2. Wait for page load (max 15s).\n3. Scroll full page; click primary nav/footer links that stay on-site.\n4. Note any console red errors (ignore 3rd-party noise).",
+    "steps": "1. Open https://trycareerpilot.com/ in a logged-out Incognito window.\n2. Wait for page load (max 15s).\n3. Scroll full page; click primary nav/footer links that stay on-site.\n4. Note any console red errors (ignore 3rd-party noise).",
     "comments": null,
     "urls": [
       {
         "col": "Test Data",
-        "url": "https://clarify.ai.sltfinanceindia.com/"
+        "url": "https://trycareerpilot.com/"
       },
       {
         "col": "Exact Steps",
-        "url": "https://clarify.ai.sltfinanceindia.com/"
+        "url": "https://trycareerpilot.com/"
       },
       {
         "col": "Expected Result (per step)",
-        "url": "https://clarify.ai.sltfinanceindia.com/"
+        "url": "https://trycareerpilot.com/"
       }
     ],
     "hyperlinks": [
@@ -51,36 +51,36 @@
     "status": "Pass",
     "module": "Public Pages",
     "feature": "Pricing",
-    "notes": "User can click there recommend account it gives the correct page url https://clarify.ai.sltfinanceindia.com/signup?plan=pro\nhttps://clarify.ai.sltfinanceindia.com/signup?plan=enterprise\nhttps://clarify.ai.sltfinanceindia.com/signup",
+    "notes": "User can click there recommend account it gives the correct page url https://trycareerpilot.com/signup?plan=pro\nhttps://trycareerpilot.com/signup?plan=enterprise\nhttps://trycareerpilot.com/signup",
     "actual": "User Can see and feel the CTA which is clearly identify where as the Start Free,Get Started,Get Max",
     "defect": null,
     "expected": "Pricing plans and CTAs visible",
-    "steps": "1. Open https://clarify.ai.sltfinanceindia.com/pricing in a logged-out Incognito window.\n2. Wait for page load (max 15s).\n3. Scroll full page; click primary nav/footer links that stay on-site.\n4. Note any console red errors (ignore 3rd-party noise).",
+    "steps": "1. Open https://trycareerpilot.com/pricing in a logged-out Incognito window.\n2. Wait for page load (max 15s).\n3. Scroll full page; click primary nav/footer links that stay on-site.\n4. Note any console red errors (ignore 3rd-party noise).",
     "comments": null,
     "urls": [
       {
         "col": "Notes",
-        "url": "https://clarify.ai.sltfinanceindia.com/signup?plan=pro"
+        "url": "https://trycareerpilot.com/signup?plan=pro"
       },
       {
         "col": "Notes",
-        "url": "https://clarify.ai.sltfinanceindia.com/signup?plan=enterprise"
+        "url": "https://trycareerpilot.com/signup?plan=enterprise"
       },
       {
         "col": "Notes",
-        "url": "https://clarify.ai.sltfinanceindia.com/signup"
+        "url": "https://trycareerpilot.com/signup"
       },
       {
         "col": "Test Data",
-        "url": "https://clarify.ai.sltfinanceindia.com/pricing"
+        "url": "https://trycareerpilot.com/pricing"
       },
       {
         "col": "Exact Steps",
-        "url": "https://clarify.ai.sltfinanceindia.com/pricing"
+        "url": "https://trycareerpilot.com/pricing"
       },
       {
         "col": "Expected Result (per step)",
-        "url": "https://clarify.ai.sltfinanceindia.com/pricing"
+        "url": "https://trycareerpilot.com/pricing"
       }
     ],
     "hyperlinks": null
@@ -94,20 +94,20 @@
     "actual": "Gov exam page land successfully without any errors user can see the type of exams that's intergated",
     "defect": null,
     "expected": "Gov exam marketing content loads",
-    "steps": "1. Open https://clarify.ai.sltfinanceindia.com/gov-exams in a logged-out Incognito window.\n2. Wait for page load (max 15s).\n3. Scroll full page; click primary nav/footer links that stay on-site.\n4. Note any console red errors (ignore 3rd-party noise).",
+    "steps": "1. Open https://trycareerpilot.com/gov-exams in a logged-out Incognito window.\n2. Wait for page load (max 15s).\n3. Scroll full page; click primary nav/footer links that stay on-site.\n4. Note any console red errors (ignore 3rd-party noise).",
     "comments": null,
     "urls": [
       {
         "col": "Test Data",
-        "url": "https://clarify.ai.sltfinanceindia.com/gov-exams"
+        "url": "https://trycareerpilot.com/gov-exams"
       },
       {
         "col": "Exact Steps",
-        "url": "https://clarify.ai.sltfinanceindia.com/gov-exams"
+        "url": "https://trycareerpilot.com/gov-exams"
       },
       {
         "col": "Expected Result (per step)",
-        "url": "https://clarify.ai.sltfinanceindia.com/gov-exams"
+        "url": "https://trycareerpilot.com/gov-exams"
       }
     ],
     "hyperlinks": null
@@ -121,20 +121,20 @@
     "actual": "In the Help section which is some articles it gives invalid information .",
     "defect": "D_ID_2",
     "expected": "Help center lists articles or empty-state",
-    "steps": "1. Open https://clarify.ai.sltfinanceindia.com/help in a logged-out Incognito window.\n2. Wait for page load (max 15s).\n3. Scroll full page; click primary nav/footer links that stay on-site.\n4. Note any console red errors (ignore 3rd-party noise).",
+    "steps": "1. Open https://trycareerpilot.com/help in a logged-out Incognito window.\n2. Wait for page load (max 15s).\n3. Scroll full page; click primary nav/footer links that stay on-site.\n4. Note any console red errors (ignore 3rd-party noise).",
     "comments": null,
     "urls": [
       {
         "col": "Test Data",
-        "url": "https://clarify.ai.sltfinanceindia.com/help"
+        "url": "https://trycareerpilot.com/help"
       },
       {
         "col": "Exact Steps",
-        "url": "https://clarify.ai.sltfinanceindia.com/help"
+        "url": "https://trycareerpilot.com/help"
       },
       {
         "col": "Expected Result (per step)",
-        "url": "https://clarify.ai.sltfinanceindia.com/help"
+        "url": "https://trycareerpilot.com/help"
       }
     ],
     "hyperlinks": null
@@ -148,20 +148,20 @@
     "actual": "User see the shortcut page successfully without error",
     "defect": null,
     "expected": "Shortcuts page loads",
-    "steps": "1. Open https://clarify.ai.sltfinanceindia.com/shortcuts in a logged-out Incognito window.\n2. Wait for page load (max 15s).\n3. Scroll full page; click primary nav/footer links that stay on-site.\n4. Note any console red errors (ignore 3rd-party noise).",
+    "steps": "1. Open https://trycareerpilot.com/shortcuts in a logged-out Incognito window.\n2. Wait for page load (max 15s).\n3. Scroll full page; click primary nav/footer links that stay on-site.\n4. Note any console red errors (ignore 3rd-party noise).",
     "comments": null,
     "urls": [
       {
         "col": "Test Data",
-        "url": "https://clarify.ai.sltfinanceindia.com/shortcuts"
+        "url": "https://trycareerpilot.com/shortcuts"
       },
       {
         "col": "Exact Steps",
-        "url": "https://clarify.ai.sltfinanceindia.com/shortcuts"
+        "url": "https://trycareerpilot.com/shortcuts"
       },
       {
         "col": "Expected Result (per step)",
-        "url": "https://clarify.ai.sltfinanceindia.com/shortcuts"
+        "url": "https://trycareerpilot.com/shortcuts"
       }
     ],
     "hyperlinks": null
@@ -175,20 +175,20 @@
     "actual": "user see the Blog page successfully without errors",
     "defect": null,
     "expected": "Blog list loads",
-    "steps": "1. Open https://clarify.ai.sltfinanceindia.com/blog in a logged-out Incognito window.\n2. Wait for page load (max 15s).\n3. Scroll full page; click primary nav/footer links that stay on-site.\n4. Note any console red errors (ignore 3rd-party noise).",
+    "steps": "1. Open https://trycareerpilot.com/blog in a logged-out Incognito window.\n2. Wait for page load (max 15s).\n3. Scroll full page; click primary nav/footer links that stay on-site.\n4. Note any console red errors (ignore 3rd-party noise).",
     "comments": null,
     "urls": [
       {
         "col": "Test Data",
-        "url": "https://clarify.ai.sltfinanceindia.com/blog"
+        "url": "https://trycareerpilot.com/blog"
       },
       {
         "col": "Exact Steps",
-        "url": "https://clarify.ai.sltfinanceindia.com/blog"
+        "url": "https://trycareerpilot.com/blog"
       },
       {
         "col": "Expected Result (per step)",
-        "url": "https://clarify.ai.sltfinanceindia.com/blog"
+        "url": "https://trycareerpilot.com/blog"
       }
     ],
     "hyperlinks": null
@@ -202,20 +202,20 @@
     "actual": "user see the terms page successfully where as contact email it give canceled status in network .",
     "defect": "D_ID_3",
     "expected": "Terms content loads",
-    "steps": "1. Open https://clarify.ai.sltfinanceindia.com/terms in a logged-out Incognito window.\n2. Wait for page load (max 15s).\n3. Scroll full page; click primary nav/footer links that stay on-site.\n4. Note any console red errors (ignore 3rd-party noise).",
+    "steps": "1. Open https://trycareerpilot.com/terms in a logged-out Incognito window.\n2. Wait for page load (max 15s).\n3. Scroll full page; click primary nav/footer links that stay on-site.\n4. Note any console red errors (ignore 3rd-party noise).",
     "comments": null,
     "urls": [
       {
         "col": "Test Data",
-        "url": "https://clarify.ai.sltfinanceindia.com/terms"
+        "url": "https://trycareerpilot.com/terms"
       },
       {
         "col": "Exact Steps",
-        "url": "https://clarify.ai.sltfinanceindia.com/terms"
+        "url": "https://trycareerpilot.com/terms"
       },
       {
         "col": "Expected Result (per step)",
-        "url": "https://clarify.ai.sltfinanceindia.com/terms"
+        "url": "https://trycareerpilot.com/terms"
       }
     ],
     "hyperlinks": [
@@ -235,20 +235,20 @@
     "actual": "user see the privacy page successfully where as contact email it give the canceled status in network",
     "defect": "D_ID_4",
     "expected": "Privacy content loads",
-    "steps": "1. Open https://clarify.ai.sltfinanceindia.com/privacy in a logged-out Incognito window.\n2. Wait for page load (max 15s).\n3. Scroll full page; click primary nav/footer links that stay on-site.\n4. Note any console red errors (ignore 3rd-party noise).",
+    "steps": "1. Open https://trycareerpilot.com/privacy in a logged-out Incognito window.\n2. Wait for page load (max 15s).\n3. Scroll full page; click primary nav/footer links that stay on-site.\n4. Note any console red errors (ignore 3rd-party noise).",
     "comments": null,
     "urls": [
       {
         "col": "Test Data",
-        "url": "https://clarify.ai.sltfinanceindia.com/privacy"
+        "url": "https://trycareerpilot.com/privacy"
       },
       {
         "col": "Exact Steps",
-        "url": "https://clarify.ai.sltfinanceindia.com/privacy"
+        "url": "https://trycareerpilot.com/privacy"
       },
       {
         "col": "Expected Result (per step)",
-        "url": "https://clarify.ai.sltfinanceindia.com/privacy"
+        "url": "https://trycareerpilot.com/privacy"
       }
     ],
     "hyperlinks": [
@@ -268,12 +268,12 @@
     "actual": "user can't find the certificates option in public pages  (user can push the certificate in auth account only to be integrated)",
     "defect": null,
     "expected": "Invalid certificate ID fails safely with no data leak.",
-    "steps": "1. Open https://clarify.ai.sltfinanceindia.com/verify-certificate/invalid-test-id-000.\n2. Observe message.",
+    "steps": "1. Open https://trycareerpilot.com/verify-certificate/invalid-test-id-000.\n2. Observe message.",
     "comments": null,
     "urls": [
       {
         "col": "Exact Steps",
-        "url": "https://clarify.ai.sltfinanceindia.com/verify-certificate/invalid-test-id-000."
+        "url": "https://trycareerpilot.com/verify-certificate/invalid-test-id-000."
       }
     ],
     "hyperlinks": null
@@ -287,12 +287,12 @@
     "actual": "user can't find the sharing feature in the public page where as the link .",
     "defect": null,
     "expected": "Invalid share token does not leak session content.",
-    "steps": "1. Open https://clarify.ai.sltfinanceindia.com/share/not-a-real-token.\n2. Observe UI.",
+    "steps": "1. Open https://trycareerpilot.com/share/not-a-real-token.\n2. Observe UI.",
     "comments": null,
     "urls": [
       {
         "col": "Exact Steps",
-        "url": "https://clarify.ai.sltfinanceindia.com/share/not-a-real-token."
+        "url": "https://trycareerpilot.com/share/not-a-real-token."
       }
     ],
     "hyperlinks": null
@@ -306,12 +306,12 @@
     "actual": "user can see the article successfully which is unreadble format .",
     "defect": "D_ID_5",
     "expected": "Help article deep links work and persist on refresh.",
-    "steps": "1. Open https://clarify.ai.sltfinanceindia.com/help and click the first available article (or open a known slug).\n2. Verify title, body, and back/nav.\n3. Refresh the article URL.",
+    "steps": "1. Open https://trycareerpilot.com/help and click the first available article (or open a known slug).\n2. Verify title, body, and back/nav.\n3. Refresh the article URL.",
     "comments": null,
     "urls": [
       {
         "col": "Exact Steps",
-        "url": "https://clarify.ai.sltfinanceindia.com/help"
+        "url": "https://trycareerpilot.com/help"
       }
     ],
     "hyperlinks": null
@@ -325,12 +325,12 @@
     "actual": "user can see the successfully Blog there postes",
     "defect": null,
     "expected": "Blog post loads or honest empty state.",
-    "steps": "1. Open https://clarify.ai.sltfinanceindia.com/blog; open first post if any.\n2. If empty, record CONTENT_NOT_AVAILABLE (not a defect unless content is required).\n3. Refresh post URL if opened.",
+    "steps": "1. Open https://trycareerpilot.com/blog; open first post if any.\n2. If empty, record CONTENT_NOT_AVAILABLE (not a defect unless content is required).\n3. Refresh post URL if opened.",
     "comments": null,
     "urls": [
       {
         "col": "Exact Steps",
-        "url": "https://clarify.ai.sltfinanceindia.com/blog;"
+        "url": "https://trycareerpilot.com/blog;"
       }
     ],
     "hyperlinks": null
@@ -344,12 +344,12 @@
     "actual": "user can see the successfully Unknown routes show safe 404.",
     "defect": null,
     "expected": "Unknown routes show safe 404.",
-    "steps": "1. Open https://clarify.ai.sltfinanceindia.com/this-page-does-not-exist-qa.\n2. Observe not-found UI and navigation home.",
+    "steps": "1. Open https://trycareerpilot.com/this-page-does-not-exist-qa.\n2. Observe not-found UI and navigation home.",
     "comments": null,
     "urls": [
       {
         "col": "Exact Steps",
-        "url": "https://clarify.ai.sltfinanceindia.com/this-page-does-not-exist-qa."
+        "url": "https://trycareerpilot.com/this-page-does-not-exist-qa."
       }
     ],
     "hyperlinks": null
@@ -377,12 +377,12 @@
     "actual": "One course is available, and the course details open successfully without any issues.",
     "defect": null,
     "expected": "Learning Hub loads; empty content classified CONTENT_NOT_AVAILABLE.",
-    "steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/learn.\n2. If no courses, record CONTENT_NOT_AVAILABLE (not auto-defect).\n3. Open a course if present.",
+    "steps": "1. Open https://trycareerpilot.com/app/learn.\n2. If no courses, record CONTENT_NOT_AVAILABLE (not auto-defect).\n3. Open a course if present.",
     "comments": null,
     "urls": [
       {
         "col": "Exact Steps",
-        "url": "https://clarify.ai.sltfinanceindia.com/app/learn."
+        "url": "https://trycareerpilot.com/app/learn."
       },
       {
         "col": "Screenshot / Evidence Requirement",
@@ -448,12 +448,12 @@
     "actual": "The Community page displays “Q&A is in preview” and “No community posts yet. This space will fill as questions are published.” The empty state is displayed clearly without any errors.",
     "defect": null,
     "expected": "Community list loads.",
-    "steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/community.\n2. Observe list/empty.",
+    "steps": "1. Open https://trycareerpilot.com/app/community.\n2. Observe list/empty.",
     "comments": null,
     "urls": [
       {
         "col": "Exact Steps",
-        "url": "https://clarify.ai.sltfinanceindia.com/app/community."
+        "url": "https://trycareerpilot.com/app/community."
       },
       {
         "col": "Screenshot / Evidence Requirement",
@@ -597,12 +597,12 @@
     "actual": "The Coding page opens successfully, and the question is accessible without any issues.",
     "defect": null,
     "expected": "Coding Lab reachable.",
-    "steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/coding.\n2. Open a question (or CONTENT_NOT_AVAILABLE).",
+    "steps": "1. Open https://trycareerpilot.com/app/coding.\n2. Open a question (or CONTENT_NOT_AVAILABLE).",
     "comments": null,
     "urls": [
       {
         "col": "Exact Steps",
-        "url": "https://clarify.ai.sltfinanceindia.com/app/coding."
+        "url": "https://trycareerpilot.com/app/coding."
       },
       {
         "col": "Screenshot / Evidence Requirement",
@@ -697,12 +697,12 @@
     "actual": "Admin dashboard loaded successfully with KPIs visible and functional.",
     "defect": "TC-ADM-001",
     "expected": "Admin dashboard KPIs load",
-    "steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+    "steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
     "comments": null,
     "urls": [
       {
         "col": "Exact Steps",
-        "url": "https://clarify.ai.sltfinanceindia.com/app/admin."
+        "url": "https://trycareerpilot.com/app/admin."
       }
     ],
     "hyperlinks": null
@@ -716,12 +716,12 @@
     "actual": "Users module loaded successfully and search functionality worked. However, the last column containing the 3-dot user actions menu has no visible column header/name.",
     "defect": "TC-ADM-002",
     "expected": "Users table loads; search works",
-    "steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/users.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+    "steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/users.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
     "comments": null,
     "urls": [
       {
         "col": "Exact Steps",
-        "url": "https://clarify.ai.sltfinanceindia.com/app/admin/users."
+        "url": "https://trycareerpilot.com/app/admin/users."
       }
     ],
     "hyperlinks": null
@@ -735,12 +735,12 @@
     "actual": "Feature Flags module  works with no api or db errors.",
     "defect": "TC-ADM-007",
     "expected": "Flags list/toggle UI present",
-    "steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/feature-flags.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+    "steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/feature-flags.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
     "comments": null,
     "urls": [
       {
         "col": "Exact Steps",
-        "url": "https://clarify.ai.sltfinanceindia.com/app/admin/feature-flags."
+        "url": "https://trycareerpilot.com/app/admin/feature-flags."
       }
     ],
     "hyperlinks": null
@@ -754,16 +754,16 @@
     "actual": "FREE_USER_01 was denied access to the Admin Portal and Admin Users URL; no admin data or user PII was exposed.",
     "defect": "TC-ADM-007",
     "expected": "Non-admin cannot access Admin portal.",
-    "steps": "1. Login FREE_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin.\n3. Open https://clarify.ai.sltfinanceindia.com/app/admin/users.",
+    "steps": "1. Login FREE_USER_01.\n2. Open https://trycareerpilot.com/app/admin.\n3. Open https://trycareerpilot.com/app/admin/users.",
     "comments": null,
     "urls": [
       {
         "col": "Exact Steps",
-        "url": "https://clarify.ai.sltfinanceindia.com/app/admin."
+        "url": "https://trycareerpilot.com/app/admin."
       },
       {
         "col": "Exact Steps",
-        "url": "https://clarify.ai.sltfinanceindia.com/app/admin/users."
+        "url": "https://trycareerpilot.com/app/admin/users."
       }
     ],
     "hyperlinks": null
@@ -791,12 +791,12 @@
     "actual": "Admin Analytics page loaded successfully via direct URL, with analytics data and controls visible",
     "defect": "TC-ADM-003",
     "expected": "Admin analytics loads",
-    "steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/analytics.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+    "steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/analytics.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
     "comments": null,
     "urls": [
       {
         "col": "Exact Steps",
-        "url": "https://clarify.ai.sltfinanceindia.com/app/admin/analytics."
+        "url": "https://trycareerpilot.com/app/admin/analytics."
       }
     ],
     "hyperlinks": null
@@ -810,12 +810,12 @@
     "actual": "Revenue page loaded, but changing the filter from Last 30 Days to Last 90 Days triggered a 400 API error due to the missing profiles.stripe_subscription_id column.",
     "defect": "TC-ADM-004",
     "expected": "Revenue page loads",
-    "steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/revenue.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+    "steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/revenue.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
     "comments": null,
     "urls": [
       {
         "col": "Exact Steps",
-        "url": "https://clarify.ai.sltfinanceindia.com/app/admin/revenue."
+        "url": "https://trycareerpilot.com/app/admin/revenue."
       }
     ],
     "hyperlinks": null
@@ -829,12 +829,12 @@
     "actual": "Model Costs page loaded successfully with model cost data and controls visible",
     "defect": "TC-ADM-005",
     "expected": "Model costs load",
-    "steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/model-costs.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+    "steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/model-costs.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
     "comments": null,
     "urls": [
       {
         "col": "Exact Steps",
-        "url": "https://clarify.ai.sltfinanceindia.com/app/admin/model-costs."
+        "url": "https://trycareerpilot.com/app/admin/model-costs."
       }
     ],
     "hyperlinks": null
@@ -848,12 +848,12 @@
     "actual": "AI Hub page loaded successfully with data and controls visible.",
     "defect": "TC-ADM-006",
     "expected": "AI Hub loads",
-    "steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/ai-hub.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+    "steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/ai-hub.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
     "comments": null,
     "urls": [
       {
         "col": "Exact Steps",
-        "url": "https://clarify.ai.sltfinanceindia.com/app/admin/ai-hub."
+        "url": "https://trycareerpilot.com/app/admin/ai-hub."
       }
     ],
     "hyperlinks": null
@@ -867,12 +867,12 @@
     "actual": "Seed Question Bank page loaded successfully and all major sections and controls were visible",
     "defect": "TC-ADM-008",
     "expected": "Seed questions UI loads",
-    "steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/seed-questions.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+    "steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/seed-questions.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
     "comments": null,
     "urls": [
       {
         "col": "Exact Steps",
-        "url": "https://clarify.ai.sltfinanceindia.com/app/admin/seed-questions."
+        "url": "https://trycareerpilot.com/app/admin/seed-questions."
       }
     ],
     "hyperlinks": null
@@ -886,12 +886,12 @@
     "actual": "Bulk upload page loaded successfully and all major sections and controls were visible",
     "defect": "TC-ADM-009",
     "expected": "Bulk upload UI loads",
-    "steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/bulk-upload.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+    "steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/bulk-upload.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
     "comments": null,
     "urls": [
       {
         "col": "Exact Steps",
-        "url": "https://clarify.ai.sltfinanceindia.com/app/admin/bulk-upload."
+        "url": "https://trycareerpilot.com/app/admin/bulk-upload."
       }
     ],
     "hyperlinks": null
@@ -905,12 +905,12 @@
     "actual": "Live Chat/Support Inbox loaded successfully with data and controls visible.",
     "defect": "TC-ADM-010",
     "expected": "Live chat/support inbox loads",
-    "steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/live-chat.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+    "steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/live-chat.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
     "comments": null,
     "urls": [
       {
         "col": "Exact Steps",
-        "url": "https://clarify.ai.sltfinanceindia.com/app/admin/live-chat."
+        "url": "https://trycareerpilot.com/app/admin/live-chat."
       }
     ],
     "hyperlinks": null
@@ -924,12 +924,12 @@
     "actual": "Saving the question displays “Question must be verified before publication,” but no Verify/Approve action is available on the question edit page.",
     "defect": "TC-ADM-011",
     "expected": "Question editor loads",
-    "steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/questions.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+    "steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/questions.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
     "comments": null,
     "urls": [
       {
         "col": "Exact Steps",
-        "url": "https://clarify.ai.sltfinanceindia.com/app/admin/questions."
+        "url": "https://trycareerpilot.com/app/admin/questions."
       }
     ],
     "hyperlinks": null
@@ -943,12 +943,12 @@
     "actual": "Audit Log search triggers an API request after a single character, with no minimum input validation. Calendar date fields also accept invalid date ranges/values without validation.",
     "defect": "TC-ADM-012",
     "expected": "Audit log loads",
-    "steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/audit-log.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+    "steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/audit-log.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
     "comments": null,
     "urls": [
       {
         "col": "Exact Steps",
-        "url": "https://clarify.ai.sltfinanceindia.com/app/admin/audit-log."
+        "url": "https://trycareerpilot.com/app/admin/audit-log."
       }
     ],
     "hyperlinks": null
@@ -962,12 +962,12 @@
     "actual": "Diagnostics module could not be accessed through the Admin sidebar, Global Search, or direct URL.",
     "defect": "TC-ADM-013",
     "expected": "Diagnostics loads",
-    "steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/diagnostics.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+    "steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/diagnostics.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
     "comments": null,
     "urls": [
       {
         "col": "Exact Steps",
-        "url": "https://clarify.ai.sltfinanceindia.com/app/admin/diagnostics."
+        "url": "https://trycareerpilot.com/app/admin/diagnostics."
       }
     ],
     "hyperlinks": null
@@ -981,12 +981,12 @@
     "actual": "Blog module could not be accessed through the Admin sidebar, Global Search, or direct URL.",
     "defect": "TC-ADM-014",
     "expected": "Blog CMS loads",
-    "steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/blog.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+    "steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/blog.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
     "comments": null,
     "urls": [
       {
         "col": "Exact Steps",
-        "url": "https://clarify.ai.sltfinanceindia.com/app/admin/blog."
+        "url": "https://trycareerpilot.com/app/admin/blog."
       }
     ],
     "hyperlinks": null
@@ -1000,12 +1000,12 @@
     "actual": "Help Articles module could not be accessed through the sidebar, Global Search, or direct URL.",
     "defect": "TC-ADM-015",
     "expected": "Help CMS loads",
-    "steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/help-articles.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+    "steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/help-articles.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
     "comments": null,
     "urls": [
       {
         "col": "Exact Steps",
-        "url": "https://clarify.ai.sltfinanceindia.com/app/admin/help-articles."
+        "url": "https://trycareerpilot.com/app/admin/help-articles."
       }
     ],
     "hyperlinks": null
@@ -1019,12 +1019,12 @@
     "actual": "Support page loaded successfully with support options and content visible.",
     "defect": "TC-ADM-016",
     "expected": "Support page loads",
-    "steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/support.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+    "steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/support.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
     "comments": null,
     "urls": [
       {
         "col": "Exact Steps",
-        "url": "https://clarify.ai.sltfinanceindia.com/app/admin/support."
+        "url": "https://trycareerpilot.com/app/admin/support."
       }
     ],
     "hyperlinks": null
@@ -1038,12 +1038,12 @@
     "actual": "Promo code was created with 0100 bonus credits, but the Bonus Credits column displays 0.",
     "defect": "TC-ADM-017",
     "expected": "Promo codes UI loads",
-    "steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/promo-codes.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+    "steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/promo-codes.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
     "comments": null,
     "urls": [
       {
         "col": "Exact Steps",
-        "url": "https://clarify.ai.sltfinanceindia.com/app/admin/promo-codes."
+        "url": "https://trycareerpilot.com/app/admin/promo-codes."
       }
     ],
     "hyperlinks": null
@@ -1057,12 +1057,12 @@
     "actual": "Billing Settings page works as expected; all available settings can be viewed and configured successfully.",
     "defect": "TC-ADM-018",
     "expected": "Billing settings load",
-    "steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/billing-settings.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+    "steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/billing-settings.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
     "comments": null,
     "urls": [
       {
         "col": "Exact Steps",
-        "url": "https://clarify.ai.sltfinanceindia.com/app/admin/billing-settings."
+        "url": "https://trycareerpilot.com/app/admin/billing-settings."
       }
     ],
     "hyperlinks": null
@@ -1076,12 +1076,12 @@
     "actual": "Gov Sources module works fine.",
     "defect": "TC-ADM-019",
     "expected": "Gov sources load",
-    "steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/gov/sources.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+    "steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/gov/sources.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
     "comments": null,
     "urls": [
       {
         "col": "Exact Steps",
-        "url": "https://clarify.ai.sltfinanceindia.com/app/admin/gov/sources."
+        "url": "https://trycareerpilot.com/app/admin/gov/sources."
       }
     ],
     "hyperlinks": null
@@ -1095,12 +1095,12 @@
     "actual": "PDF Ingest page displays malformed technical text with typos (textPayioad), stray characters, and internal API field names (pdfBase64, storagePath, textPayload) visible to admins.",
     "defect": "TC-ADM-020",
     "expected": "Gov ingest load",
-    "steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/gov/ingest.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+    "steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/gov/ingest.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
     "comments": null,
     "urls": [
       {
         "col": "Exact Steps",
-        "url": "https://clarify.ai.sltfinanceindia.com/app/admin/gov/ingest."
+        "url": "https://trycareerpilot.com/app/admin/gov/ingest."
       }
     ],
     "hyperlinks": null
@@ -1114,12 +1114,12 @@
     "actual": "Gov Exams page could not be fully tested because the search-exams API is continuously failing, preventing exam data from loading.",
     "defect": "TC-ADM-021",
     "expected": "Exam registry loads",
-    "steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/gov/exams.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+    "steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/gov/exams.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
     "comments": null,
     "urls": [
       {
         "col": "Exact Steps",
-        "url": "https://clarify.ai.sltfinanceindia.com/app/admin/gov/exams."
+        "url": "https://trycareerpilot.com/app/admin/gov/exams."
       }
     ],
     "hyperlinks": null
@@ -1133,12 +1133,12 @@
     "actual": "Question Review page loaded successfully and review functionality was accessible.",
     "defect": "TC-ADM-022",
     "expected": "Question review loads",
-    "steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/gov/question-review.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+    "steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/gov/question-review.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
     "comments": null,
     "urls": [
       {
         "col": "Exact Steps",
-        "url": "https://clarify.ai.sltfinanceindia.com/app/admin/gov/question-review."
+        "url": "https://trycareerpilot.com/app/admin/gov/question-review."
       }
     ],
     "hyperlinks": null
@@ -1152,12 +1152,12 @@
     "actual": "Paper Review page loaded successfully and review functionality was accessible.",
     "defect": "TC-ADM-023",
     "expected": "Paper review loads",
-    "steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/gov/paper-review.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+    "steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/gov/paper-review.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
     "comments": null,
     "urls": [
       {
         "col": "Exact Steps",
-        "url": "https://clarify.ai.sltfinanceindia.com/app/admin/gov/paper-review."
+        "url": "https://trycareerpilot.com/app/admin/gov/paper-review."
       }
     ],
     "hyperlinks": null
@@ -1171,12 +1171,12 @@
     "actual": "Translation Review page loaded successfully. Language and status filters and Refresh control worked correctly. No translation records were available, and the page displayed an appropriate empty-state message.",
     "defect": "TC-ADM-024",
     "expected": "Translations review loads",
-    "steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/gov/translations.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+    "steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/gov/translations.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
     "comments": null,
     "urls": [
       {
         "col": "Exact Steps",
-        "url": "https://clarify.ai.sltfinanceindia.com/app/admin/gov/translations."
+        "url": "https://trycareerpilot.com/app/admin/gov/translations."
       }
     ],
     "hyperlinks": null
@@ -1190,12 +1190,12 @@
     "actual": "Q&A community page opens successfully and displays the “Questions & Answers” page with the preview status and empty-state message.",
     "defect": "TC-ADM-025",
     "expected": "Community admin loads",
-    "steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/community.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+    "steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/community.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
     "comments": null,
     "urls": [
       {
         "col": "Exact Steps",
-        "url": "https://clarify.ai.sltfinanceindia.com/app/admin/community."
+        "url": "https://trycareerpilot.com/app/admin/community."
       }
     ],
     "hyperlinks": null
@@ -1209,12 +1209,12 @@
     "actual": "Learning Hub page opened successfully and all available content loaded as expec",
     "defect": "TC-ADM-026",
     "expected": "Learning admin loads",
-    "steps": "1. Login ADMIN_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/admin/learning.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
+    "steps": "1. Login ADMIN_USER_01.\n2. Open https://trycareerpilot.com/app/admin/learning.\n3. Perform one safe read interaction (search/filter/open row).\n4. For write UIs, make a reversible test change OR stop at confirming controls enable.\n5. Classify Fully/Partial/Blocked.",
     "comments": null,
     "urls": [
       {
         "col": "Exact Steps",
-        "url": "https://clarify.ai.sltfinanceindia.com/app/admin/learning."
+        "url": "https://trycareerpilot.com/app/admin/learning."
       }
     ],
     "hyperlinks": null
@@ -1228,16 +1228,16 @@
     "actual": "After logout, accessing /app/dashboard and /app/sessions correctly redirected/handled the unauthenticated session as expected.",
     "defect": "TC-SEC-001",
     "expected": "Protected routes require authentication.",
-    "steps": "1. Logout.\n2. Open https://clarify.ai.sltfinanceindia.com/app/dashboard.\n3. Open https://clarify.ai.sltfinanceindia.com/app/sessions.",
+    "steps": "1. Logout.\n2. Open https://trycareerpilot.com/app/dashboard.\n3. Open https://trycareerpilot.com/app/sessions.",
     "comments": null,
     "urls": [
       {
         "col": "Exact Steps",
-        "url": "https://clarify.ai.sltfinanceindia.com/app/dashboard."
+        "url": "https://trycareerpilot.com/app/dashboard."
       },
       {
         "col": "Exact Steps",
-        "url": "https://clarify.ai.sltfinanceindia.com/app/sessions."
+        "url": "https://trycareerpilot.com/app/sessions."
       }
     ],
     "hyperlinks": null
@@ -1321,12 +1321,12 @@
     "actual": "",
     "defect": null,
     "expected": "Login is keyboard operable.",
-    "steps": "1. Open https://clarify.ai.sltfinanceindia.com/login.\n2. Tab through fields.\n3. Submit with Enter.\n4. Confirm visible focus styles.",
+    "steps": "1. Open https://trycareerpilot.com/login.\n2. Tab through fields.\n3. Submit with Enter.\n4. Confirm visible focus styles.",
     "comments": null,
     "urls": [
       {
         "col": "Exact Steps",
-        "url": "https://clarify.ai.sltfinanceindia.com/login."
+        "url": "https://trycareerpilot.com/login."
       }
     ],
     "hyperlinks": null

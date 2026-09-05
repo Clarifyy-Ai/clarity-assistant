@@ -252,7 +252,7 @@ def build_overrides(report: dict) -> dict[str, tuple[str, str, str]]:
         "Code fixed 007c2816: buildAuthRedirectUrl() never bakes localhost into prod "
         "reset emails; ResetPassword shows expired-link UX. Remaining OPS: Supabase Auth "
         "email template CTA ({{ .ConfirmationURL }}) + redirect allowlist + deploy with "
-        "VITE_APP_URL=https://clarify.ai.sltfinanceindia.com. See "
+        "VITE_APP_URL=https://trycareerpilot.com. See "
         "docs/qa/incidents/2026-08-05-qa-041-password-reset-redirect.md.",
     )
     put(
@@ -846,7 +846,7 @@ def apply():
                     qid,
                     section,
                     account,
-                    "https://clarify.ai.sltfinanceindia.com/",
+                    "https://trycareerpilot.com/",
                     test,
                     "See Expected in checklist",
                     notes,
@@ -870,7 +870,7 @@ def apply():
 
     # Sign-off
     so = wb["Sign-off"]
-    so["B3"] = "https://clarify.ai.sltfinanceindia.com/"
+    so["B3"] = "https://trycareerpilot.com/"
     so["B4"] = sum(counts.values())
     so["B5"] = counts.get("Pass", 0)
     so["A6"] = "Failed"

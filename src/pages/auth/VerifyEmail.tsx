@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/Button";
 import { BrandLogo } from "@/components/marketing";
 import { AuthShell } from "@/components/layout/AuthShell";
 import { isUserEmailConfirmed } from "@/lib/auth/emailVerification";
-import { getAuthenticatedEntryPath } from "@/lib/auth/postAuthRedirect";
+import { getAuthenticatedEntryPath, resolveOnboardingCompletedForRedirect } from "@/lib/auth/postAuthRedirect";
 import {
   assignLoginWithReturnTo,
   preferredReturnToFromNavigation,
@@ -45,7 +45,8 @@ export default function VerifyEmail() {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const user = useAuthStore((s) => s.user);
-  const isOnboarded = useAuthStore((s) => s.isOnboarded);
+  const profile = useAuthStore((s) => s.profile);
+  const isProfileLoaded = useAuthStore((s) => s.isProfileLoaded);
   const isAdmin = useAuthStore((s) => s.isAdmin);
   const signOut = useAuthStore((s) => s.signOut);
   // Signup has no session yet (email confirmation required), so fall back to
@@ -76,7 +77,7 @@ export default function VerifyEmail() {
     if (otpStatus !== "verified" && otpStatus !== "idle") return;
     const target = getAuthenticatedEntryPath({
       isAdmin,
-      isOnboarded,
+      isOnboarded: resolveOnboardingCompletedForRedirect({ profile, isProfileLoaded }),
       preferredReturnTo,
     });
     // returnTo is embedded in the onboarding URL by getAuthenticatedEntryPath
@@ -85,7 +86,7 @@ export default function VerifyEmail() {
       replace: true,
       state: preferredReturnTo ? { from: preferredReturnTo } : undefined,
     });
-  }, [user, isAdmin, isOnboarded, navigate, otpStatus, preferredReturnTo]);
+  }, [user, isAdmin, profile, isProfileLoaded, navigate, otpStatus, preferredReturnTo]);
 
   // Refresh auth user after the confirmation link is opened in another tab.
   useEffect(() => {

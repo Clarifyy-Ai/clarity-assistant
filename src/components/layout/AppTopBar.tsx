@@ -24,7 +24,7 @@ import { assignLoginWithReturnTo } from "@/lib/auth/safeReturnTo";
 const CMDK_TIP_KEY = "clarify:cmdk-tip-dismissed";
 
 export function AppTopBar() {
-  const { profile, signOut } = useAuthStore();
+  const { profile, signOut, signOutThisTab } = useAuthStore();
   const { balance: creditBalance, known: creditsKnown } = useCreditBalance();
   const location = useLocation();
   const notifStore  = useNotificationStore();
@@ -66,6 +66,15 @@ export function AppTopBar() {
   // non-standard `-webkit-app-region` property.
   const dragStyle = { WebkitAppRegion: "drag" } as React.CSSProperties;
   const noDragStyle = { WebkitAppRegion: "no-drag" } as React.CSSProperties;
+
+  async function handleSignOutThisTab() {
+    try {
+      await signOutThisTab();
+      assignLoginWithReturnTo({ returnTo: "/login" });
+    } catch (error) {
+      console.error("[AppTopBar] Tab-local sign out failed:", error);
+    }
+  }
 
   async function handleSignOut() {
     try {
@@ -255,11 +264,18 @@ export function AppTopBar() {
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
+              onClick={() => void handleSignOutThisTab()}
+              className="cursor-pointer"
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              Sign out this tab
+            </DropdownMenuItem>
+            <DropdownMenuItem
               onClick={() => void handleSignOut()}
               className="text-red-500 focus:text-red-500 cursor-pointer"
             >
               <LogOut className="w-4 h-4 mr-2" />
-              Log out
+              Log out everywhere
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

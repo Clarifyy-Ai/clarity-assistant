@@ -20,7 +20,7 @@ import {
 } from "@/lib/constants/helpArticlesFallback";
 import { helpArticlesDB } from "@/lib/supabase/database";
 
-const SITE_URL = "https://clarify.ai.sltfinanceindia.com";
+const SITE_URL = "https://trycareerpilot.com";
 const SEARCH_DEBOUNCE_MS = 300;
 
 const POPULAR_ARTICLES = [...HELP_ARTICLES_FALLBACK]

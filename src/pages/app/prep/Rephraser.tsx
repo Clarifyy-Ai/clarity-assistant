@@ -33,6 +33,7 @@ import {
   readPersistedRephraserState,
   writePersistedRephraserState,
 } from "@/lib/prep/rephraserPersistence";
+import { withPrepToolContext } from "@/lib/prep/prepToolContext";
 import {
   listPrepRephraseHistory,
   upsertPrepRephraseHistory,
@@ -139,10 +140,10 @@ export default function Rephraser() {
       const data = await fetchEdgeJson<{
         result?: string;
         alternatives?: Alternatives;
-      }>("prep-tool", {
+      }>("prep-tool", withPrepToolContext({
         tool_id: "rephrase",
         input: original,
-      }, {
+      }), {
         headers: {
           "x-idempotency-key": idempotencyKey,
         },

@@ -19,6 +19,15 @@ export {
 } from "./coachQuestionClassify";
 export type { CoachQuestionClass, OfflineCategoryHint } from "./coachQuestionClassify";
 
+export { buildFeatureContext, buildPrepProfileContext } from "./buildFeatureContext";
+export type { FeatureContextInput, FeatureContextOutput } from "./buildFeatureContext";
+export { normalizeCoachPayload, assertClientContextForOperation } from "./aiRequestContract";
+export {
+  scoreAnswerBankRelevance,
+  selectRelevantAnswerBankEntries,
+  formatAnswerBankBlock,
+} from "./answerBankRelevance";
+
 // ─── AI Hub fallback walk (mirrors Edge ai-hub-router) ───────────────────────
 export {
   buildHubTryModels,

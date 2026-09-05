@@ -23,7 +23,7 @@ const FROM_EMAIL =
   Deno.env.get("RESEND_FROM_EMAIL") ??
   Deno.env.get("FROM_EMAIL") ??
   "Clarify AI <noreply@clarifyprep.com>";
-const APP_URL = Deno.env.get("APP_URL") ?? "https://clarityapp.ai";
+const APP_URL = Deno.env.get("APP_URL") ?? "https://trycareerpilot.com";
 const BATCH_LIMIT = 50;
 
 function json(req: Request, payload: unknown, status = 200) {

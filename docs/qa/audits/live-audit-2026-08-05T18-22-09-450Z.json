@@ -1,5 +1,5 @@
 {
-  "base": "https://clarify.ai.sltfinanceindia.com",
+  "base": "https://trycareerpilot.com",
   "supabase": "https://qzgvjrvtkwlzxpmlddkx.supabase.co",
   "generatedAt": "2026-08-05T18:22:09.450Z",
   "summary": {
@@ -89,7 +89,7 @@
         "status": 200,
         "ms": 48,
         "spa": true,
-        "finalUrl": "https://clarify.ai.sltfinanceindia.com/"
+        "finalUrl": "https://trycareerpilot.com/"
       },
       "ts": "2026-08-05T18:20:06.407Z"
     },
@@ -102,7 +102,7 @@
         "status": 200,
         "ms": 1291,
         "spa": true,
-        "finalUrl": "https://clarify.ai.sltfinanceindia.com/login"
+        "finalUrl": "https://trycareerpilot.com/login"
       },
       "ts": "2026-08-05T18:20:07.699Z"
     },
@@ -115,7 +115,7 @@
         "status": 200,
         "ms": 1046,
         "spa": true,
-        "finalUrl": "https://clarify.ai.sltfinanceindia.com/signup"
+        "finalUrl": "https://trycareerpilot.com/signup"
       },
       "ts": "2026-08-05T18:20:08.745Z"
     },
@@ -128,7 +128,7 @@
         "status": 200,
         "ms": 1222,
         "spa": true,
-        "finalUrl": "https://clarify.ai.sltfinanceindia.com/pricing"
+        "finalUrl": "https://trycareerpilot.com/pricing"
       },
       "ts": "2026-08-05T18:20:09.967Z"
     },
@@ -141,7 +141,7 @@
         "status": 200,
         "ms": 1019,
         "spa": true,
-        "finalUrl": "https://clarify.ai.sltfinanceindia.com/help"
+        "finalUrl": "https://trycareerpilot.com/help"
       },
       "ts": "2026-08-05T18:20:10.986Z"
     },
@@ -154,7 +154,7 @@
         "status": 200,
         "ms": 1099,
         "spa": true,
-        "finalUrl": "https://clarify.ai.sltfinanceindia.com/terms"
+        "finalUrl": "https://trycareerpilot.com/terms"
       },
       "ts": "2026-08-05T18:20:12.085Z"
     },
@@ -167,7 +167,7 @@
         "status": 200,
         "ms": 1516,
         "spa": true,
-        "finalUrl": "https://clarify.ai.sltfinanceindia.com/privacy"
+        "finalUrl": "https://trycareerpilot.com/privacy"
       },
       "ts": "2026-08-05T18:20:13.601Z"
     },
@@ -180,7 +180,7 @@
         "status": 200,
         "ms": 1368,
         "spa": true,
-        "finalUrl": "https://clarify.ai.sltfinanceindia.com/gov-exams"
+        "finalUrl": "https://trycareerpilot.com/gov-exams"
       },
       "ts": "2026-08-05T18:20:14.969Z"
     },
@@ -193,7 +193,7 @@
         "status": 200,
         "ms": 1034,
         "spa": true,
-        "finalUrl": "https://clarify.ai.sltfinanceindia.com/blog"
+        "finalUrl": "https://trycareerpilot.com/blog"
       },
       "ts": "2026-08-05T18:20:16.003Z"
     },
@@ -206,7 +206,7 @@
         "status": 200,
         "ms": 1195,
         "spa": true,
-        "finalUrl": "https://clarify.ai.sltfinanceindia.com/shortcuts"
+        "finalUrl": "https://trycareerpilot.com/shortcuts"
       },
       "ts": "2026-08-05T18:20:17.199Z"
     },
@@ -219,7 +219,7 @@
         "status": 200,
         "ms": 1432,
         "spa": true,
-        "finalUrl": "https://clarify.ai.sltfinanceindia.com/dashboard"
+        "finalUrl": "https://trycareerpilot.com/dashboard"
       },
       "ts": "2026-08-05T18:20:18.632Z"
     },
@@ -232,7 +232,7 @@
         "status": 200,
         "ms": 1117,
         "spa": true,
-        "finalUrl": "https://clarify.ai.sltfinanceindia.com/app/dashboard"
+        "finalUrl": "https://trycareerpilot.com/app/dashboard"
       },
       "ts": "2026-08-05T18:20:19.750Z"
     },
@@ -245,7 +245,7 @@
         "status": 200,
         "ms": 1528,
         "spa": true,
-        "finalUrl": "https://clarify.ai.sltfinanceindia.com/app/live"
+        "finalUrl": "https://trycareerpilot.com/app/live"
       },
       "ts": "2026-08-05T18:20:21.278Z"
     },
@@ -258,7 +258,7 @@
         "status": 200,
         "ms": 1287,
         "spa": true,
-        "finalUrl": "https://clarify.ai.sltfinanceindia.com/app/mock"
+        "finalUrl": "https://trycareerpilot.com/app/mock"
       },
       "ts": "2026-08-05T18:20:22.565Z"
     },
@@ -271,7 +271,7 @@
         "status": 200,
         "ms": 1072,
         "spa": true,
-        "finalUrl": "https://clarify.ai.sltfinanceindia.com/app/prep"
+        "finalUrl": "https://trycareerpilot.com/app/prep"
       },
       "ts": "2026-08-05T18:20:23.637Z"
     },
@@ -284,7 +284,7 @@
         "status": 200,
         "ms": 1168,
         "spa": true,
-        "finalUrl": "https://clarify.ai.sltfinanceindia.com/app/answers"
+        "finalUrl": "https://trycareerpilot.com/app/answers"
       },
       "ts": "2026-08-05T18:20:24.805Z"
     },
@@ -297,7 +297,7 @@
         "status": 200,
         "ms": 1391,
         "spa": true,
-        "finalUrl": "https://clarify.ai.sltfinanceindia.com/app/admin"
+        "finalUrl": "https://trycareerpilot.com/app/admin"
       },
       "ts": "2026-08-05T18:20:26.196Z"
     },
@@ -310,7 +310,7 @@
         "status": 200,
         "ms": 1127,
         "spa": true,
-        "finalUrl": "https://clarify.ai.sltfinanceindia.com/this-route-should-404-clarify"
+        "finalUrl": "https://trycareerpilot.com/this-route-should-404-clarify"
       },
       "ts": "2026-08-05T18:20:27.324Z"
     },
@@ -547,7 +547,7 @@
       "section": "BROWSER",
       "id": "page /login",
       "status": "PASS",
-      "detail": "title=Sign in | Career Pilot url=https://clarify.ai.sltfinanceindia.com/login",
+      "detail": "title=Sign in | Career Pilot url=https://trycareerpilot.com/login",
       "evidence": {},
       "ts": "2026-08-05T18:20:53.650Z"
     },
@@ -555,7 +555,7 @@
       "section": "BROWSER",
       "id": "page /signup",
       "status": "PASS",
-      "detail": "title=Create account | Career Pilot url=https://clarify.ai.sltfinanceindia.com/signup",
+      "detail": "title=Create account | Career Pilot url=https://trycareerpilot.com/signup",
       "evidence": {},
       "ts": "2026-08-05T18:20:55.628Z"
     },
@@ -563,7 +563,7 @@
       "section": "BROWSER",
       "id": "page /pricing",
       "status": "PASS",
-      "detail": "title=Pricing — Career Pilot url=https://clarify.ai.sltfinanceindia.com/pricing",
+      "detail": "title=Pricing — Career Pilot url=https://trycareerpilot.com/pricing",
       "evidence": {},
       "ts": "2026-08-05T18:20:57.774Z"
     },
@@ -571,7 +571,7 @@
       "section": "BROWSER",
       "id": "page /help",
       "status": "PASS",
-      "detail": "title=Help Center — Career Pilot url=https://clarify.ai.sltfinanceindia.com/help",
+      "detail": "title=Help Center — Career Pilot url=https://trycareerpilot.com/help",
       "evidence": {},
       "ts": "2026-08-05T18:20:59.724Z"
     },
@@ -579,7 +579,7 @@
       "section": "BROWSER",
       "id": "anon /app/dashboard → login",
       "status": "PASS",
-      "detail": "landed=https://clarify.ai.sltfinanceindia.com/login",
+      "detail": "landed=https://trycareerpilot.com/login",
       "evidence": {},
       "ts": "2026-08-05T18:21:06.593Z"
     },
@@ -587,7 +587,7 @@
       "section": "BROWSER",
       "id": "anon /dashboard behavior",
       "status": "PASS",
-      "detail": "landed=https://clarify.ai.sltfinanceindia.com/login",
+      "detail": "landed=https://trycareerpilot.com/login",
       "evidence": {},
       "ts": "2026-08-05T18:21:12.079Z"
     },
@@ -595,10 +595,10 @@
       "section": "BROWSER",
       "id": "Pro UI login → /app",
       "status": "PASS",
-      "detail": "ms=2572 url=https://clarify.ai.sltfinanceindia.com/app/dashboard profileError=false stillLoading=false",
+      "detail": "ms=2572 url=https://trycareerpilot.com/app/dashboard profileError=false stillLoading=false",
       "evidence": {
         "loginUiMs": 2572,
-        "url": "https://clarify.ai.sltfinanceindia.com/app/dashboard",
+        "url": "https://trycareerpilot.com/app/dashboard",
         "hasProfileError": false,
         "stillLoading": false
       },
@@ -616,7 +616,7 @@
       "section": "BROWSER",
       "id": "Pro hard refresh keeps session",
       "status": "PASS",
-      "detail": "url=https://clarify.ai.sltfinanceindia.com/app/dashboard",
+      "detail": "url=https://trycareerpilot.com/app/dashboard",
       "evidence": {},
       "ts": "2026-08-05T18:21:26.920Z"
     },
@@ -624,7 +624,7 @@
       "section": "BROWSER",
       "id": "authed /app/live",
       "status": "PASS",
-      "detail": "url=https://clarify.ai.sltfinanceindia.com/app/live badProfile=false",
+      "detail": "url=https://trycareerpilot.com/app/live badProfile=false",
       "evidence": {},
       "ts": "2026-08-05T18:21:31.302Z"
     },
@@ -632,7 +632,7 @@
       "section": "BROWSER",
       "id": "authed /app/mock",
       "status": "PASS",
-      "detail": "url=https://clarify.ai.sltfinanceindia.com/app/mock badProfile=false",
+      "detail": "url=https://trycareerpilot.com/app/mock badProfile=false",
       "evidence": {},
       "ts": "2026-08-05T18:21:35.989Z"
     },
@@ -640,7 +640,7 @@
       "section": "BROWSER",
       "id": "authed /app/prep",
       "status": "PASS",
-      "detail": "url=https://clarify.ai.sltfinanceindia.com/app/prep badProfile=false",
+      "detail": "url=https://trycareerpilot.com/app/prep badProfile=false",
       "evidence": {},
       "ts": "2026-08-05T18:21:40.319Z"
     },
@@ -648,7 +648,7 @@
       "section": "BROWSER",
       "id": "authed /app/answers",
       "status": "PASS",
-      "detail": "url=https://clarify.ai.sltfinanceindia.com/app/answers badProfile=false",
+      "detail": "url=https://trycareerpilot.com/app/answers badProfile=false",
       "evidence": {},
       "ts": "2026-08-05T18:21:44.738Z"
     },
@@ -656,7 +656,7 @@
       "section": "BROWSER",
       "id": "authed /app/sessions",
       "status": "PASS",
-      "detail": "url=https://clarify.ai.sltfinanceindia.com/app/sessions badProfile=false",
+      "detail": "url=https://trycareerpilot.com/app/sessions badProfile=false",
       "evidence": {},
       "ts": "2026-08-05T18:21:49.108Z"
     },
@@ -664,7 +664,7 @@
       "section": "BROWSER",
       "id": "authed /app/settings/profile",
       "status": "PASS",
-      "detail": "url=https://clarify.ai.sltfinanceindia.com/app/settings/profile badProfile=false",
+      "detail": "url=https://trycareerpilot.com/app/settings/profile badProfile=false",
       "evidence": {},
       "ts": "2026-08-05T18:21:55.209Z"
     },
@@ -672,7 +672,7 @@
       "section": "BROWSER",
       "id": "authed /app/usage",
       "status": "PASS",
-      "detail": "url=https://clarify.ai.sltfinanceindia.com/app/usage badProfile=false",
+      "detail": "url=https://trycareerpilot.com/app/usage badProfile=false",
       "evidence": {},
       "ts": "2026-08-05T18:21:59.663Z"
     },
@@ -680,7 +680,7 @@
       "section": "BROWSER",
       "id": "Pro /app/admin Access Denied",
       "status": "PASS",
-      "detail": "url=https://clarify.ai.sltfinanceindia.com/app/admin snip=Access Denied You don't have admin privileges to access this page. Go to Dashboard Cookie Notice We use essential cookies for authentication and optional an",
+      "detail": "url=https://trycareerpilot.com/app/admin snip=Access Denied You don't have admin privileges to access this page. Go to Dashboard Cookie Notice We use essential cookies for authentication and optional an",
       "evidence": {},
       "ts": "2026-08-05T18:22:04.903Z"
     },
@@ -915,11 +915,11 @@
       "section": "BROWSER",
       "id": "failed requests",
       "status": "WARN",
-      "detail": "net::ERR_ABORTED https://clarify.ai.sltfinanceindia.com/app/theme-init.js || net::ERR_ABORTED https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/sessions?select=id&user_id=eq.692978b7-153a-4dcd-811a-8a7133fba8c8 || net::ERR_ABORTED https://clarify.ai.sltfinanceindia.com/app/theme-init.js || net::ERR_ABORTED https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/sessions?select=id&user_id=eq.692978b7-153a-4dcd-811a-8a7133fba8c8 || net::ERR_ABORTED https://clarify.ai.sltfinanceindia.com/app/theme-init.js || net::ERR_ABORTED https://clarify.ai.sltfinanceindia.com/app/theme-init.js || net::ERR_ABORTED https://clarify.ai.sltfinanceindia.com/app/theme-init.js || net::ERR_ABORTED https://clarify.ai.sltfinanceindia.com/app/theme-init.js",
+      "detail": "net::ERR_ABORTED https://trycareerpilot.com/app/theme-init.js || net::ERR_ABORTED https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/sessions?select=id&user_id=eq.692978b7-153a-4dcd-811a-8a7133fba8c8 || net::ERR_ABORTED https://trycareerpilot.com/app/theme-init.js || net::ERR_ABORTED https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/sessions?select=id&user_id=eq.692978b7-153a-4dcd-811a-8a7133fba8c8 || net::ERR_ABORTED https://trycareerpilot.com/app/theme-init.js || net::ERR_ABORTED https://trycareerpilot.com/app/theme-init.js || net::ERR_ABORTED https://trycareerpilot.com/app/theme-init.js || net::ERR_ABORTED https://trycareerpilot.com/app/theme-init.js",
       "evidence": {
         "failedRequests": [
           {
-            "url": "https://clarify.ai.sltfinanceindia.com/app/theme-init.js",
+            "url": "https://trycareerpilot.com/app/theme-init.js",
             "error": "net::ERR_ABORTED"
           },
           {
@@ -927,7 +927,7 @@
             "error": "net::ERR_ABORTED"
           },
           {
-            "url": "https://clarify.ai.sltfinanceindia.com/app/theme-init.js",
+            "url": "https://trycareerpilot.com/app/theme-init.js",
             "error": "net::ERR_ABORTED"
           },
           {
@@ -935,35 +935,35 @@
             "error": "net::ERR_ABORTED"
           },
           {
-            "url": "https://clarify.ai.sltfinanceindia.com/app/theme-init.js",
+            "url": "https://trycareerpilot.com/app/theme-init.js",
             "error": "net::ERR_ABORTED"
           },
           {
-            "url": "https://clarify.ai.sltfinanceindia.com/app/theme-init.js",
+            "url": "https://trycareerpilot.com/app/theme-init.js",
             "error": "net::ERR_ABORTED"
           },
           {
-            "url": "https://clarify.ai.sltfinanceindia.com/app/theme-init.js",
+            "url": "https://trycareerpilot.com/app/theme-init.js",
             "error": "net::ERR_ABORTED"
           },
           {
-            "url": "https://clarify.ai.sltfinanceindia.com/app/theme-init.js",
+            "url": "https://trycareerpilot.com/app/theme-init.js",
             "error": "net::ERR_ABORTED"
           },
           {
-            "url": "https://clarify.ai.sltfinanceindia.com/app/theme-init.js",
+            "url": "https://trycareerpilot.com/app/theme-init.js",
             "error": "net::ERR_ABORTED"
           },
           {
-            "url": "https://clarify.ai.sltfinanceindia.com/app/settings/theme-init.js",
+            "url": "https://trycareerpilot.com/app/settings/theme-init.js",
             "error": "net::ERR_ABORTED"
           },
           {
-            "url": "https://clarify.ai.sltfinanceindia.com/app/theme-init.js",
+            "url": "https://trycareerpilot.com/app/theme-init.js",
             "error": "net::ERR_ABORTED"
           },
           {
-            "url": "https://clarify.ai.sltfinanceindia.com/app/theme-init.js",
+            "url": "https://trycareerpilot.com/app/theme-init.js",
             "error": "net::ERR_ABORTED"
           },
           {

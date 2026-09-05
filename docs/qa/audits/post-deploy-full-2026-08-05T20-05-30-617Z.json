@@ -1,5 +1,5 @@
 {
-  "base": "https://clarify.ai.sltfinanceindia.com",
+  "base": "https://trycareerpilot.com",
   "summary": {
     "PASS": 60,
     "FAIL": 2,
@@ -302,7 +302,7 @@
       "phase": "AUTH",
       "id": "invalid password UI",
       "status": "PASS",
-      "detail": "url=https://clarify.ai.sltfinanceindia.com/login",
+      "detail": "url=https://trycareerpilot.com/login",
       "evidence": {},
       "ts": "2026-08-05T20:03:22.705Z"
     },
@@ -310,7 +310,7 @@
       "phase": "AUTH",
       "id": "anon /app/dashboard → login",
       "status": "PASS",
-      "detail": "url=https://clarify.ai.sltfinanceindia.com/login?returnTo=%2Fapp%2Fdashboard",
+      "detail": "url=https://trycareerpilot.com/login?returnTo=%2Fapp%2Fdashboard",
       "evidence": {},
       "ts": "2026-08-05T20:03:28.595Z"
     },
@@ -318,7 +318,7 @@
       "phase": "AUTH",
       "id": "returnTo present",
       "status": "PASS",
-      "detail": "url=https://clarify.ai.sltfinanceindia.com/login?returnTo=%2Fapp%2Fdashboard",
+      "detail": "url=https://trycareerpilot.com/login?returnTo=%2Fapp%2Fdashboard",
       "evidence": {},
       "ts": "2026-08-05T20:03:28.596Z"
     },
@@ -326,7 +326,7 @@
       "phase": "AUTH",
       "id": "Pro UI login",
       "status": "PASS",
-      "detail": "ms=4493 url=https://clarify.ai.sltfinanceindia.com/app/dashboard profileErr=false",
+      "detail": "ms=4493 url=https://trycareerpilot.com/app/dashboard profileErr=false",
       "evidence": {},
       "ts": "2026-08-05T20:03:35.085Z"
     },
@@ -334,7 +334,7 @@
       "phase": "AUTH",
       "id": "Pro hard refresh session",
       "status": "PASS",
-      "detail": "url=https://clarify.ai.sltfinanceindia.com/app/dashboard",
+      "detail": "url=https://trycareerpilot.com/app/dashboard",
       "evidence": {},
       "ts": "2026-08-05T20:03:40.638Z"
     },
@@ -342,7 +342,7 @@
       "phase": "AUTH",
       "id": "Pro /app/live",
       "status": "PASS",
-      "detail": "url=https://clarify.ai.sltfinanceindia.com/app/live",
+      "detail": "url=https://trycareerpilot.com/app/live",
       "evidence": {},
       "ts": "2026-08-05T20:03:44.760Z"
     },
@@ -350,7 +350,7 @@
       "phase": "AUTH",
       "id": "Pro /app/mock",
       "status": "PASS",
-      "detail": "url=https://clarify.ai.sltfinanceindia.com/app/mock",
+      "detail": "url=https://trycareerpilot.com/app/mock",
       "evidence": {},
       "ts": "2026-08-05T20:03:50.605Z"
     },
@@ -358,7 +358,7 @@
       "phase": "AUTH",
       "id": "Pro /app/prep",
       "status": "PASS",
-      "detail": "url=https://clarify.ai.sltfinanceindia.com/app/prep",
+      "detail": "url=https://trycareerpilot.com/app/prep",
       "evidence": {},
       "ts": "2026-08-05T20:03:54.500Z"
     },
@@ -366,7 +366,7 @@
       "phase": "AUTH",
       "id": "Pro /app/answers",
       "status": "PASS",
-      "detail": "url=https://clarify.ai.sltfinanceindia.com/app/answers",
+      "detail": "url=https://trycareerpilot.com/app/answers",
       "evidence": {},
       "ts": "2026-08-05T20:03:58.327Z"
     },
@@ -374,7 +374,7 @@
       "phase": "AUTH",
       "id": "Pro /app/sessions",
       "status": "PASS",
-      "detail": "url=https://clarify.ai.sltfinanceindia.com/app/sessions",
+      "detail": "url=https://trycareerpilot.com/app/sessions",
       "evidence": {},
       "ts": "2026-08-05T20:04:02.192Z"
     },
@@ -382,7 +382,7 @@
       "phase": "AUTH",
       "id": "Pro /app/settings/profile",
       "status": "PASS",
-      "detail": "url=https://clarify.ai.sltfinanceindia.com/app/settings/profile",
+      "detail": "url=https://trycareerpilot.com/app/settings/profile",
       "evidence": {},
       "ts": "2026-08-05T20:04:06.339Z"
     },
@@ -390,7 +390,7 @@
       "phase": "AUTH",
       "id": "Pro /app/usage",
       "status": "PASS",
-      "detail": "url=https://clarify.ai.sltfinanceindia.com/app/usage",
+      "detail": "url=https://trycareerpilot.com/app/usage",
       "evidence": {},
       "ts": "2026-08-05T20:04:10.133Z"
     },
@@ -406,7 +406,7 @@
       "phase": "AUTH",
       "id": "logout clears /app access",
       "status": "PASS",
-      "detail": "url=https://clarify.ai.sltfinanceindia.com/login?returnTo=%2Fapp%2Fdashboard",
+      "detail": "url=https://trycareerpilot.com/login?returnTo=%2Fapp%2Fdashboard",
       "evidence": {},
       "ts": "2026-08-05T20:04:23.770Z"
     },
@@ -430,7 +430,7 @@
       "phase": "AUTH",
       "id": "Max UI login",
       "status": "PASS",
-      "detail": "ms=3577 url=https://clarify.ai.sltfinanceindia.com/app/dashboard",
+      "detail": "ms=3577 url=https://trycareerpilot.com/app/dashboard",
       "evidence": {},
       "ts": "2026-08-05T20:04:45.315Z"
     },
@@ -478,7 +478,7 @@
       "phase": "RESPONSIVE",
       "id": "dashboard iphone-ish 375x812",
       "status": "PASS",
-      "detail": "hang=false overflowX=false url=https://clarify.ai.sltfinanceindia.com/app/dashboard",
+      "detail": "hang=false overflowX=false url=https://trycareerpilot.com/app/dashboard",
       "evidence": {},
       "ts": "2026-08-05T20:04:59.773Z"
     },
@@ -486,7 +486,7 @@
       "phase": "RESPONSIVE",
       "id": "dashboard pixel-ish 390x844",
       "status": "PASS",
-      "detail": "hang=false overflowX=false url=https://clarify.ai.sltfinanceindia.com/app/dashboard",
+      "detail": "hang=false overflowX=false url=https://trycareerpilot.com/app/dashboard",
       "evidence": {},
       "ts": "2026-08-05T20:05:03.426Z"
     },
@@ -494,7 +494,7 @@
       "phase": "RESPONSIVE",
       "id": "dashboard tablet 768x1024",
       "status": "PASS",
-      "detail": "hang=false overflowX=false url=https://clarify.ai.sltfinanceindia.com/app/dashboard",
+      "detail": "hang=false overflowX=false url=https://trycareerpilot.com/app/dashboard",
       "evidence": {},
       "ts": "2026-08-05T20:05:07.090Z"
     },
@@ -502,7 +502,7 @@
       "phase": "RESPONSIVE",
       "id": "dashboard desktop 1440x900",
       "status": "PASS",
-      "detail": "hang=false overflowX=false url=https://clarify.ai.sltfinanceindia.com/app/dashboard",
+      "detail": "hang=false overflowX=false url=https://trycareerpilot.com/app/dashboard",
       "evidence": {},
       "ts": "2026-08-05T20:05:10.700Z"
     },

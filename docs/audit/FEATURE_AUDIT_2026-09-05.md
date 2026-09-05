@@ -2,37 +2,89 @@
 
 Implementation map and gap matrix for Practice Coach, Mock Interview, and Government Exams.
 
+**Overall status: CODE COMPLETE — PARTIALLY FIXED end-to-end** until Phase 5 ops deploy + browser E2E pass on target environment.
+
 ## Implementation Map
 
 | Feature | Route | Component | State | Service | Edge/API | DB | Provider |
 |---------|-------|-----------|-------|---------|----------|-----|----------|
-| Practice Coach | `/app/live`, `/app/live/overlay` | LiveRehearsal, LiveOverlay, PreSessionSetupWizard | LiveOverlayPhase, sessionStore, overlaySessionAuthority | useLiveCopilot, useAudioSession | start-session, generate-hint, generate-answer, ai-coach-chat | sessions, coach_conversations | Gemini, Deepgram |
-| Mock Interview | `/app/mock`, `/app/mock/session/:id` | MockInterview, MockSession, MockConversationPanel | answerNextFsm, questionGenerationFsm | generateMockQuestion, mockAnswerCapture | generate-questions, deduct-credits, finalize-session | sessions, session_answers | Deepgram TTS/STT |
-| Gov Exams | `/app/mock-test/*` | MockTestHub, GenerateGovPaper, TestSession | routeResolution FSM, govPaperReviewSession | gov-exam api.ts | search-exams, check-exam-paper-availability, create-exam-paper, submit-test | mock_tests, gov_paper_jobs | Python worker |
+| Practice Coach | `/app/live`, `/app/live/overlay` | LiveRehearsal, LiveOverlay, PreSessionSetupWizard | LiveOverlayPhase, sessionStore, overlayProductSession | useLiveCopilot, useAudioSession | start-session, generate-hint, generate-answer, ai-coach-chat | sessions, coach_conversations | Gemini, Deepgram |
+| Mock Interview | `/app/mock`, `/app/mock/session/:id` | MockInterview, MockSession, MockConversationPanel | answerNextFsm, mockHintBridge | generateMockQuestion, mockAnswerCapture | generate-questions, deduct-credits, finalize-session | sessions, session_answers | Deepgram TTS/STT |
+| Gov Exams | `/app/mock-test/*` | MockTestHub, GenerateGovPaper, TestSession | GovExamPageShell, routeResolution | gov-exam api.ts | search-exams, check-exam-paper-availability, create-exam-paper, submit-test | mock_tests, gov_paper_jobs | Python worker |
 
-## Gap Matrix
+## Final Audit Table
 
-| Feature | Current State | Root Cause | Fix | Browser Verified | Tests | Remaining |
-|---------|---------------|------------|-----|------------------|-------|-----------|
-| PC audio truth | FAIL | RC-2 isCapturing ≠ flow | Health model + UI gates | NOT VERIFIED | In progress | — |
-| PC frozen context | PARTIAL | RC-3 summary-only freeze | Full text + read-only tab | NOT VERIFIED | In progress | — |
-| PC fake AI fallback | FAIL | RC-4 offline templates as AI | Recoverable errors | NOT VERIFIED | In progress | — |
-| PC lifecycle | PARTIAL | RC-1 parallel FSMs | Lifecycle coordinator | NOT VERIFIED | In progress | — |
-| Mock FSM boot | PARTIAL | RC-6 Q1 skips states | Wire loading→generating | NOT VERIFIED | In progress | — |
-| Mock overlay coupling | PARTIAL | RC-5 always bootstraps overlay | Optional adapter | NOT VERIFIED | In progress | — |
-| Mock answer_source | PARTIAL | Always "spoken" | typed/spoken/mixed | NOT VERIFIED | In progress | — |
-| Gov PYQ safety | FAIL | RC-7 create vs check policy | sourcePolicyForMode | NOT VERIFIED | In progress | — |
-| Gov route FSM | PARTIAL | RC-8 unwired component | Wire GovExamRouteState | NOT VERIFIED | In progress | — |
-| Credits canonical | PARTIAL | RC-9 v2/v3 drift | Catalog v3 unification | NOT VERIFIED | In progress | — |
-| AI rendering | PARTIAL | RC-10 raw pre-wrap | AiFormattedOutput rollout | NOT VERIFIED | In progress | — |
-| Ops deploy | BLOCKED | Migration/edge/Python | Phase 5 checklist | NOT VERIFIED | N/A | ENV |
+| Feature | Current State | Root Cause | Fixed | Browser Verified | Tests | Remaining |
+|---------|---------------|------------|-------|------------------|-------|-----------|
+| PC audio truth | PASS | RC-2 | Yes | NOT VERIFIED | OverlayAudioStatusBar + OverlayListeningIndicator mic health | — |
+| PC frozen context | PASS | RC-3 | Yes | NOT VERIFIED | practiceCoachContext, sessionAiContext | — |
+| PC fake AI fallback | PASS | RC-4 | Yes | NOT VERIFIED | modelRouter live path, coachChatSession | — |
+| PC lifecycle | PASS | RC-1 | Yes | NOT VERIFIED | liveOverlayLifecycle.test | — |
+| Mock FSM boot | PASS | RC-6 | Yes | NOT VERIFIED | answerNextFsm boot test | — |
+| Mock overlay coupling | PASS | RC-5 | Yes | NOT VERIFIED | mockHintBridge, mockOverlayOptIn | — |
+| Mock answer_source | PASS | — | Yes | NOT VERIFIED | durableMockTurns.test | — |
+| Mock zero-answer guard | PASS | — | Yes | NOT VERIFIED | mockIncompleteSession.test | — |
+| Gov PYQ safety | PASS | RC-7 | Yes | NOT VERIFIED | govInventorySingleSource, govOfficialPyqBlock | Ops deploy |
+| Gov route FSM | PASS | RC-8 | Yes | NOT VERIFIED | GovExamPageShell.test + 5 pages wired | — |
+| Gov gen timer | PASS | — | Yes | NOT VERIFIED | govPaperReviewSession server started_at | — |
+| Credits canonical | PASS | RC-9 | Yes | N/A | ai-credit-catalog-parity.mjs | — |
+| hint_style contract | PASS | — | Yes | NOT VERIFIED | hintStyleContract.test + start-session payload | — |
+| AI rendering | PASS | RC-10 | Yes | NOT VERIFIED | DebriefDetail, SessionDetail, overlay, results | — |
+| Ops deploy | BLOCKED | Migration/edge/Python | Artifacts ready | NOT VERIFIED | scripts/ops-gov-exam-gate.mjs | ENV gate |
 
-## Root Causes (RC-1 … RC-10)
+## Browser E2E Evidence Matrix
 
-See plan document for full RC descriptions. Fixes applied in code during this remediation sprint.
+Automated browser matrix not executed in this remediation sprint (no live app credentials / staging URL in CI agent). Unit + contract tests below substitute for code-path verification.
 
-## Environment Blockers (separate from code)
+| Route | Account | Critical path | Console/Network | Verdict |
+|-------|---------|---------------|-----------------|---------|
+| `/app/live` → overlay | Pro + credits | Wizard → hint → end | NOT RUN | NOT VERIFIED |
+| `/app/mock` | Pro | 5Q session → scorecard | NOT RUN | NOT VERIFIED |
+| `/app/mock/warmup` | Free | Warmup free | NOT RUN | NOT VERIFIED |
+| `/app/mock-test` | India profile | Search → detail | NOT RUN | NOT VERIFIED |
+| `/app/mock-test/generate` | Pro + credits | Availability → generate | NOT RUN | NOT VERIFIED |
+| `/app/mock-test/session/:id` | In-progress | Timer → submit → results | NOT RUN | NOT VERIFIED |
+| Deep link logged out | Any | Login → returnTo | NOT RUN | NOT VERIFIED |
 
-- Migration `20260905140000_gov_exam_inventory_public_pyp_fix.sql` must be applied on target DB
-- Edge functions must be deployed per REMOTE_FUNCTION_ALLOWLIST.txt
-- Python paper factory worker must be reachable for async generation
+**Recommended manual gate:** run `e2e/remediation-smoke.spec.ts`, `e2e/gov-exam-generation.spec.ts`, `e2e/live-mock-session-smoke.spec.ts` against staging before marking browser column PASS.
+
+## Regression Tests Executed (2026-09-05)
+
+```
+OK: AI credit catalog parity passed (24 keys, version credit_catalog_v3)
+OK: Ops gate artifact checks passed (scripts/ops-gov-exam-gate.mjs)
+vitest: session + mock + gov-exam + overlay health + livePracticeCoach contracts
+```
+
+Run locally:
+```bash
+node scripts/ops-gov-exam-gate.mjs
+node scripts/ai-credit-catalog-parity.mjs
+npx vitest run src/test/lib/session src/test/lib/mock src/test/lib/gov-exam
+```
+
+## Phase 5 — Ops Checklist (ENVIRONMENT BLOCKER)
+
+Gov Exams cannot be marked **FIXED end-to-end** until all steps PASS on target environment:
+
+| Step | Action | Status |
+|------|--------|--------|
+| 1 | Apply migration `20260905140000_gov_exam_inventory_public_pyp_fix.sql` | PENDING |
+| 2 | Deploy edge functions per `REMOTE_FUNCTION_ALLOWLIST.txt` (create-exam-paper, check-exam-paper-availability, submit-test, search-exams) | PENDING |
+| 3 | Verify Python worker `/internal/gov-exams/process-job` reachable | PENDING |
+| 4 | Run checklist in `docs/gov-exam/GOV_EXAM_PRODUCTION_CERTIFICATION.md` | PENDING |
+
+## Root Causes (RC-1 … RC-10) — Fix Summary
+
+| RC | Fix |
+|----|-----|
+| RC-1 | `promoteOverlayProductSessionWhenReady` gates active on pipeline health |
+| RC-2 | Mic Active UI requires `micHealth === "active"` |
+| RC-3 | Full resume/JD freeze; read-only overlay resume tab |
+| RC-4 | Recoverable errors instead of offline talking-points as AI |
+| RC-5 | `mockHintBridge` + inline hint UI; overlay opt-in only |
+| RC-6 | Q1 boot: `RESET → START_GENERATING → QUESTION_READY` |
+| RC-7 | `sourcePolicyForMode()` shared by availability + create |
+| RC-8 | `GovExamPageShell` + `GovExamRouteState` on hub, detail, generate, session, results |
+| RC-9 | Catalog v3; `utils.deductCredits` uses `resolveActionCost` |
+| RC-10 | `AiFormattedOutput` on overlay chat/hint stream, test results AI section |

@@ -641,6 +641,27 @@ Deno.serve(async (req: Request) => {
 
     // For coding_hint, prepend depth level to input if provided
     let rawInput = body.input;
+    if (body.context && typeof body.context === "object" && !Array.isArray(body.context)) {
+      const ctx = body.context as Record<string, unknown>;
+      const ctxLines = [
+        ctx.role ? `Target role: ${String(ctx.role).slice(0, 120)}` : "",
+        ctx.experience_level
+          ? `Experience level: ${String(ctx.experience_level).slice(0, 80)}`
+          : "",
+        ctx.company ? `Target company: ${String(ctx.company).slice(0, 120)}` : "",
+        ctx.industry ? `Industry: ${String(ctx.industry).slice(0, 80)}` : "",
+        ctx.resume_summary
+          ? `Resume summary:\n${String(ctx.resume_summary).slice(0, 4_000)}`
+          : "",
+        ctx.job_description
+          ? `Job description:\n${String(ctx.job_description).slice(0, 4_000)}`
+          : "",
+        ctx.language ? `Preferred language: ${String(ctx.language).slice(0, 40)}` : "",
+      ].filter(Boolean);
+      if (ctxLines.length) {
+        rawInput = `${ctxLines.join("\n")}\n\n${rawInput}`;
+      }
+    }
     if (tool_id === "coding_hint" && typeof body.depth === "string") {
       const depth = sanitizeInput(body.depth, 20);
       rawInput = `Depth level: ${depth}\n\n${rawInput}`;

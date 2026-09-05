@@ -22,6 +22,12 @@ export type PublishableQuestionRow = {
   metadata?: unknown;
 };
 
+export type QuestionApprovePatch = {
+  review_status: "approved";
+  is_verified: true;
+  validation_status: "valid";
+};
+
 export type QuestionPublishPatch = {
   publish_status: PublishTargetStatus;
   is_public: boolean;
@@ -130,6 +136,15 @@ export function assertPublishableForTrigger(
   }
 
   return null;
+}
+
+/** Admin approve — sets fields required by validate_question_publication on publish. */
+export function buildQuestionApprovePatch(): QuestionApprovePatch {
+  return {
+    review_status: "approved",
+    is_verified: true,
+    validation_status: "valid",
+  };
 }
 
 /**

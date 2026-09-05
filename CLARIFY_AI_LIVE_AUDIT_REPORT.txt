@@ -1,7 +1,7 @@
 ================================================================================
 CLARIFY AI — GENUINE LIVE PRODUCTION AUDIT REPORT
 ================================================================================
-Site      : https://clarify.ai.sltfinanceindia.com
+Site      : https://trycareerpilot.com
 Supabase  : https://qzgvjrvtkwlzxpmlddkx.supabase.co
 Generated : 2026-08-05T18:22:09.452Z
 Summary   : PASS=58 FAIL=4 WARN=2 BLOCKED=0 INFO=2
@@ -112,19 +112,19 @@ SECTION: BROWSER
 [PASS] pageerrors
   none
 [PASS] page /login
-  title=Sign in | Career Pilot url=https://clarify.ai.sltfinanceindia.com/login
+  title=Sign in | Career Pilot url=https://trycareerpilot.com/login
 [PASS] page /signup
-  title=Create account | Career Pilot url=https://clarify.ai.sltfinanceindia.com/signup
+  title=Create account | Career Pilot url=https://trycareerpilot.com/signup
 [PASS] page /pricing
-  title=Pricing — Career Pilot url=https://clarify.ai.sltfinanceindia.com/pricing
+  title=Pricing — Career Pilot url=https://trycareerpilot.com/pricing
 [PASS] page /help
-  title=Help Center — Career Pilot url=https://clarify.ai.sltfinanceindia.com/help
+  title=Help Center — Career Pilot url=https://trycareerpilot.com/help
 [PASS] anon /app/dashboard → login
-  landed=https://clarify.ai.sltfinanceindia.com/login
+  landed=https://trycareerpilot.com/login
 [PASS] anon /dashboard behavior
-  landed=https://clarify.ai.sltfinanceindia.com/login
+  landed=https://trycareerpilot.com/login
 [PASS] Pro UI login → /app
-  ms=2572 url=https://clarify.ai.sltfinanceindia.com/app/dashboard profileError=false stillLoading=false
+  ms=2572 url=https://trycareerpilot.com/app/dashboard profileError=false stillLoading=false
 [INFO] shell text after login
   Career Pilot
 
@@ -167,23 +167,23 @@ Press Ctrl+K to jump anywhere fast.
 
 Q | Edit with
 [PASS] Pro hard refresh keeps session
-  url=https://clarify.ai.sltfinanceindia.com/app/dashboard
+  url=https://trycareerpilot.com/app/dashboard
 [PASS] authed /app/live
-  url=https://clarify.ai.sltfinanceindia.com/app/live badProfile=false
+  url=https://trycareerpilot.com/app/live badProfile=false
 [PASS] authed /app/mock
-  url=https://clarify.ai.sltfinanceindia.com/app/mock badProfile=false
+  url=https://trycareerpilot.com/app/mock badProfile=false
 [PASS] authed /app/prep
-  url=https://clarify.ai.sltfinanceindia.com/app/prep badProfile=false
+  url=https://trycareerpilot.com/app/prep badProfile=false
 [PASS] authed /app/answers
-  url=https://clarify.ai.sltfinanceindia.com/app/answers badProfile=false
+  url=https://trycareerpilot.com/app/answers badProfile=false
 [PASS] authed /app/sessions
-  url=https://clarify.ai.sltfinanceindia.com/app/sessions badProfile=false
+  url=https://trycareerpilot.com/app/sessions badProfile=false
 [PASS] authed /app/settings/profile
-  url=https://clarify.ai.sltfinanceindia.com/app/settings/profile badProfile=false
+  url=https://trycareerpilot.com/app/settings/profile badProfile=false
 [PASS] authed /app/usage
-  url=https://clarify.ai.sltfinanceindia.com/app/usage badProfile=false
+  url=https://trycareerpilot.com/app/usage badProfile=false
 [PASS] Pro /app/admin Access Denied
-  url=https://clarify.ai.sltfinanceindia.com/app/admin snip=Access Denied You don't have admin privileges to access this page. Go to Dashboard Cookie Notice We use essential cookies for authentication and optional an
+  url=https://trycareerpilot.com/app/admin snip=Access Denied You don't have admin privileges to access this page. Go to Dashboard Cookie Notice We use essential cookies for authentication and optional an
 [FAIL] session_expired banner
   message missing (remediation may be undeployed)
 [PASS] mobile landing
@@ -191,7 +191,7 @@ Q | Edit with
 [INFO] supabase API samples during UI
   67 captured
 [WARN] failed requests
-  net::ERR_ABORTED https://clarify.ai.sltfinanceindia.com/app/theme-init.js || net::ERR_ABORTED https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/sessions?select=id&user_id=eq.692978b7-153a-4dcd-811a-8a7133fba8c8 || net::ERR_ABORTED https://clarify.ai.sltfinanceindia.com/app/theme-init.js || net::ERR_ABORTED https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/sessions?select=id&user_id=eq.692978b7-153a-4dcd-811a-8a7133fba8c8 || net::ERR_ABORTED https://clarify.ai.sltfinanceindia.com/app/theme-init.js || net::ERR_ABORTED https://clarify.ai.sltfinanceindia.com/app/theme-init.js || net::ERR_ABORTED https://clarify.ai.sltfinanceindia.com/app/theme-init.js || net::ERR_ABORTED https://clarify.ai.sltfinanceindia.com/app/theme-init.js
+  net::ERR_ABORTED https://trycareerpilot.com/app/theme-init.js || net::ERR_ABORTED https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/sessions?select=id&user_id=eq.692978b7-153a-4dcd-811a-8a7133fba8c8 || net::ERR_ABORTED https://trycareerpilot.com/app/theme-init.js || net::ERR_ABORTED https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/sessions?select=id&user_id=eq.692978b7-153a-4dcd-811a-8a7133fba8c8 || net::ERR_ABORTED https://trycareerpilot.com/app/theme-init.js || net::ERR_ABORTED https://trycareerpilot.com/app/theme-init.js || net::ERR_ABORTED https://trycareerpilot.com/app/theme-init.js || net::ERR_ABORTED https://trycareerpilot.com/app/theme-init.js
 
 ================================================================================
 RELEASE DECISION (from this audit)

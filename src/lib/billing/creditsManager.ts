@@ -1,4 +1,4 @@
-import { AI_CREDIT_COSTS, mockSessionCreditCost } from "@/lib/constants/creditEconomics";
+import { AI_CREDIT_COSTS, LIVE_ANSWER_LONG_CREDITS, mockSessionCreditCost } from "@/lib/constants/creditEconomics";
 import { creditsDB } from "@/lib/supabase/database";
 import { useAuthStore } from "@/store/userStore";
 import { useUIStore } from "@/store/uiStore";
@@ -9,8 +9,8 @@ import { isPaidPlan as isPaidPlanId } from "@/lib/billing/planIds";
 export const SERVER_AI_CREDIT_COSTS = {
   hint: AI_CREDIT_COSTS.live_hint,
   fullAnswer: AI_CREDIT_COSTS.live_answer,
-  /** resolveActionCost("liveanswerlong") = live_answer + 4 */
-  longAnswer: AI_CREDIT_COSTS.live_answer + 4,
+  /** resolveActionCost("liveanswerlong") */
+  longAnswer: LIVE_ANSWER_LONG_CREDITS,
   screenshotAnswer: AI_CREDIT_COSTS.screenshot_answer,
   coachMessage: AI_CREDIT_COSTS.ai_coach_message,
 } as const;
@@ -81,6 +81,8 @@ export function checkCreditsForAction(
 
 // ─────────────────────────────────────────────────────────────────
 // Credits Manager
+// @deprecated Prefer useCredits() + UI_CREDIT_COSTS for new call sites.
+// Retained for Live Copilot and mock session upfront charge paths.
 // ─────────────────────────────────────────────────────────────────
 
 export type CreditAction =
@@ -96,7 +98,7 @@ export type CreditAction =
 
 export const CREDIT_COSTS: Record<CreditAction, number> = {
   liveanswershort:   AI_CREDIT_COSTS.live_answer,
-  liveanswerlong:    AI_CREDIT_COSTS.live_answer + 4,
+  liveanswerlong:    LIVE_ANSWER_LONG_CREDITS,
   generate_hint:     AI_CREDIT_COSTS.live_hint,
   starbuilder:       AI_CREDIT_COSTS.star_builder,
   documentparse:     AI_CREDIT_COSTS.parse_question_pdf,

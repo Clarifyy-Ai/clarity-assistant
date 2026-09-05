@@ -1,4 +1,5 @@
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
+import { withPrepToolContext } from "@/lib/prep/prepToolContext";
 import { prepToolIdempotencyKey } from "@/lib/network/idempotency";
 import {
   getAiUserFacingError,
@@ -182,11 +183,11 @@ export default function CodingHints() {
 
     try {
       const input = `Problem: ${activeProblem.title}\n\n${activeProblem.description}\n\nExamples:\n${activeProblem.examples}\n\nTags: ${activeProblem.tags.join(", ")}`;
-      const data = await fetchEdgeJson<{ result?: string }>("prep-tool", {
+      const data = await fetchEdgeJson<{ result?: string }>("prep-tool", withPrepToolContext({
         tool_id: "coding_hint",
         input,
         depth,
-      }, {
+      }), {
         headers: {
           "x-idempotency-key": idempotencyKey,
         },
@@ -228,10 +229,10 @@ export default function CodingHints() {
 
     try {
       const input = `Problem: ${activeProblem.title}\n\n${activeProblem.description}\n\nExamples:\n${activeProblem.examples}\n\nTags: ${activeProblem.tags.join(", ")}`;
-      const data = await fetchEdgeJson<{ result?: string }>("prep-tool", {
+      const data = await fetchEdgeJson<{ result?: string }>("prep-tool", withPrepToolContext({
         tool_id: "coding_solution",
         input,
-      }, {
+      }), {
         headers: {
           "x-idempotency-key": idempotencyKey,
         },

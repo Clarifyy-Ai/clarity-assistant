@@ -6,7 +6,7 @@ from openpyxl.formatting.rule import CellIsRule, FormulaRule
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.datavalidation import DataValidation
 
-SITE = "https://clarify.ai.sltfinanceindia.com"
+SITE = "https://trycareerpilot.com"
 LOCAL = "http://localhost:5173"
 ENV_NAME = "Closed Beta / QA Target"
 

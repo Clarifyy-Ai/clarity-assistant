@@ -9,6 +9,10 @@ import {
   overlayStateRecovery,
   type OverlaySessionState,
 } from "@/lib/overlay/overlaySessionStates";
+import {
+  type AudioChannelHealthStatus,
+  isChannelUiActive,
+} from "@/lib/audio/audioChannelHealth";
 import { cn } from "@/lib/utils";
 
 type ListeningState = "listening" | "paused" | "muted" | "error" | "idle" | "busy";
@@ -28,6 +32,9 @@ export const OverlayListeningIndicator = memo(function OverlayListeningIndicator
   const providerStatus = useAudioStore((s) => s.transcription_provider_status);
   const audioPipeline = useAudioStore((s) => s.pipeline_status);
   const isCapturing = useAudioStore((s) => s.streams?.is_capturing ?? false);
+  const micHealth = useAudioStore(
+    (s) => (s.channel_health?.mic?.status ?? "idle") as AudioChannelHealthStatus,
+  );
   const currentLevel = useAudioStore((s) => s.levels?.current_level ?? 0);
   const sessionStatus = useSessionStore((s) => s.status);
   const pipeline = useOverlayStore((s) => s.session_pipeline_state);
@@ -103,11 +110,22 @@ export const OverlayListeningIndicator = memo(function OverlayListeningIndicator
     detail = "Ready for the next question";
   } else if (
     sessionStatus === "active" &&
-    (providerStatus === "connected" || isCapturing || pipeline === "listening")
+    isChannelUiActive(micHealth) &&
+    (providerStatus === "connected" ||
+      audioPipeline === "receiving_audio" ||
+      audioPipeline === "transcribing" ||
+      pipeline === "listening")
   ) {
     state = "listening";
     label = "Listening";
     detail = "Hints typically appear shortly after a clear question";
+  } else if (
+    sessionStatus === "active" &&
+    (providerStatus === "connected" || isCapturing || pipeline === "listening")
+  ) {
+    state = "busy";
+    label = micHealth === "connecting" ? "Connecting mic…" : "Waiting for audio…";
+    detail = undefined;
   } else if (sessionStatus === "active" || sessionStatus === "warming_up") {
     state = "idle";
     label = pipeline === "idle" ? "Connecting…" : overlayStateLabel(pipeline);

@@ -119,6 +119,38 @@ export function subscriptionCentsPerCredit(planId: keyof typeof PLAN_MONTHLY_CRE
   return Math.round(price / credits);
 }
 
+/** Long-form live answer surcharge (matches Edge resolveActionCost). */
+export const LIVE_ANSWER_LONG_CREDITS = AI_CREDIT_COSTS.live_answer + 4;
+
+/** UI-facing credit costs — single source for hooks and displays. */
+export const UI_CREDIT_COSTS = {
+  live_answer: AI_CREDIT_COSTS.live_answer,
+  live_answer_long: LIVE_ANSWER_LONG_CREDITS,
+  live_hint: AI_CREDIT_COSTS.live_hint,
+  live_feedback: AI_CREDIT_COSTS.live_feedback,
+  generate_questions: AI_CREDIT_COSTS.generate_questions,
+  generate_hint: AI_CREDIT_COSTS.live_hint,
+  generate_debrief: AI_CREDIT_COSTS.session_debrief,
+  ai_coach_message: AI_CREDIT_COSTS.ai_coach_message,
+  mock_question: AI_CREDIT_COSTS.generate_questions,
+  mock_full_answer: AI_CREDIT_COSTS.live_answer,
+  mock_session: AI_CREDIT_COSTS.mock_session,
+  scorecard_generate: AI_CREDIT_COSTS.generate_scorecard,
+  gap_analysis: AI_CREDIT_COSTS.gap_analysis,
+  star_generate: AI_CREDIT_COSTS.star_builder,
+  star_analyse: AI_CREDIT_COSTS.polish_star,
+  company_brief: AI_CREDIT_COSTS.company_research,
+  screenshot_analyse: AI_CREDIT_COSTS.screenshot_answer,
+  coding_hint: AI_CREDIT_COSTS.coding_hint,
+  coding_solution: AI_CREDIT_COSTS.live_answer,
+  system_design: AI_CREDIT_COSTS.system_design,
+  rephrase: AI_CREDIT_COSTS.rephraser,
+  project_build: AI_CREDIT_COSTS.project_builder,
+  resume_analysis: AI_CREDIT_COSTS.resume_analysis,
+} as const;
+
+export type UICreditAction = keyof typeof UI_CREDIT_COSTS;
+
 /** Baseline question count for flat `mock_session` (15 cr) pricing. */
 export const MOCK_SESSION_BASELINE_QUESTIONS = 5;
 

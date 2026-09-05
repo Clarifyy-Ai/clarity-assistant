@@ -28,7 +28,7 @@ import {
   validateInterviewBlueprint,
 } from "@/lib/mock/interviewBlueprint";
 import { encodeMockProgressNotes } from "@/lib/mock/mockSessionProgress";
-import { sessionsDB, resumesDB, jobDescriptionsDB } from "@/lib/supabase/database";
+import { sessionsDB, resumesDB, jobDescriptionsDB, answerBankDB } from "@/lib/supabase/database";
 import { mockSessionCreditCost } from "@/lib/constants/creditEconomics";
 import { deductMockSessionCredits } from "@/lib/billing/creditsManager";
 import { useSessionStore } from "@/store/sessionStore";
@@ -69,6 +69,40 @@ async function loadFrozenDocs(config: LiveSessionConfig): Promise<{ resume: stri
   return { resume, jd };
 }
 
+async function loadAnswerBankSnippets(userId: string, ids: string[]): Promise<string[]> {
+  if (!ids.length) return [];
+  try {
+    const entries = await answerBankDB.listByUserId(userId);
+    const byId = new Map(entries.map((e) => [e.id, e]));
+    const snippets: string[] = [];
+    for (const id of ids.slice(0, 8)) {
+      const entry = byId.get(id);
+      if (!entry) continue;
+      const enriched = entry as typeof entry & {
+        star_situation?: string;
+        star_task?: string;
+        star_action?: string;
+        star_result?: string;
+        summary?: string;
+      };
+      const starParts = [
+        enriched.star_situation,
+        enriched.star_task,
+        enriched.star_action,
+        enriched.star_result,
+      ].filter(Boolean);
+      const starText =
+        starParts.length > 0
+          ? starParts.join(" → ")
+          : (enriched.summary ?? enriched.answer_text?.slice(0, 240) ?? "");
+      snippets.push(`Q: ${entry.question_text}\nSTAR: ${starText}`.slice(0, 500));
+    }
+    return snippets;
+  } catch {
+    return [];
+  }
+}
+
 export default function MockInterview() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
@@ -91,6 +125,7 @@ export default function MockInterview() {
     setLoading(true);
     try {
       const docs = await loadFrozenDocs(config);
+      const bankSnippets = await loadAnswerBankSnippets(user.id, config.answer_bank_context_ids ?? []);
       const mergedDifficulty = config.difficulty ?? difficulty;
       const snapshot = buildInterviewContextSnapshot({
         config: { ...config, difficulty: mergedDifficulty },
@@ -98,6 +133,7 @@ export default function MockInterview() {
         durationMinutes: config.duration_minutes ?? 5,
         resumeText: docs.resume,
         jdText: docs.jd,
+        answerBankSnippets: bankSnippets,
       });
 
       const micOk =

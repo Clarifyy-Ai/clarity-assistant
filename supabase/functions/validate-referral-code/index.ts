@@ -63,15 +63,22 @@ Deno.serve(async (req: Request) => {
     .ilike("referral_code", code)
     .maybeSingle();
 
+  const now = new Date().toISOString();
   const { data: programme } = await db
     .from("referral_programmes")
-    .select("version, status")
+    .select("version, status, start_at, end_at")
     .eq("status", "active")
+    .lte("start_at", now)
+    .or(`end_at.is.null,end_at.gt.${now}`)
     .order("start_at", { ascending: false })
     .limit(1)
     .maybeSingle();
 
-  const programmeActive = programme?.status === "active";
+  const programmeActive =
+    programme?.status === "active" &&
+    Boolean(programme.start_at) &&
+    new Date(programme.start_at) <= new Date() &&
+    (!programme.end_at || new Date(programme.end_at) > new Date());
   const valid = Boolean(profile?.id) && programmeActive;
 
   return new Response(

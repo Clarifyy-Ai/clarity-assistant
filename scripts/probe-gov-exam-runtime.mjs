@@ -32,7 +32,7 @@ const base = (env.VITE_SUPABASE_URL || env.QA_SUPABASE_URL || "").replace(/\/$/,
 const anon = env.VITE_SUPABASE_ANON_KEY || env.VITE_SUPABASE_PUBLISHABLE_KEY || "";
 const email = env.QA_PRO_EMAIL || env.QA_MAX_EMAIL;
 const password = env.QA_PRO_PASSWORD || env.QA_MAX_PASSWORD;
-const APPROVED_ORIGIN = "https://clarityapp.ai";
+const APPROVED_ORIGIN = "https://trycareerpilot.com";
 const UNAPPROVED_ORIGIN = "https://evil.example";
 
 const SSC = {

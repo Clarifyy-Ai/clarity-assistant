@@ -55,14 +55,15 @@ import {
   SIGNED_OUT_ELSEWHERE_MESSAGE,
   SIGNED_OUT_ELSEWHERE_REASON,
 } from "@/lib/auth/sessionErrors";
-import { authAbsoluteUrl } from "@/lib/auth/appOrigin";
-import { isUserEmailConfirmed } from "@/lib/auth/emailVerification";
-import { buildOAuthCallbackUrl } from "@/lib/auth/oauthCallbackUrl";
 import {
   clearTabLocalLogout,
   isTabLocalLogout,
+  markTabLocalLogout,
   softClearTabSession,
 } from "@/lib/auth/tabLocalLogout";
+import { authAbsoluteUrl } from "@/lib/auth/appOrigin";
+import { isUserEmailConfirmed } from "@/lib/auth/emailVerification";
+import { buildOAuthCallbackUrl } from "@/lib/auth/oauthCallbackUrl";
 import {
   AUTH_ACCOUNT_FRIENDLY_ERROR,
   AUTH_SESSION_TIMEOUT_MS_ELECTRON,
@@ -286,6 +287,8 @@ export interface AuthActions {
   ) => Promise<void>;
   signInWithOAuth: (provider: AuthProvider) => Promise<void>;
   signOut: () => Promise<void>;
+  /** Sign out this tab only — other tabs keep their session. */
+  signOutThisTab: () => Promise<void>;
   clearAuth: () => Promise<void>;
 
   sendPasswordReset: (email: string) => Promise<void>;
@@ -1297,6 +1300,30 @@ export const useAuthStore = create<AuthStore>()(
             }
           },
 
+          signOutThisTab: async () => {
+            markTabLocalLogout();
+            dset((state) => {
+              state.status = "loading";
+              state.error = null;
+            });
+            clearProfileLoadState();
+            resetPostHog();
+            try {
+              resetTransientOverlaySessionStores({
+                hideOverlay: true,
+                stopTts: true,
+                releaseAuthority: true,
+              });
+            } catch {
+              /* best-effort */
+            }
+            await softClearTabSession(() => supabase.auth.signOut({ scope: "local" }));
+            get().reset();
+            dset((state) => {
+              state.status = "unauthenticated";
+            });
+          },
+
           clearAuth: async () => {
             await get().signOut();
           },
@@ -1927,9 +1954,7 @@ export const useAuthStore = create<AuthStore>()(
          * - planId
          * - credits
          */
-        partialize: (state) => ({
-          isOnboarded: state.isOnboarded,
-        }),
+        partialize: () => ({}),
       }
     ),
     {

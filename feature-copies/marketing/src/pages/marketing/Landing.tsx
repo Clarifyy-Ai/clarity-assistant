@@ -295,13 +295,13 @@ export default function Landing() {
   usePageMeta({
     title: "Clarify AI — Practice every interview with AI by your side",
     description: "Live AI practice coach, full mock interview engine with analytics, and a complete prep lab. Multi-model routing across Gemini, GPT-4o, and Claude. Start free with 50 credits / month.",
-    canonical: "https://clarify.ai.sltfinanceindia.com/",
+    canonical: "https://trycareerpilot.com/",
     jsonLd: [
       {
         "@context": "https://schema.org",
         "@type": "Organization",
         name: "Clarify AI",
-        url: "https://clarify.ai.sltfinanceindia.com/",
+        url: "https://trycareerpilot.com/",
         description: "AI-powered interview preparation platform.",
       },
       {

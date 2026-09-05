@@ -11,7 +11,7 @@ const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SERVICE_ID = process.env.RENDER_SERVICE_ID || "srv-da58j1qjobas73dtjbk0";
 const CORS_ORIGINS =
   process.env.CORS_ORIGINS ||
-  "https://trycareerpilot.com,https://www.trycareerpilot.com,https://clarify.ai.sltfinanceindia.com";
+  "https://trycareerpilot.com,https://www.trycareerpilot.com";
 
 function load(file) {
   const p = path.join(ROOT, file);

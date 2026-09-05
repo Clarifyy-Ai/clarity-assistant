@@ -1,5 +1,5 @@
 {
-  "credit_catalog_version": "credit_catalog_v2",
+  "credit_catalog_version": "credit_catalog_v3",
   "quality_algorithm_version": "gov_question_quality_v2",
   "dedup_algorithm_version": "gov_question_dedup_v2",
   "mastery_algorithm_version": "mastery_v1",

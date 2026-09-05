@@ -7,7 +7,6 @@ export {
   signUp,
   signIn,
   signInWithOAuth,
-  sendMagicLink,
   sendPasswordReset,
   updatePassword,
   signOut,

@@ -143,9 +143,10 @@ describe("Live Practice Coach — AI edge session enforcement", () => {
 });
 
 describe("Live Practice Coach — useLiveCopilot client contracts", () => {
-  it("maps live overlay to rehearsal + practice tags on start", () => {
+  it("persists live overlay sessions as live (not rehearsal)", () => {
     const source = readSrc("src/hooks/useLiveCopilot.ts");
-    expect(source).toContain('sessionType === "live" ? "rehearsal" : sessionType');
+    expect(source).toContain("const apiSessionType = sessionType;");
+    expect(source).not.toContain('sessionType === "live" ? "rehearsal"');
     expect(source).toContain('is_practice: sessionType === "live" ? true : undefined');
     expect(source).toContain("practiceCoachStartIdempotencyKey");
   });

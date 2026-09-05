@@ -12,7 +12,8 @@ import { fetchEdgeJson, getAuthHeaders } from "@/lib/network/fetchEdge";
 import { fetchLiveEdgeWithRetry } from "@/lib/session/liveSessionRetry";
 import { createIdempotencyKey } from "@/lib/api/functions";
 import { ApiClientError } from "@/lib/api/apiClient";
-import { practiceCoachStylePayload } from "@/lib/ai/practiceCoachContract";
+import { classifyCoachQuestion } from "./coachQuestionClassify";
+import { practiceCoachStylePayload } from "./practiceCoachContract";
 import { useOverlayStore } from "@/store/overlayStore";
 
 export type GeminiModel =
@@ -100,10 +101,16 @@ export async function streamGeminiHint(opts: GeminiStreamOptions): Promise<void>
     answerMode: useOverlayStore.getState().answer_mode,
   });
 
+  const question_class = classifyCoachQuestion(
+    question,
+    context.session_type ?? "behavioral",
+  );
+
   const body = {
     question,
     model: model ?? "gemini-2.5-flash",
     interview_type: context.session_type ?? "behavioral",
+    question_class,
     // Zod optional strings reject `null` — always send strings or omit.
     target_company: context.target_company ?? "",
     transcript: context.last_transcript ?? "",
@@ -179,10 +186,16 @@ export async function streamFullAnswer(opts: GeminiStreamOptions): Promise<void>
     answerMode: "full_answer",
   });
 
+  const question_class = classifyCoachQuestion(
+    question,
+    context.session_type ?? "behavioral",
+  );
+
   const body = {
     question,
     model: model ?? "gemini-2.5-flash",
     interview_type: context.session_type ?? "behavioral",
+    question_class,
     target_company: context.target_company ?? "",
     transcript: context.last_transcript ?? "",
     resume_context: [

@@ -2,7 +2,7 @@
 CLARIFY AI — OVERALL COMPLETE CHECKLIST (START TO END)
 ================================================================================
 Product   : Career Pilot — Interview Prep & Practice Platform
-Site      : https://clarify.ai.sltfinanceindia.com/
+Site      : https://trycareerpilot.com/
 Date      : _______________
 Tester    : _______________
 Browser   : _______________   OS: _______________
@@ -14,10 +14,10 @@ Priority: P0 = must pass | P1 = high | P2 = if time
 ================================================================================
 A. TEST SETUP
 ================================================================================
-URL base     : https://clarify.ai.sltfinanceindia.com/
-Login        : https://clarify.ai.sltfinanceindia.com/login
-Signup       : https://clarify.ai.sltfinanceindia.com/signup
-Dashboard    : https://clarify.ai.sltfinanceindia.com/app/dashboard
+URL base     : https://trycareerpilot.com/
+Login        : https://trycareerpilot.com/login
+Signup       : https://trycareerpilot.com/signup
+Dashboard    : https://trycareerpilot.com/app/dashboard
 
 QA accounts (internal — do not post publicly):
 
@@ -347,7 +347,7 @@ ID | Area | Account | URL | Steps | Expected | Actual | Screenshot
 ================================================================================
 SIGN-OFF
 ================================================================================
-Site tested     : https://clarify.ai.sltfinanceindia.com/
+Site tested     : https://trycareerpilot.com/
 P0 Pass / Fail / Blocked / N/A totals: ______ / ______ / ______ / ______
 Overall items run: ______
 

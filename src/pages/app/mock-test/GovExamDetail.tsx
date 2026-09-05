@@ -67,12 +67,10 @@ import { resolveCreditBalance } from "@/lib/billing/resolveCreditBalance";
 import { fetchSpendableCredits } from "@/lib/billing/fetchSpendableCredits";
 import { evaluateGovExamCreditGate } from "@/lib/gov-exam/govExamCreditGate";
 import { openUpgradeIfInsufficientCredits } from "@/lib/network/aiErrorUx";
-import { ApiClientError } from "@/lib/api/apiClient";
-import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { GovPaperReviewGenerationTimer } from "@/components/gov-exam/GovPaperReviewGenerationTimer";
 import {
-  beginGenerationSession,
+  beginGenerationSessionFromJob,
   completeGenerationSession,
   failGenerationSession,
   initialGenerationSession,
@@ -584,7 +582,13 @@ export default function GovExamDetail(): React.ReactElement {
         topicPollAbortRef.current = false;
         topicResumeStartedRef.current = result.jobId;
         persistTopicPracticeJob(result.jobId, exam.examId);
-        setTopicGenerationSession(beginGenerationSession(result.jobId));
+        setTopicGenerationSession(
+          beginGenerationSessionFromJob({
+            jobId: result.jobId,
+            startedAt: result.startedAt,
+            createdAt: result.createdAt,
+          }),
+        );
         toast.message("Assembling topic practice…");
         const terminal = await awaitTopicPracticeJob(result.jobId, result);
         if (completeTopicPracticeJob(terminal)) return;
@@ -615,9 +619,22 @@ export default function GovExamDetail(): React.ReactElement {
     topicResumeStartedRef.current = jobId;
     setTopicBusy(true);
     try {
-      setTopicGenerationSession(beginGenerationSession(jobId));
+      setTopicGenerationSession(
+        beginGenerationSessionFromJob({
+          jobId,
+          startedAt: topicJob?.startedAt,
+          createdAt: topicJob?.createdAt,
+        }),
+      );
       await processPaperGenerationJob(jobId).catch(() => undefined);
       const latest = await getPaperGenerationJob(jobId);
+      setTopicGenerationSession(
+        beginGenerationSessionFromJob({
+          jobId,
+          startedAt: latest.startedAt,
+          createdAt: latest.createdAt,
+        }),
+      );
       const terminal = await awaitTopicPracticeJob(jobId, latest);
       completeTopicPracticeJob(terminal);
     } catch (e) {
@@ -673,7 +690,13 @@ export default function GovExamDetail(): React.ReactElement {
           return;
         }
         if (exam?.examId) persistTopicPracticeJob(jobId, exam.examId);
-        setTopicGenerationSession(beginGenerationSession(jobId));
+        setTopicGenerationSession(
+          beginGenerationSessionFromJob({
+            jobId,
+            startedAt: current.startedAt,
+            createdAt: current.createdAt,
+          }),
+        );
         toast.message("Resuming topic practice…");
         const terminal = await awaitTopicPracticeJob(jobId, current);
         if (cancelled) return;

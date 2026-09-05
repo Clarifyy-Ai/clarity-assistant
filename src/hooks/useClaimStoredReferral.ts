@@ -14,6 +14,22 @@ import { useAuthStore } from "@/store/authStore";
 const MAX_CLAIM_ATTEMPTS = 5;
 const RETRY_DELAYS_MS = [0, 2_000, 5_000, 10_000, 30_000] as const;
 
+const TERMINAL_CLAIM_MESSAGES: Record<string, string> = {
+  self_referral: "You can't use your own referral code.",
+  code_not_found: "That referral code isn't valid.",
+  invalid_code: "That referral code isn't valid.",
+  programme_disabled: "Referrals are paused right now.",
+  already_recorded: "",
+};
+
+function terminalClaimMessage(reason: string | undefined): string | null {
+  if (!reason || reason === "already_recorded") return null;
+  return (
+    TERMINAL_CLAIM_MESSAGES[reason] ??
+    "We couldn't apply your referral. Sign in again or contact support if this persists."
+  );
+}
+
 /**
  * After login, claim a referral code from Auth user_metadata (signup) or
  * assistive storage (?ref=). Retries transient failures per attribution policy.
@@ -59,6 +75,9 @@ export function useClaimStoredReferral(userId: string | undefined): void {
 
       if (outcome.applied) {
         await refreshCredits().catch(() => undefined);
+        await Promise.resolve(
+          useAuthStore.getState().loadProfile?.({ force: true }),
+        ).catch(() => undefined);
         if (outcome.refereeCredits) {
           toast.success(
             `Referral applied — ${outcome.refereeCredits} bonus credits added to your account.`,
@@ -89,6 +108,15 @@ export function useClaimStoredReferral(userId: string | undefined): void {
           retryable: outcome.retryable ?? false,
           attempts: attempt + 1,
         });
+      }
+
+      const message = terminalClaimMessage(outcome.reason);
+      if (message) {
+        toast.error(message);
+      } else if (outcome.retryable) {
+        toast.error(
+          "We couldn't apply your referral after several tries. It will retry next time you sign in.",
+        );
       }
     };
 

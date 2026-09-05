@@ -1,4 +1,4 @@
-const base = "https://clarify.ai.sltfinanceindia.com";
+const base = "https://trycareerpilot.com";
 const assets = [
   "/assets/ExamSearchCombobox-L2YcOPMO.js",
   "/assets/MockTestHub-Uapa_NbC.js",

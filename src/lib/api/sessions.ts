@@ -5,6 +5,8 @@
 import { invokeFunction } from "@/lib/api/functions";
 import { withLiveTransientRetry } from "@/lib/session/liveSessionRetry";
 import { ensureAuthSession } from "@/lib/focusRecovery/sessionRefresh";
+import type { StartSessionHintStyle } from "@/lib/session/hintStyleContract";
+import type { HintStyle } from "@/types/user.types";
 
 export type StartSessionRequest = {
   session_type?: "mock" | "live" | "warmup" | "rehearsal" | "room" | "practice";
@@ -35,7 +37,7 @@ export type StartSessionRequest = {
   enable_transcription?: boolean;
   enable_metrics?: boolean;
   model?: string;
-  hint_style?: "minimal" | "balanced" | "detailed";
+  hint_style?: StartSessionHintStyle | HintStyle;
   focus_areas?: string[];
   practice_context_id?: string | null;
   source_type?: string | null;

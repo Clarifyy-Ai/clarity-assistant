@@ -20,7 +20,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { useAuthStore } from "@/store/authStore";
 import { isUserEmailConfirmed } from "@/lib/auth/emailVerification";
-import { getAuthenticatedEntryPath } from "@/lib/auth/postAuthRedirect";
+import { getAuthenticatedEntryPath, resolveOnboardingCompletedForRedirect } from "@/lib/auth/postAuthRedirect";
 import { pathWithReturnTo, preferredReturnToFromNavigation } from "@/lib/auth/safeReturnTo";
 import {
   isOAuthCancelledError,
@@ -29,12 +29,18 @@ import {
 } from "@/lib/auth/oauthProviders";
 import { classifyLoginFailure } from "@/lib/auth/loginFailure";
 import { resolveMfaGateDecision } from "@/lib/auth/mfaGate";
+import {
+  extractRefCodeFromSearchParams,
+  persistPendingReferralToAuthMetadata,
+  storeRefCode,
+} from "@/lib/referrals";
 import { AUTH_PATHS } from "@/lib/auth/appOrigin";
-import { MFA_REQUIRED_REASON } from "@/hooks/useAuth";
 import {
   isPasswordRecoveryFlowMarked,
   resolveAuthDeepLinkRedirect,
 } from "@/lib/auth/authDeepLinkRedirect";
+import { MfaInlineChallenge } from "@/components/auth/MfaInlineChallenge";
+import { AuthShell } from "@/components/auth/AuthShell";
 
 type CallbackError = {
   loginQueryError: string;
@@ -98,13 +104,13 @@ export default function AuthCallback(): JSX.Element {
 
   const status = useAuthStore((state) => state.status);
   const user = useAuthStore((state) => state.user);
-  const isOnboarded = useAuthStore((state) => state.isOnboarded);
   const isAdmin = useAuthStore((state) => state.isAdmin);
   const isProfileLoaded = useAuthStore((state) => state.isProfileLoaded);
   const profile = useAuthStore((state) => state.profile);
   const initialize = useAuthStore((state) => state.initialize);
 
   const [timedOut, setTimedOut] = useState(false);
+  const [mfaFactorId, setMfaFactorId] = useState<string | null>(null);
 
   const callbackError = useMemo(
     () => getCallbackError(location.search, location.hash),
@@ -160,8 +166,27 @@ export default function AuthCallback(): JSX.Element {
     };
   }, [callbackError]);
 
+  function finishAuthenticatedRedirect(): void {
+    const preferred = preferredReturnToFromNavigation({
+      searchParams: new URLSearchParams(location.search),
+      locationState: location.state,
+    });
+    const target = getSafeRedirectTarget({
+      isAdmin,
+      isOnboarded: resolveOnboardingCompletedForRedirect({
+        profile,
+        isProfileLoaded,
+      }),
+      preferredReturnTo: preferred,
+    });
+    navigate(target, {
+      replace: true,
+      state: preferred ? { from: preferred } : undefined,
+    });
+  }
+
   useEffect(() => {
-    if (callbackError || timedOut) {
+    if (callbackError || timedOut || mfaFactorId) {
       return;
     }
 
@@ -171,6 +196,14 @@ export default function AuthCallback(): JSX.Element {
     }
 
     if (status === "authenticated" && isProfileLoaded) {
+      const urlRef = extractRefCodeFromSearchParams(
+        new URLSearchParams(location.search),
+      );
+      if (urlRef) {
+        storeRefCode(urlRef);
+      }
+      void persistPendingReferralToAuthMetadata(user, urlRef);
+
       if (!isUserEmailConfirmed(user)) {
         const preferred = preferredReturnToFromNavigation({
           searchParams: new URLSearchParams(location.search),
@@ -187,8 +220,12 @@ export default function AuthCallback(): JSX.Element {
       void (async () => {
         const gate = await resolveMfaGateDecision();
         if (cancelled) return;
-        if (gate.decision !== "allow") {
-          navigate(`/login?reason=${encodeURIComponent(MFA_REQUIRED_REASON)}`, { replace: true });
+        if (gate.decision === "block") {
+          navigate("/login?error=auth_failed", { replace: true });
+          return;
+        }
+        if (gate.decision === "challenge" && gate.factorId) {
+          setMfaFactorId(gate.factorId);
           return;
         }
         if (profile?.mfa_reenrollment_required) {
@@ -202,19 +239,7 @@ export default function AuthCallback(): JSX.Element {
           });
           return;
         }
-        const preferred = preferredReturnToFromNavigation({
-          searchParams: new URLSearchParams(location.search),
-          locationState: location.state,
-        });
-        const target = getSafeRedirectTarget({
-          isAdmin,
-          isOnboarded,
-          preferredReturnTo: preferred,
-        });
-        navigate(target, {
-          replace: true,
-          state: preferred ? { from: preferred } : undefined,
-        });
+        finishAuthenticatedRedirect();
       })();
       return () => {
         cancelled = true;
@@ -227,16 +252,41 @@ export default function AuthCallback(): JSX.Element {
   }, [
     callbackError,
     timedOut,
+    mfaFactorId,
     status,
     isProfileLoaded,
     isAdmin,
-    isOnboarded,
-    navigate,
     user,
+    profile,
     location.search,
-    location.hash,
-    profile?.mfa_reenrollment_required,
+    location.state,
+    navigate,
   ]);
+
+  if (mfaFactorId) {
+    return (
+      <AuthShell>
+        <MfaInlineChallenge
+          factorId={mfaFactorId}
+          onVerified={() => {
+            setMfaFactorId(null);
+            if (profile?.mfa_reenrollment_required) {
+              const preferred = preferredReturnToFromNavigation({
+                searchParams: new URLSearchParams(location.search),
+                locationState: location.state,
+              });
+              navigate(AUTH_PATHS.mfaEnroll, {
+                replace: true,
+                state: preferred ? { from: preferred } : undefined,
+              });
+              return;
+            }
+            finishAuthenticatedRedirect();
+          }}
+        />
+      </AuthShell>
+    );
+  }
 
   if (timedOut) {
     return (

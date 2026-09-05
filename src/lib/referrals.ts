@@ -1,6 +1,7 @@
-import { recordReferralViaEdge } from "@/lib/api/payments";
+import { recordReferralViaEdge, validateReferralViaEdge } from "@/lib/api/payments";
 import { PUBLIC_WEBSITE_URL } from "@/lib/constants/contact";
 import { logger } from "@/lib/logger";
+import { supabase } from "@/lib/supabase/client";
 
 export const REFERRAL_STORAGE_KEY = "clarify_ref";
 export const REFERRAL_SESSION_STORAGE_KEY = "clarify_ref_session";
@@ -121,6 +122,79 @@ function isTerminalReferralReason(reason: string | undefined): boolean {
 /** Public signup URL with attribution query for sharing. */
 export function buildReferralLink(code: string): string {
   return `${PUBLIC_WEBSITE_URL}/signup?ref=${code}`;
+}
+
+/** Neutral banner copy — reward is not confirmed until server claim succeeds. */
+export function referralCodeSavedMessage(code: string): string {
+  return `Referral code ${code} saved — bonus credits apply after email verification.`;
+}
+
+export type ValidateReferralOutcome = {
+  valid: boolean;
+  programmeVersion: string | null;
+  code: string;
+};
+
+/** Public validation — no PII; optional debounce on signup forms. */
+export async function validateReferralCode(
+  codeRaw: string,
+): Promise<ValidateReferralOutcome> {
+  const code = normalizeRefCode(codeRaw);
+  if (!code) {
+    return { valid: false, programmeVersion: null, code: "REFERRAL_CODE_INVALID" };
+  }
+  try {
+    const result = await validateReferralViaEdge(code);
+    return {
+      valid: Boolean(result.valid),
+      programmeVersion: result.programmeVersion ?? null,
+      code: result.code ?? (result.valid ? "OK" : "REFERRAL_CODE_INVALID"),
+    };
+  } catch (e) {
+    logger.warn("referral.validate.failed", {
+      error: e instanceof Error ? e.message : "unknown",
+    });
+    return { valid: false, programmeVersion: null, code: "VALIDATION_UNAVAILABLE" };
+  }
+}
+
+/**
+ * Persist assistive referral code to Auth user_metadata (survives OAuth redirect).
+ * Explicit URL codes may update metadata; storage alone never overrides existing metadata.
+ */
+export async function persistPendingReferralToAuthMetadata(
+  user: { user_metadata?: Record<string, unknown> | null } | null | undefined,
+  explicitCode?: string | null,
+): Promise<string | null> {
+  const resolved = resolveReferralCodeForClaim(explicitCode, user);
+  if (!resolved) {
+    return getPendingReferralFromUserMetadata(user);
+  }
+
+  const existing = getPendingReferralFromUserMetadata(user);
+  if (existing === resolved) return resolved;
+
+  const explicit = normalizeRefCode(explicitCode);
+  if (existing && !explicit) return existing;
+
+  try {
+    const { error } = await supabase.auth.updateUser({
+      data: { [PENDING_REFERRAL_METADATA_KEY]: resolved },
+    });
+    if (error) {
+      logger.warn("referral.metadata.persist.failed", {
+        error: error.message,
+        hasExplicit: Boolean(explicit),
+      });
+      return resolved;
+    }
+    return resolved;
+  } catch (e) {
+    logger.warn("referral.metadata.persist.failed", {
+      error: e instanceof Error ? e.message : "unknown",
+    });
+    return resolved;
+  }
 }
 
 /** Clear stored code after a successful HTTP response that will not succeed on retry. */

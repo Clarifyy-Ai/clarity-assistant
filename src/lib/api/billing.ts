@@ -9,6 +9,8 @@ import {
   invokeIdempotentFunction,
   type IdempotencyOptions,
 } from "@/lib/api/functions";
+import { resolvePublicAppOrigin } from "@/lib/auth/redirectUrl";
+import { ENV } from "@/lib/env";
 
 export type CheckoutRequest = {
   price_id: string;
@@ -126,12 +128,12 @@ export function getCheckoutUrls(): {
   success_url: string;
   cancel_url: string;
 } {
-  // Prefer the live page origin so a leaked localhost VITE_APP_URL never
-  // becomes a billing redirect / resource URL in production UIs.
-  const origin =
-    typeof window !== "undefined" && window.location?.origin
-      ? window.location.origin
-      : "";
+  const origin = resolvePublicAppOrigin({
+    configuredAppUrl: ENV.APP_URL,
+    appEnv: ENV.APP_ENV,
+    windowOrigin:
+      typeof window !== "undefined" ? window.location.origin : null,
+  });
 
   return {
     success_url: `${origin}/app/settings/billing?checkout=success`,
@@ -140,10 +142,12 @@ export function getCheckoutUrls(): {
 }
 
 export function getBillingReturnUrl(path = "/app/settings/billing"): string {
-  const origin =
-    typeof window !== "undefined" && window.location?.origin
-      ? window.location.origin
-      : "";
+  const origin = resolvePublicAppOrigin({
+    configuredAppUrl: ENV.APP_URL,
+    appEnv: ENV.APP_ENV,
+    windowOrigin:
+      typeof window !== "undefined" ? window.location.origin : null,
+  });
   return `${origin}${path.startsWith("/") ? path : `/${path}`}`;
 }
 

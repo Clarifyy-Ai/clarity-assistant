@@ -9,7 +9,7 @@
 
 const PROJECT_REF = "qzgvjrvtkwlzxpmlddkx";
 const DEFAULT_BASE = `https://${PROJECT_REF}.supabase.co/functions/v1`;
-const APPROVED_ORIGIN = "https://clarityapp.ai";
+const APPROVED_ORIGIN = "https://trycareerpilot.com";
 const LOCAL_ORIGIN = "http://127.0.0.1:5000";
 const UNAPPROVED_ORIGIN = "https://evil.example";
 

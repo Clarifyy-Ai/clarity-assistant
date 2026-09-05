@@ -275,12 +275,10 @@ export default function TestResults() {
 
       const loadedAnalysis = analysisData as unknown as TestAnalysis;
 
-      const { data: questionRows, error: questionError } = await supabase
-        .from("questions")
-        .select(
-          "id, question_text, question_type, correct_answer, explanation, subject, topic, difficulty"
-        )
-        .in("id", loadedTest.question_ids);
+      const { data: questionRows, error: questionError } = await supabase.rpc(
+        "get_owned_mock_test_question_review",
+        { p_test_id: loadedTest.id },
+      );
 
       if (questionError) throw questionError;
 
@@ -1007,9 +1005,7 @@ export default function TestResults() {
                       className="rounded-xl border border-border bg-muted/10 p-4"
                     >
                       <h4 className="mb-2 text-sm font-bold text-primary">{heading}</h4>
-                      <p className="whitespace-pre-wrap text-sm text-foreground/80">
-                        {content}
-                      </p>
+                      <AiFormattedOutput text={content} className="text-sm text-foreground/80" />
                     </div>
                   );
                 })}

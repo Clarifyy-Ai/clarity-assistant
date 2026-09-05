@@ -11,11 +11,11 @@ OS      : _______________
 --------------------------------------------------------------------------------
 TEST SITE (USE THIS ONLY)
 --------------------------------------------------------------------------------
-URL: https://clarify.ai.sltfinanceindia.com/
+URL: https://trycareerpilot.com/
 
-Login page : https://clarify.ai.sltfinanceindia.com/login
-Signup     : https://clarify.ai.sltfinanceindia.com/signup
-App home   : https://clarify.ai.sltfinanceindia.com/app/dashboard
+Login page : https://trycareerpilot.com/login
+Signup     : https://trycareerpilot.com/signup
+App home   : https://trycareerpilot.com/app/dashboard
 
 Do NOT use localhost unless asked. All checks below are against the published site.
 
@@ -63,7 +63,7 @@ Same-day focus: finish ALL P0 first, then P1, then P2.
 Write Fail notes at the bottom (URL + steps + screenshot name).
 
 --------------------------------------------------------------------------------
-0. PRE-FLIGHT / ENVIRONMENT  (site: https://clarify.ai.sltfinanceindia.com/)
+0. PRE-FLIGHT / ENVIRONMENT  (site: https://trycareerpilot.com/)
 --------------------------------------------------------------------------------
 [ ] P0  Open URL — app leaves splash and shows landing (not stuck loading)
 [ ] P0  Landing shows Career Pilot brand, headline, CTA
@@ -455,7 +455,7 @@ Evening / wrap
 ================================================================================
 SIGN-OFF
 ================================================================================
-Site tested          : https://clarify.ai.sltfinanceindia.com/
+Site tested          : https://trycareerpilot.com/
 Total items run      : ______
 Passed               : ______
 Failed               : ______
@@ -484,7 +484,7 @@ ID/Area | Account used | URL | Steps | Expected | Actual | Screenshot
 ================================================================================
 NOTES FOR TESTER
 ================================================================================
-- Base URL for every check: https://clarify.ai.sltfinanceindia.com/
+- Base URL for every check: https://trycareerpilot.com/
 - Passwords are on page 1 of this sheet — keep internal; do not commit to public chat/repos.
 - Onboarding is 2-step (Essentials + Optional) for NEW signups; seeded QA users skip it.
 - Overlay must STAY visible during screen share (no stealth / hide-from-capture).
@@ -497,7 +497,7 @@ NOTES FOR TESTER
 ================================================================================
 INCIDENT RECHECK � INC-2026-08-005 (Auth / CSP / Dashboard) � 2026-08-05
 ================================================================================
-Site: https://clarify.ai.sltfinanceindia.com/
+Site: https://trycareerpilot.com/
 Ledger: docs/qa/incidents/2026-08-auth-csp-dashboard-remediation.md
 
 [P] P0  GET /dashboard returns SPA HTML (HTTP 200) � hosting rewrite OK
@@ -523,7 +523,7 @@ Root causes addressed in repo (deploy required for production):
 [P] Admin role unresolved ? recoverable error after 8s (not infinite spinner)
 [P] Settings + TopBar use authStore as single profile source
 [P] CSP: static JSON-LD + gpteng font-src; structured-data.js removed
-[ ] Deploy to https://clarify.ai.sltfinanceindia.com/
+[ ] Deploy to https://trycareerpilot.com/
 [ ] Post-deploy: Pro login ? dashboard <2s; hard refresh keeps session
 [ ] Post-deploy: console clean of CSP font/inline script errors
 [ ] Post-deploy: inject stale refresh ? session_expired once (no loop)

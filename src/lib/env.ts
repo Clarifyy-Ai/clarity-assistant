@@ -14,6 +14,7 @@
 // Never put service-role keys, Stripe secret keys, webhook secrets,
 // Gemini/OpenAI/Anthropic server keys, or any private secret here.
 
+import { PUBLIC_WEBSITE_URL } from "@/lib/constants/contact";
 import { resolveCriticalSupabaseEnv } from "./envCritical";
 
 type RawEnv = Record<string, string | undefined>;
@@ -139,11 +140,14 @@ const SUPABASE_PUBLISHABLE_KEY_VALUE = optional(
 
 
 const APP_URL_RAW = normalizeOptionalUrl(optional(["VITE_APP_URL"]));
+const APP_URL_IS_LOCALHOST =
+  Boolean(APP_URL_RAW) &&
+  /^(https?:\/\/)?(localhost|127\.0\.0\.1|0\.0\.0\.0|::1)\b/i.test(APP_URL_RAW);
 const APP_URL_VALUE =
-  APP_ENV_VALUE === "production" &&
-  APP_URL_RAW &&
-  /^(https?:\/\/)?(localhost|127\.0\.0\.1|0\.0\.0\.0|::1)\b/i.test(APP_URL_RAW)
-    ? ""
+  APP_ENV_VALUE === "production"
+    ? APP_URL_IS_LOCALHOST || !APP_URL_RAW
+      ? PUBLIC_WEBSITE_URL
+      : APP_URL_RAW
     : APP_URL_RAW;
 
 const API_URL_VALUE = normalizePathOrUrl(

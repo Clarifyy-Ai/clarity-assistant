@@ -2,6 +2,7 @@ import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { authenticateRequest } from "../_shared/auth.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { parseJsonBody } from "../_shared/errors.ts";
+import { opsLog } from "../_shared/opsLog.ts";
 import {
   createRateLimitKey,
   enforceRateLimitAsync,
@@ -87,9 +88,18 @@ Deno.serve(async (req: Request) => {
   });
 
   if (error) {
-    console.error("[record-referral]", {
-      correlationId,
-      message: error.message?.slice(0, 200),
+    opsLog({
+      correlation_id: correlationId,
+      user_id: auth.context.user.id,
+      function_name: "record-referral",
+      operation: "record_referral_reward",
+      result: "error",
+      retryable: true,
+      error_class: "rpc_error",
+      meta: {
+        reason: "rpc_failed",
+        message: error.message?.slice(0, 160) ?? "unknown",
+      },
     });
     return new Response(
       JSON.stringify({
@@ -125,6 +135,21 @@ Deno.serve(async (req: Request) => {
     already_recorded: "REFERRAL_REWARD_ALREADY_GRANTED",
     success: "OK",
   };
+
+  opsLog({
+    correlation_id: correlationId,
+    user_id: auth.context.user.id,
+    function_name: "record-referral",
+    operation: "record_referral_reward",
+    result: result.ok ? "ok" : reason === "already_recorded" ? "ok" : "denied",
+    meta: {
+      reason,
+      referral_id: result.attribution_id ?? null,
+      referee_credits: result.referee_credits ?? null,
+      referrer_credits: result.referrer_credits ?? null,
+      promo_created: Boolean(result.promo_code),
+    },
+  });
 
   return new Response(
     JSON.stringify({

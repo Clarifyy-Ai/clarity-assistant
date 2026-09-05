@@ -16,7 +16,7 @@ import { helpArticlesDB } from "@/lib/supabase/database";
 
 type Article = HelpArticleItem;
 
-const SITE_URL = "https://clarify.ai.sltfinanceindia.com";
+const SITE_URL = "https://trycareerpilot.com";
 
 function renderInline(text: string): React.ReactNode {
   const parts = text.split(/(\*\*[^*]+\*\*)/g);

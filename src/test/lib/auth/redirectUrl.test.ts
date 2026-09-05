@@ -3,6 +3,7 @@ import {
   buildAuthRedirectUrl,
   isLocalhostUrl,
   PRODUCTION_APP_URL,
+  resolvePublicAppOrigin,
 } from "@/lib/auth/redirectUrl";
 
 describe("isLocalhostUrl", () => {
@@ -73,6 +74,18 @@ describe("buildAuthRedirectUrl", () => {
     ).toBe(`${PRODUCTION_APP_URL}/reset-password`);
   });
 
+  it("QA-041: falls back to production when productionBuild is true even if appEnv is development", () => {
+    expect(
+      buildAuthRedirectUrl({
+        path: "/reset-password",
+        configuredAppUrl: "http://localhost:5173",
+        appEnv: "development",
+        productionBuild: true,
+        windowOrigin: "https://trycareerpilot.com",
+      }),
+    ).toBe(`${PRODUCTION_APP_URL}/reset-password`);
+  });
+
   it("allows a localhost VITE_APP_URL outside of production (local dev)", () => {
     expect(
       buildAuthRedirectUrl({
@@ -122,5 +135,58 @@ describe("buildAuthRedirectUrl", () => {
         windowOrigin: "http://localhost:5174",
       }),
     ).toBe("http://localhost:5174/reset-password");
+  });
+});
+
+describe("resolvePublicAppOrigin", () => {
+  it("prefers a valid configured VITE_APP_URL", () => {
+    expect(
+      resolvePublicAppOrigin({
+        configuredAppUrl: "https://staging.trycareerpilot.com",
+        appEnv: "staging",
+        windowOrigin: "https://unrelated-origin.example",
+      }),
+    ).toBe("https://staging.trycareerpilot.com");
+  });
+
+  it("falls back to production when localhost leaks in a production build", () => {
+    expect(
+      resolvePublicAppOrigin({
+        configuredAppUrl: "http://localhost:5173",
+        appEnv: "production",
+        windowOrigin: "https://preview.example",
+      }),
+    ).toBe(PRODUCTION_APP_URL);
+  });
+
+  it("falls back to production when VITE_APP_URL is missing in production", () => {
+    expect(
+      resolvePublicAppOrigin({
+        configuredAppUrl: "",
+        appEnv: "production",
+        windowOrigin: "https://preview.example",
+      }),
+    ).toBe(PRODUCTION_APP_URL);
+  });
+
+  it("uses production when productionBuild is true and configured URL is missing", () => {
+    expect(
+      resolvePublicAppOrigin({
+        configuredAppUrl: "",
+        appEnv: "staging",
+        productionBuild: true,
+        windowOrigin: "http://localhost:5173",
+      }),
+    ).toBe(PRODUCTION_APP_URL);
+  });
+
+  it("uses window.location.origin in development when VITE_APP_URL is unset", () => {
+    expect(
+      resolvePublicAppOrigin({
+        configuredAppUrl: "",
+        appEnv: "development",
+        windowOrigin: "http://localhost:5174",
+      }),
+    ).toBe("http://localhost:5174");
   });
 });
