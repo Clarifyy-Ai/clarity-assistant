@@ -40,7 +40,7 @@ import {
   resolveAuthDeepLinkRedirect,
 } from "@/lib/auth/authDeepLinkRedirect";
 import { MfaInlineChallenge } from "@/components/auth/MfaInlineChallenge";
-import { AuthShell } from "@/components/auth/AuthShell";
+import { AuthShell } from "@/components/layout/AuthShell";
 
 type CallbackError = {
   loginQueryError: string;
