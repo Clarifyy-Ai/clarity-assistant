@@ -286,8 +286,8 @@ export default function QuestionBankPage() {
     setSaving(true);
     try {
       const { error } = editingId
-        ? await supabase.from("questions").update(payload).eq("id", editingId)
-        : await supabase.from("questions").insert(payload);
+        ? await supabase.from("questions").update(payload as never).eq("id", editingId)
+        : await supabase.from("questions").insert(payload as never);
       if (error) {
         toast.error(userFacingDbError(error, "save"));
         return;
@@ -356,7 +356,7 @@ export default function QuestionBankPage() {
       explanation: row.explanation,
       image_url: row.image_url ?? null,
       has_image: Boolean(row.has_image ?? row.image_url),
-      metadata: row.metadata ?? {},
+      metadata: (row.metadata ?? {}) as never,
       subject: row.subject,
       category: row.category ?? row.subject,
       topic: row.topic,
