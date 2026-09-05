@@ -9565,10 +9565,14 @@ export type Database = {
           latex_present: boolean | null
           marks_negative: number | null
           marks_positive: number | null
+          metadata: Json | null
           options: Json | null
           question_html: string | null
           question_text: string | null
           question_type: string | null
+          source: string | null
+          source_paper: string | null
+          source_year: number | null
           subject: string | null
           subtopic: string | null
           tags: string[] | null
@@ -9589,10 +9593,14 @@ export type Database = {
           latex_present?: boolean | null
           marks_negative?: number | null
           marks_positive?: number | null
+          metadata?: Json | null
           options?: Json | null
           question_html?: string | null
           question_text?: string | null
           question_type?: string | null
+          source?: string | null
+          source_paper?: string | null
+          source_year?: number | null
           subject?: string | null
           subtopic?: string | null
           tags?: string[] | null
@@ -9613,10 +9621,14 @@ export type Database = {
           latex_present?: boolean | null
           marks_negative?: number | null
           marks_positive?: number | null
+          metadata?: Json | null
           options?: Json | null
           question_html?: string | null
           question_text?: string | null
           question_type?: string | null
+          source?: string | null
+          source_paper?: string | null
+          source_year?: number | null
           subject?: string | null
           subtopic?: string | null
           tags?: string[] | null
@@ -9964,6 +9976,19 @@ export type Database = {
         }[]
       }
       get_onboarding_state: { Args: never; Returns: string }
+      get_owned_mock_test_question_review: {
+        Args: { p_test_id: string }
+        Returns: {
+          correct_answer: string
+          difficulty: string
+          explanation: string
+          id: string
+          question_text: string
+          question_type: string
+          subject: string
+          topic: string
+        }[]
+      }
       get_owned_session_detail: {
         Args: { p_session_id: string }
         Returns: Json
@@ -9975,6 +10000,7 @@ export type Database = {
           key: string
         }[]
       }
+      get_public_promo_offers: { Args: never; Returns: Json }
       get_referral_dashboard: { Args: never; Returns: Json }
       get_session_history: {
         Args: {
