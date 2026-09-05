@@ -453,23 +453,18 @@ export function pickActiveRuleRow<
   return sorted.find((r) => r.enabled) ?? sorted[0] ?? null;
 }
 
+type RuleQueryChain = {
+  eq(col: string, val: string | boolean): RuleQueryChain;
+  order(col: string, opts: { ascending: boolean }): {
+    limit(n: number): {
+      maybeSingle(): Promise<{ data: Record<string, unknown> | null }>;
+    };
+  };
+};
+
 type RuleQueryClient = {
   from(table: string): {
-    select(cols: string): {
-      eq(col: string, val: string | boolean): {
-        order(col: string, opts: { ascending: boolean }): {
-          limit(n: number): {
-            maybeSingle(): Promise<{ data: Record<string, unknown> | null }>;
-          };
-        };
-      } & {
-        order(col: string, opts: { ascending: boolean }): {
-          limit(n: number): {
-            maybeSingle(): Promise<{ data: Record<string, unknown> | null }>;
-          };
-        };
-      };
-    };
+    select(cols: string): RuleQueryChain;
   };
 };
 
