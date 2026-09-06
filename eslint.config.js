@@ -5,11 +5,38 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist", "coverage", "supabase/functions/**", "electron/**", "scripts/**", "playwright*.ts", ".deploy-payloads/**", "tmp-mcp-*/**", "tmp-mcp-*", "tmp-*", "node_modules_mcp/**"] },
+  {
+    ignores: [
+      "dist/**",
+      "coverage/**",
+      "release/**",
+      "electron-release/**",
+      "supabase/**",
+      "electron/**",
+      "scripts/**",
+      "e2e/**",
+      "scraper/**",
+      "docs/**",
+      "feature-copies/**",
+      "playwright*.ts",
+      "playwright.config.ts",
+      ".deploy-payloads/**",
+      "tmp-mcp-*/**",
+      "tmp-mcp-*",
+      "tmp-*",
+      "node_modules_mcp/**",
+      // Large generated DB types — typecheck covers them; linting OOMs CI runners.
+      "src/integrations/supabase/types.ts",
+      // Vitest covers unit tests; excluding them avoids project-service default-project blowups.
+      "src/test/**",
+    ],
+  },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
 
-    files: ["**/*.{ts,tsx}"],
+    // Scope tightly — linting the whole monorepo with type-aware rules OOMs (~4GB+).
+    files: ["src/**/*.{ts,tsx}"],
+    ignores: ["src/test/**", "src/integrations/supabase/types.ts"],
 
     languageOptions: {
       ecmaVersion: 2020,

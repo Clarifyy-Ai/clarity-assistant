@@ -33,6 +33,9 @@ jobs:
 
       - name: Lint
         run: npm run lint
+        env:
+          # Type-aware ESLint needs headroom beyond Node's default ~4GB heap on this repo.
+          NODE_OPTIONS: --max-old-space-size=6144
 
       - name: Typecheck
         run: npm run typecheck

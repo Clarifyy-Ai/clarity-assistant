@@ -20,7 +20,7 @@
     "dist:win": "cross-env BUILD_TARGET=electron node scripts/validate-env.js && cross-env BUILD_TARGET=electron vite build && electron-builder --win",
     "dist:linux": "cross-env BUILD_TARGET=electron node scripts/validate-env.js && cross-env BUILD_TARGET=electron vite build && electron-builder --linux",
     "preview": "vite preview",
-    "lint": "eslint .",
+    "lint": "cross-env NODE_OPTIONS=--max-old-space-size=6144 eslint src --cache --cache-location node_modules/.cache/eslint",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "test": "vitest",
     "test:ui": "vitest --ui",
