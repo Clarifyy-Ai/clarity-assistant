@@ -468,7 +468,7 @@ export default function SettingsBilling(): JSX.Element {
             <div>
               <div className="flex items-center justify-between mb-1">
                 <p className="text-xs text-muted-foreground">
-                  Credits used this period
+                  Credits spent (lifetime wallet)
                 </p>
 
                 <p className="text-xs text-muted-foreground">

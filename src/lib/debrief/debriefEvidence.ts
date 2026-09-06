@@ -182,7 +182,7 @@ export function classifyDebriefEligibility(input: {
     });
 
   // In-progress / non-complete sessions cannot get a debrief yet.
-  if (input.status != null && !complete) {
+  if (!complete) {
     return "SESSION_INCOMPLETE";
   }
   if (!input.hasMeaningfulAnswers && !input.hasTranscript) {

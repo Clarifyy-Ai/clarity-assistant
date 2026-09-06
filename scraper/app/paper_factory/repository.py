@@ -641,6 +641,7 @@ class PaperRepository:
                         "duration_minutes": blueprint.duration_minutes,
                         "sections": [s.to_json() for s in blueprint.sections],
                         "generator": "python_paper_factory",
+                        "assembly_source": "python_paper_factory",
                         "generation_job_id": job_id,
                         "disclaimer": blueprint.label,
                         "scoring_version": "gov_exam_snapshot_v1",
@@ -691,6 +692,7 @@ class PaperRepository:
                     "mock_test_id": mock_test_id,
                     "paper_source": paper_source,
                     "source_mix": resolved_mix,
+                    "assembly_source": "python_paper_factory",
                 }
             )
             .execute()

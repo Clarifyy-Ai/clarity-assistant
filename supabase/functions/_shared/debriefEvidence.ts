@@ -181,7 +181,7 @@ export function classifyDebriefEligibility(input: {
       scorableAnswerCount: evidenceCount,
     });
 
-  if (input.status != null && !complete) {
+  if (!complete) {
     return "SESSION_INCOMPLETE";
   }
   if (!input.hasMeaningfulAnswers && !input.hasTranscript) {

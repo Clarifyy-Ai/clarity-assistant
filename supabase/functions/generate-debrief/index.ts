@@ -1028,8 +1028,16 @@ async function runDebriefHybrid(input: {
   const hasAnswers = hasScorableAnswers(answers);
   const hasTranscript = hasTranscriptContent(transcripts);
   const hasQuestions = hasPersistedQuestions(answers) || hasTranscript;
+  const scorableAnswerCount = answers.filter((row) => {
+    const text = sanitizeText(String(row.transcript ?? row.answer ?? ""), 20_000);
+    return text.length > 0 && text !== "(skipped)";
+  }).length;
   const eligibility = classifyDebriefEligibility({
     status: session.status,
+    lifecycle_status: session.lifecycle_status,
+    terminal_reason: session.terminal_reason,
+    ended_at: session.ended_at,
+    scorableAnswerCount,
     hasQuestions,
     hasMeaningfulAnswers: hasAnswers,
     hasTranscript,
@@ -1616,8 +1624,16 @@ Deno.serve(async (req: Request) => {
     const hasAnswers = hasScorableAnswers(answers);
     const hasTranscript = hasTranscriptContent(transcripts);
     const hasQuestions = hasPersistedQuestions(answers) || hasTranscript;
+    const scorableAnswerCount = answers.filter((row) => {
+      const text = sanitizeText(String(row.transcript ?? row.answer ?? ""), 20_000);
+      return text.length > 0 && text !== "(skipped)";
+    }).length;
     const eligibility = classifyDebriefEligibility({
       status: session.status,
+      lifecycle_status: session.lifecycle_status,
+      terminal_reason: session.terminal_reason,
+      ended_at: session.ended_at,
+      scorableAnswerCount,
       hasQuestions,
       hasMeaningfulAnswers: hasAnswers,
       hasTranscript,

@@ -1,7 +1,7 @@
 # CAREER PILOT — COMPLETE ENGINEERING & BUSINESS LOGIC AUDIT
 
-**Date:** 2026-09-05  
-**Scope:** Full-stack audit (business → UI → state → API → Edge → DB → RLS → AI → credits → billing → auth → security)  
+**Date:** 2026-09-05 (extended 2026-09-06)  
+**Scope:** Full-stack audit (business → UI → state → API → Edge → DB → RLS → AI → Python → credits → billing → auth → security)  
 **Product decision (confirmed):** Free tier = **50 credits at signup (one-time)** — no monthly reset job.
 
 ---
@@ -10,7 +10,7 @@
 
 Career Pilot is a credit-wallet interview prep platform with **server-authoritative billing** (Postgres RPCs), **Razorpay one-time checkout** (Stripe retired), and **hybrid AI execution** (Gemini → OpenAI → Anthropic → Python → deterministic fallback). The codebase is **mature in contract tests** (~626 unit + hybrid suite) but **runtime verification gaps** remain for live AI audio, gov-exam worker deploy, and Razorpay settlement.
 
-**This audit cycle:**
+**This audit cycle (2026-09-05):**
 - Produced system map + feature matrix (20+ modules)
 - Ran automated parity gates (billing catalog v3, hybrid contracts)
 - Fixed P0 security: `questions` answer-key exposure via tightened RLS + owned review RPC
@@ -18,8 +18,32 @@ Career Pilot is a credit-wallet interview prep platform with **server-authoritat
 - Fixed hybrid test brittleness (error envelope source contract)
 - Added regression tests for copy + security migration
 
+**Extended cycle (2026-09-06):**
+- Repository-wide discovery index (tech debt markers, localhost, Stripe drift)
+- Python dual entry-point routing audit + contract tests
+- Gov exam paper **assembly provenance** (Edge + Python aligned metadata, admin UI, migration)
+- Official/PYQ fail-closed alignment (Edge `OFFICIAL_MODE_ALLOWED` = `official_verified` only)
+- Debrief eligibility fail-closed when `status` is null but session incomplete
+- Session duration **runtime contract** (`normalizeSessionDurationInput`)
+- Billing UI: one-time purchase copy clarified (not subscription renewal)
+- Full matrices: Business Logic, Data Engineering, AI, Python, Billing, Security, Feature Health
+
 **Release classification:** **CONDITIONAL GO**  
 Code and unit tests support production logic; **NO-GO** until environment blockers cleared (Edge redeploy, Python worker, live payment webhook, browser E2E on core flows).
+
+---
+
+## Discovery Index (2026-09-06)
+
+| Scan | Count / finding | Top risk |
+|------|-----------------|----------|
+| TODO/FIXME/HACK/MOCK/FAKE/PLACEHOLDER/LEGACY/DEPRECATED/FALLBACK | ~200+ hits across repo (many in `feature-copies/`, e2e, scripts) | `feature-copies/` drift (RC-H) |
+| localhost / 127.0.0.1 | ~120 hits | Mostly e2e, CORS tests, dev config — **production loopback blocked** in `pythonClient.ts` |
+| Stripe references | ~80 files | **DEAD/MISLEADING** — fail-closed webhook; `pro_monthly` is Razorpay SKU name not subscription |
+| Python `/v1/process` vs `/internal/operations` | 11 V1 ops + 20+ scaffold ops | Guarded: user coach cannot stay on `practice_coach_hint` scaffold |
+| Gov dual-assembler | Edge + Python both publish papers | **FIXED** — `assembly_source` column + provenance_json envelope |
+| Document SYNC vs ASYNC | Edge job + Python worker | Contract tests pass; live worker NOT_VERIFIED |
+| startTime / duration_seconds | Centralized in `sessionDurationContract.ts` | **FIXED** — reject bare numbers at boundary |
 
 ---
 
@@ -107,6 +131,10 @@ flowchart TB
 | RC-F | Types lag migrations | P2 | OPEN — regen blocked on remote migrate |
 | RC-G | `questions` answer-key exposure | P0 | **FIXED** — RLS + review RPC |
 | RC-H | `feature-copies/` drift risk | P3 | DOCUMENTED in docs/feature-copies/README.md |
+| RC-I | Gov dual-assembler provenance ambiguity | P1 | **FIXED** — assembly_source + admin UI |
+| RC-J | Debrief incomplete session when status=null | P1 | **FIXED** — lifecycle-aware eligibility |
+| RC-K | Session duration null/type contract | P2 | **FIXED** — sessionDurationContract |
+| RC-L | Official PYQ Edge source policy looser than Python | P1 | **FIXED** — official_verified only |
 
 ---
 
@@ -293,6 +321,169 @@ flowchart TB
 - [ ] Live Gemini + Deepgram session in browser
 - [ ] Gov exam: generate → submit → results
 - [ ] RLS spot-check with QA users
+
+## Fixes Applied (2026-09-06)
+
+| Wave | Item | Files |
+|------|------|-------|
+| P1 Gov | Paper assembly provenance metadata | `govPaperAssembly.ts`, `repository.py`, `models.py`, migration `20260906120000` |
+| P1 Gov | Official PYQ source policy aligned | `govPaperAssembly.ts` OFFICIAL_MODE_ALLOWED |
+| P1 Gov | Admin assembler visibility | `adminOps.ts`, `AdminGovPaperReview.tsx` |
+| P1 Debrief | Lifecycle-aware eligibility (status=null) | `debriefEvidence.ts` (Edge + client), `generate-debrief/index.ts` |
+| P2 Session | Duration runtime contract | `sessionDurationContract.ts`, `sessionDisplay.ts` |
+| P2 Billing | One-time wallet copy | `SettingsBilling.tsx` |
+| Tests | Python routing, provenance, session, debrief | `pythonRoutingContracts.test.ts`, `govPaperProvenance.test.ts`, `sessionDurationContract.test.ts` |
+
+---
+
+## Complete Feature Inventory (extended)
+
+| Feature | Route | Owner | API/Edge | DB | AI | Python | Credits | Persistence | Status |
+|---------|-------|-------|----------|-----|-----|--------|---------|-------------|--------|
+| Signup/Login | `/login`, `/signup` | Auth | Supabase Auth | `profiles` | — | — | — | profiles | WORKING |
+| MFA | `/mfa/*` | Auth | AAL2 gate | `profiles.mfa_*` | — | — | — | profiles | WORKING |
+| Live Copilot | `/app/live/*` | Session+Overlay | `generate-hint/answer`, `ai-coach-chat` | sessions, transcripts | Gemini→… | speech via `/v1/process` | 2–12/action | session_answers | PARTIALLY_WORKING |
+| Mock Interview | `/app/mock/*` | sessionStore | `deduct-credits`, `generate-questions` | sessions, answers | hybrid | validate via `/v1/process` | 15+ upfront | notes+answers | WORKING |
+| Prep Lab | `/app/prep/*` | Prep pages | `prep-tool`, `polish-star` | prep history | hybrid | star via `/v1/process` | 2–20 | history rows | WORKING |
+| Documents | `/app/library` | Documents | `parse-document`, job worker | documents, jobs | Gemini enrich | `/v1/process` extract | 8–12 | documents | WORKING |
+| Gov Exams | `/app/mock-test/*` | Gov UI | `create-exam-paper`, worker | gov_* tables | gap-fill Pro | paper_factory | 3–15 job | papers+attempts | ENV DEPENDENT |
+| Assessments | `/app/assessments/*` | Assessment UI | `assemble-assessment` | snapshots | — | — | varies | attempts | PARTIALLY_WORKING |
+| Scorecard | session detail | Sessions | `generate-scorecard` | scorecards | hybrid | scaffold | 15 | scorecards | WORKING |
+| Debrief | session detail | Sessions | `generate-debrief` job | debrief jobs | hybrid | scaffold | 15 job | debriefs | WORKING |
+| Billing | `/settings/billing` | Billing UI | Razorpay edges | payment_orders | — | — | grants | ledger | ENV DEPENDENT |
+| Referrals | `/app/referrals` | Referrals | `record-referral` | referrals | — | — | +25/+25 | RPC idempotent | WORKING |
+| Admin | `/app/admin/*` | Admin | admin edges | audit logs | — | ingest | — | audit | PARTIALLY_WORKING |
+
+---
+
+## Business Logic Matrix (selected)
+
+| Feature | Rule | Implementation | Correct? | Enforcement | Risk |
+|---------|------|----------------|----------|-------------|------|
+| Free credits | 50 one-time at signup | RPC grant + copy | Yes | Postgres + Edge | Low |
+| Mock upfront charge | Deduct before session | `deduct-credits` | Yes | Edge RPC | Low |
+| Hybrid AI | One charge per op | `hybridExecute` reserve/finalize | Yes | Edge | Low |
+| Official PYQ | Bank only, no AI fill | Edge+Python validators | Yes (post-fix) | Edge+Python | Low |
+| Debrief | No charge without evidence | Eligibility before reserve | Yes | Edge | Low |
+| Scorecard | Requires scorable answers | `scorecardEligibility` | Yes | Edge | Med (junk answers) |
+| Referrals | No self-referral | RPC guards | Yes | Postgres | Low |
+
+---
+
+## Data Engineering Matrix (selected)
+
+| Entity | Source of Truth | Constraints | RLS | Lifecycle | Risk |
+|--------|-----------------|-------------|-----|-----------|------|
+| profiles.credits | credit_ledger sum | RPC-only mutation | own row | append-only ledger | Low |
+| sessions | sessions table | lifecycle_status RPCs | auth.uid | active→ended | Med (FSM split) |
+| gov_generated_papers | gov_generated_papers | paper_source CHECK | admin+owner | review_state FSM | Low (post provenance) |
+| payment_orders | payment_orders | idempotency keys | own + service | pending→fulfilled | Low |
+| questions | questions | source_type CHECK | owner/admin | publish_status | Low (post RLS fix) |
+
+---
+
+## AI Matrix (selected)
+
+| Feature | Context inputs | Provider chain | Validation | Credit | Status |
+|---------|----------------|----------------|------------|--------|--------|
+| Live hint | profile, JD, transcript, Q | Gemini→OpenAI→Anthropic | `buildFeatureContext` | hybrid inline | WORKING (code) |
+| Mock questions | role, seniority, topics | hybrid + Python validate | schema + validate op | upfront+gen | WORKING |
+| Prep tools | STAR/doc context | hybrid | operation registry | hybrid | WORKING |
+| Gov gap-fill | syllabus, blueprint | Gemini (Pro gate) | MCQ validator | job reserve | ENV DEPENDENT |
+| Debrief | answers+transcript | hybrid AI only | evidence quotes | job reserve | WORKING |
+
+---
+
+## Python Matrix (selected)
+
+| Operation | Entry point | Edge owner | Python role | Credit owner | Status |
+|-----------|-------------|------------|-------------|--------------|--------|
+| document_extract | `/v1/process` | parse-document | OCR/extract engine | Edge hybrid | WORKING |
+| practice_coach | `/v1/process` | generate-hint/answer | coach engine | Edge hybrid | WORKING |
+| speech_process | `/v1/process` | live STT post | normalize transcript | Edge hybrid | NOT_VERIFIED live |
+| star_evidence | `/v1/process` | prep-tool | evidence extract | Edge hybrid | WORKING |
+| mock_question_validate | `/v1/process` | generate-questions | validate MCQ | Edge hybrid | WORKING |
+| gov paper factory | Python worker | create-exam-paper job | assemble+publish | job RPC | ENV DEPENDENT |
+| session_scorecard | `/internal/operations` | generate-scorecard | deterministic scaffold | Edge hybrid | WORKING |
+| session_debrief | `/internal/operations` | generate-debrief | scaffold only (AI on Edge) | job layer | WORKING |
+
+---
+
+## Billing Matrix
+
+| Product | Price source | Provider | Credits | Idempotency | Status |
+|---------|--------------|----------|---------|-------------|--------|
+| Free | — | — | 50 signup | RPC once | WORKING |
+| pro_monthly (SKU) | liveCatalog INR | Razorpay one-time | 1400 grant | webhook+verify | ENV DEPENDENT |
+| enterprise_monthly (SKU) | liveCatalog INR | Razorpay one-time | enterprise grant | webhook+verify | ENV DEPENDENT |
+| Credit packs | creditEconomics | Razorpay | pack amount | idempotent fulfill | WORKING (code) |
+| Stripe legacy | env STRIPE_* | Stripe | **none** | fail-closed | DEAD CODE |
+
+---
+
+## Security Matrix (selected)
+
+| Area | Threat | Protection | Gap | Severity | Fix |
+|------|--------|------------|-----|----------|-----|
+| Questions | Answer key leak | RLS owner/admin + review RPC | — | — | FIXED |
+| Python internal | Replay/forgery | HMAC + timestamp | — | Low | Verified |
+| Credits | Client balance tamper | RPC-only deduct | — | Low | OK |
+| IDOR sessions | Cross-user access | RLS auth.uid() | Live spot-check pending | Med | Ops verify |
+| Promo codes | Secret exposure | public RPC safe fields | — | Low | OK |
+| Loopback Python | Prod SSRF to localhost | sanitizeInternalServiceUrl | — | Low | OK |
+
+---
+
+## Feature Health Matrix
+
+| Feature | Business | Frontend | Backend | Data | AI | Security | Performance | Persistence | Overall |
+|---------|----------|----------|---------|------|-----|----------|-------------|-------------|---------|
+| Auth/MFA | 9 | 8 | 9 | 8 | — | 9 | 8 | 9 | WORKING |
+| Live Copilot | 7 | 7 | 8 | 8 | 7* | 8 | 7 | 8 | PARTIAL |
+| Mock Interview | 8 | 8 | 8 | 8 | 8 | 8 | 7 | 9 | WORKING |
+| Gov Exams | 8 | 7 | 8 | 8 | 7* | 8 | 6 | 8 | ENV DEP |
+| Billing | 8 | 8 | 8 | 9 | — | 8 | 8 | 9 | ENV DEP |
+| Debrief | 8 | 7 | 8 | 8 | 7* | 8 | 7 | 8 | WORKING |
+
+*Runtime provider/audio not verified in CI
+
+---
+
+## Production Readiness Scores (2026-09-06)
+
+| Dimension | Score | Notes |
+|-----------|-------|-------|
+| Business Logic | 8 | Gov PYQ + debrief gates aligned |
+| Data Engineering | 8 | Provenance column added |
+| Database / RLS | 8 | Questions fix; assembly_source migration |
+| Backend / Edge | 8 | Hybrid mature |
+| Frontend | 7 | Billing copy improved |
+| AI | 7 | Context enforced; runtime unverified |
+| Python | 8 | Routing contracts; worker deploy pending |
+| Auth / MFA | 8 | Fail-closed |
+| Security | 8 | P0 questions fixed |
+| Credits | 8 | Server authoritative |
+| Billing | 7 | Razorpay live; Stripe naming drift |
+| Testing | 8 | +pythonRouting, provenance, session contracts |
+| Observability | 7 | correlation_id; paper provenance improved |
+| **Overall** | **7.8** | **CONDITIONAL GO** |
+
+---
+
+## Final Release Decision
+
+**Verdict: CONDITIONAL GO**
+
+**Cleared in code this cycle:** gov paper provenance, official PYQ policy parity, debrief incomplete-session gate, session duration contract, Python routing contracts.
+
+**Still required for full GO:**
+1. Apply migrations (`20260905210000`, `20260905211000`, `20260906120000`)
+2. Deploy Edge functions + Python worker
+3. Live Razorpay webhook verification
+4. Browser E2E: Live Copilot, Mock voice, Gov exam, Billing checkout
+5. RLS live spot-check (User A/B)
+
+**NO-GO if found in production:** auth bypass, cross-user leak, credit/payment corruption, core workflow broken.
 
 ---
 

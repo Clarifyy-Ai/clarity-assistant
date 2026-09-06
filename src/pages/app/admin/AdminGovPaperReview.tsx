@@ -17,6 +17,8 @@ import {
   listGeneratedPapers,
   setPaperReviewState,
   summarizeBlueprint,
+  resolvePaperAssemblyLabel,
+  resolvePaperProviderLabel,
   type GeneratedPaperRow,
   type PaperReviewState,
 } from "@/lib/gov-exam/adminOps";
@@ -84,6 +86,7 @@ export default function AdminGovPaperReview() {
             <TableRow>
               <TableHead>Paper</TableHead>
               <TableHead>Exam</TableHead>
+              <TableHead>Assembler</TableHead>
               <TableHead>Blueprint</TableHead>
               <TableHead>State</TableHead>
               <TableHead className="text-right">Actions</TableHead>
@@ -92,13 +95,13 @@ export default function AdminGovPaperReview() {
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-muted-foreground">
+                <TableCell colSpan={6} className="text-muted-foreground">
                   <Loader2 className="w-4 h-4 inline animate-spin mr-2" /> Loading…
                 </TableCell>
               </TableRow>
             ) : rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-muted-foreground">
+                <TableCell colSpan={6} className="text-muted-foreground">
                   No generated papers yet (or RLS is hiding non-owned drafts).
                 </TableCell>
               </TableRow>
@@ -119,6 +122,13 @@ export default function AdminGovPaperReview() {
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
                       {row.gov_exams?.code ?? row.exam_id.slice(0, 8)}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      <p>{resolvePaperAssemblyLabel(row)}</p>
+                      <p className="text-[10px] text-muted-foreground/80">
+                        provider: {resolvePaperProviderLabel(row)}
+                        {row.job_id ? ` · job ${row.job_id.slice(0, 8)}` : ""}
+                      </p>
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
                       {summarizeBlueprint(row.blueprint_json)}

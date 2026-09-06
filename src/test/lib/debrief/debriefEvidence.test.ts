@@ -95,6 +95,18 @@ describe("classifyDebriefEligibility", () => {
     ).toBe("SESSION_INCOMPLETE");
   });
 
+  it("flags incomplete sessions when status is null but lifecycle is active", () => {
+    expect(
+      classifyDebriefEligibility({
+        status: null,
+        lifecycle_status: "active",
+        hasQuestions: true,
+        hasMeaningfulAnswers: true,
+        hasTranscript: false,
+      }),
+    ).toBe("SESSION_INCOMPLETE");
+  });
+
   it("maps empty evidence to NOT_SCORED when questions exist", () => {
     expect(
       classifyDebriefEligibility({

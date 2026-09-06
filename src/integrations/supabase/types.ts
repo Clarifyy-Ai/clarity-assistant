@@ -3835,6 +3835,7 @@ export type Database = {
       gov_generated_papers: {
         Row: {
           approval_mode: string | null
+          assembly_source: string | null
           blueprint_json: Json
           created_at: string
           created_by: string | null
@@ -3864,6 +3865,7 @@ export type Database = {
         }
         Insert: {
           approval_mode?: string | null
+          assembly_source?: string | null
           blueprint_json?: Json
           created_at?: string
           created_by?: string | null
@@ -3893,6 +3895,7 @@ export type Database = {
         }
         Update: {
           approval_mode?: string | null
+          assembly_source?: string | null
           blueprint_json?: Json
           created_at?: string
           created_by?: string | null

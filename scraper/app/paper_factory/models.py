@@ -277,6 +277,9 @@ class PaperResult:
         source_mix = summarize_source_mix(types)
         return {
             "generator": "python_paper_factory",
+            "assembly_source": "python_paper_factory",
+            "generated_by": "python_paper_factory",
+            "job_id": self.job_id,
             "generation_policy_version": GENERATION_POLICY_VERSION,
             "algorithm_version": ALGORITHM_VERSION,
             "quality_algorithm_version": quality_algorithm_version(),

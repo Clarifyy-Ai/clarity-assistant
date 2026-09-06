@@ -1068,9 +1068,30 @@ export type GeneratedPaperRow = {
   review_state: PaperReviewState;
   quality_score: number | null;
   mock_test_id: string | null;
+  job_id: string | null;
+  paper_source: string | null;
+  source_mix: Record<string, number> | null;
+  assembly_source: string | null;
+  provenance_json: Record<string, unknown> | null;
   created_at: string;
   gov_exams?: { code: string; name: string } | null;
 };
+
+export function resolvePaperAssemblyLabel(row: GeneratedPaperRow): string {
+  const fromColumn = row.assembly_source?.trim();
+  if (fromColumn) return fromColumn;
+  const prov = row.provenance_json ?? {};
+  const fromProv = String(
+    prov.assembly_source ?? prov.generated_by ?? prov.generator ?? "",
+  ).trim();
+  return fromProv || "unknown";
+}
+
+export function resolvePaperProviderLabel(row: GeneratedPaperRow): string {
+  const prov = row.provenance_json ?? {};
+  const provider = String(prov.provider ?? "").trim();
+  return provider || "—";
+}
 
 export async function listGeneratedPapers(filters: {
   reviewState?: string;
@@ -1079,7 +1100,7 @@ export async function listGeneratedPapers(filters: {
   let q = db()
     .from("gov_generated_papers")
     .select(
-      "id, exam_id, title, paper_class, language, question_count, total_marks, duration_minutes, blueprint_json, review_state, quality_score, mock_test_id, created_at, gov_exams(code, name)",
+      "id, exam_id, title, paper_class, language, question_count, total_marks, duration_minutes, blueprint_json, review_state, quality_score, mock_test_id, job_id, paper_source, source_mix, assembly_source, provenance_json, created_at, gov_exams(code, name)",
     )
     .order("created_at", { ascending: false })
     .limit(filters.limit ?? 100);

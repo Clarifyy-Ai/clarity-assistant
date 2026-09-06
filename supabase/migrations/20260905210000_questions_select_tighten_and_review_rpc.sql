@@ -40,7 +40,7 @@ AS $$
     q.topic,
     q.difficulty
   FROM public.mock_tests mt
-  JOIN public.questions q ON q.id = ANY(COALESCE(mt.question_ids, ARRAY[]::uuid[]))
+  JOIN public.questions q ON q.id::text = ANY(COALESCE(mt.question_ids, ARRAY[]::text[]))
   WHERE mt.id = p_test_id
     AND mt.user_id = auth.uid()
     AND upper(trim(COALESCE(mt.status, ''))) = 'COMPLETED';

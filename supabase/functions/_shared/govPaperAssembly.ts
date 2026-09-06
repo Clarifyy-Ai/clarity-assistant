@@ -154,11 +154,8 @@ type PaperSourceType =
   | "generated_practice"
   | "ai_generated_practice";
 
-const OFFICIAL_MODE_ALLOWED = new Set<PaperSourceType>([
-  "official_verified",
-  "verified_public_source",
-  "approved_bank",
-]);
+/** Align with Python source_priority: official PYQ mode accepts verified bank only. */
+const OFFICIAL_MODE_ALLOWED = new Set<PaperSourceType>(["official_verified"]);
 
 const GENERATED_SOURCE_TYPES = new Set<PaperSourceType>([
   "generated_practice",
@@ -1182,6 +1179,8 @@ export async function assembleClaimedPaperJob(
           source_years: blueprint.source_years,
           disclaimer: blueprint.label,
           generation_job_id: job.id,
+          generator: "edge_assembler",
+          assembly_source: "edge_assembler",
           shuffle_questions: false,
           shuffle_options: false,
           quality_score: paperQuality.score,
@@ -1220,6 +1219,23 @@ export async function assembleClaimedPaperJob(
         negative_mark: blueprint.negative_mark,
         blueprint_json: blueprint,
         provenance_json: {
+          assembly_source: "edge_assembler",
+          generated_by: "edge_assembler",
+          generator: "edge_assembler",
+          provider:
+            usedPythonFallback
+              ? "python_deterministic"
+              : aiFilledCount > 0
+              ? "ai"
+              : "database",
+          job_id: job.id,
+          correlation_id: correlationId,
+          worker_id: workerId,
+          fallback: usedPythonFallback
+            ? { from: "python_paper_factory", reason: aiFillError ?? "python_bank_fallback" }
+            : aiFillError
+            ? { reason: aiFillError }
+            : null,
           assembly: aiFilledCount > 0 ? "bank_plus_ai_fill_v1" : "bank_select_v1",
           seed: randomSeed,
           source_years: sourceYears,
@@ -1254,6 +1270,7 @@ export async function assembleClaimedPaperJob(
         mock_test_id: mockTest.id,
         paper_source: paperSource,
         source_mix: sourceMix,
+        assembly_source: "edge_assembler",
       })
       .select("id")
       .single();
@@ -1359,6 +1376,8 @@ export async function assembleClaimedPaperJob(
           source_years: blueprint.source_years,
           disclaimer: blueprint.label,
           generation_job_id: job.id,
+          generator: "edge_assembler",
+          assembly_source: "edge_assembler",
           shuffle_questions: false,
           shuffle_options: false,
           quality_score: paperQuality.score,
