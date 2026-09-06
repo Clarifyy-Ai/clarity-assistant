@@ -6,7 +6,7 @@ import {
   recordReferral,
   resolveReferralCodeForClaim,
 } from "@/lib/referrals";
-import { refreshCredits } from "@/lib/billing/creditsManager";
+import { refreshCreditsFromStore } from "@/lib/billing/creditPrecheck";
 import { isUserEmailConfirmed } from "@/lib/auth/emailVerification";
 import { logger } from "@/lib/logger";
 import { useAuthStore } from "@/store/authStore";
@@ -74,7 +74,7 @@ export function useClaimStoredReferral(userId: string | undefined): void {
       if (cancelled) return;
 
       if (outcome.applied) {
-        await refreshCredits().catch(() => undefined);
+        await refreshCreditsFromStore().catch(() => undefined);
         await Promise.resolve(
           useAuthStore.getState().loadProfile?.({ force: true }),
         ).catch(() => undefined);

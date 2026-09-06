@@ -22,6 +22,23 @@ export type DashboardSessionRow = {
 };
 
 const INITIAL_TIMEOUT_MS = 15_000;
+const DASHBOARD_HISTORY_PAGE_SIZE = 50;
+
+function mapHistoryToDashboardRow(
+  item: Awaited<ReturnType<typeof fetchSessionHistory>>["items"][number],
+): DashboardSessionRow {
+  return {
+    id: item.sourceId,
+    type: sessionHistoryTypeLabel(item),
+    status: item.status,
+    overall_score: item.score ?? null,
+    title: item.title,
+    contextLine:
+      item.sessionType === "assessment" ? sessionHistoryContextLine(item) : null,
+    created_at: item.lastActivityAt || item.createdAt,
+    detailRoute: item.detailRoute,
+  };
+}
 
 export function useDashboardData(userId: string | undefined) {
   const [sessionCount, setSessionCount] = useState<number | null>(null);
@@ -39,10 +56,96 @@ export function useDashboardData(userId: string | undefined) {
   const recentAbort = useRef<AbortController | null>(null);
   const lastCountAt = useRef(0);
   const lastRecentAt = useRef(0);
+  const bundleGen = useRef(0);
+
+  const loadDashboardBundle = useCallback(
+    async (mode: "initial" | "background") => {
+      if (!userId) {
+        setRecentInitialLoading(false);
+        return;
+      }
+      const generation = ++bundleGen.current;
+      countAbort.current?.abort();
+      recentAbort.current?.abort();
+      const controller = new AbortController();
+      countAbort.current = controller;
+      recentAbort.current = controller;
+
+      if (mode === "initial") {
+        setSessionCountError(null);
+        setRecentInitialLoading(true);
+        setRecentError(null);
+      } else {
+        setSessionCountRefreshing(true);
+        setRecentRefreshing(true);
+      }
+
+      try {
+        const history = await fetchSessionHistory({
+          pageSize: DASHBOARD_HISTORY_PAGE_SIZE,
+          sort: "newest",
+        });
+        if (generation !== bundleGen.current || controller.signal.aborted) return;
+
+        const visible = history.items.filter((i) =>
+          matchesCountBucket(i.status, "history_visible"),
+        );
+        let count = visible.length;
+        if (history.hasMore) {
+          const interviewCount = await sessionsDB.countByUserId(userId);
+          count = Math.max(count, interviewCount);
+        }
+
+        setSessionCount(count);
+        setSessionCountError(null);
+        setRecentSessions(history.items.slice(0, 10).map(mapHistoryToDashboardRow));
+        setRecentError(null);
+        lastCountAt.current = Date.now();
+        lastRecentAt.current = Date.now();
+      } catch (err: unknown) {
+        if (generation !== bundleGen.current || isStaleOrAbortError(err)) return;
+        try {
+          const [interviewCount, rows] = await Promise.all([
+            sessionsDB.countByUserId(userId),
+            sessionsDB.listRecentSummary(userId, 10),
+          ]);
+          if (generation !== bundleGen.current || controller.signal.aborted) return;
+          setSessionCount(interviewCount);
+          setSessionCountError(null);
+          setRecentSessions(
+            rows.map((r) => ({
+              id: r.id,
+              type: r.type,
+              status: r.status,
+              overall_score: r.overall_score,
+              title: r.title,
+              created_at: r.created_at,
+              detailRoute: `/app/sessions/${r.id}`,
+            })),
+          );
+          setRecentError(null);
+        } catch {
+          setSessionCountError(toSafeUiError(err, "Couldn't load session count"));
+          setRecentError(toSafeUiError(err, "Couldn't load recent sessions"));
+        }
+      } finally {
+        if (generation === bundleGen.current) {
+          setSessionCountRefreshing(false);
+          setRecentInitialLoading(false);
+          setRecentRefreshing(false);
+        }
+      }
+    },
+    [userId],
+  );
 
   const loadSessionCount = useCallback(
     async (mode: "initial" | "background") => {
       if (!userId) return;
+      if (mode === "initial" && sessionCount === null && recentSessions.length === 0) {
+        await loadDashboardBundle("initial");
+        return;
+      }
       const generation = ++countGen.current;
       countAbort.current?.abort();
       const controller = new AbortController();
@@ -87,13 +190,17 @@ export function useDashboardData(userId: string | undefined) {
         }
       }
     },
-    [userId],
+    [userId, loadDashboardBundle, sessionCount, recentSessions.length],
   );
 
   const loadRecent = useCallback(
     async (mode: "initial" | "background") => {
       if (!userId) {
         setRecentInitialLoading(false);
+        return;
+      }
+      if (mode === "initial" && sessionCount === null && recentSessions.length === 0) {
+        await loadDashboardBundle("initial");
         return;
       }
       const generation = ++recentGen.current;
@@ -154,13 +261,14 @@ export function useDashboardData(userId: string | undefined) {
         }
       }
     },
-    [userId],
+    [userId, loadDashboardBundle, sessionCount, recentSessions.length],
   );
 
   useEffect(() => {
     if (!userId) return;
-    void loadSessionCount(sessionCount === null ? "initial" : "background");
-    void loadRecent(recentSessions.length === 0 && recentInitialLoading ? "initial" : "background");
+    void loadDashboardBundle(
+      sessionCount === null && recentSessions.length === 0 ? "initial" : "background",
+    );
     return () => {
       countAbort.current?.abort();
       recentAbort.current?.abort();

@@ -30,7 +30,7 @@ import {
   VolumeX,
 } from "lucide-react";
 import { OverlayAnswerStrength } from "./OverlayAnswerStrength";
-import { checkCreditsForAction, SERVER_AI_CREDIT_COSTS } from "@/lib/billing/creditsManager";
+import { checkCreditsForAction, SERVER_AI_CREDIT_COSTS } from "@/lib/billing/creditPrecheck";
 import { toast } from "sonner";
 import { composeHint, splitInlineRich, type InlinePart } from "@/lib/overlay/overlayCompositor";
 import { copyTextToClipboard, extractCodeFromAnswer } from "@/lib/overlay/answerTextUtils";

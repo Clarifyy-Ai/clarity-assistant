@@ -34,9 +34,9 @@ describe("scorecardsDB.createShare + useScorecard share/export wiring", () => {
     expect(db).toContain("p_session_id: sessionId");
   });
 
-  it("useScorecard shares via createShare and keeps exportPDF distinct from exportJSON", () => {
+  it("useScorecard shares via issueShareToken and keeps exportPDF distinct from exportJSON", () => {
     const hook = read("src/hooks/useScorecard.ts");
-    expect(hook).toContain("scorecardsDB.createShare(sessionId)");
+    expect(hook).toContain("issueShareToken(sessionId");
     expect(hook).not.toContain("markShared(sessionId, userId, token)");
     expect(hook).toContain('import("@/lib/export/scorecardPdf")');
     expect(hook).toContain("exportScorecardPdf");

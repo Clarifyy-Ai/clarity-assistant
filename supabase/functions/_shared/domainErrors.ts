@@ -88,6 +88,7 @@ export function httpStatusForDomainCode(code: DomainErrorCode | string): number 
     case "PLAN_NOT_ALLOWED":
       return 403;
     case "UNKNOWN_OPERATION":
+      return 400;
     case "INVALID_REQUEST":
       return 400;
     case "AI_INVALID_OUTPUT":

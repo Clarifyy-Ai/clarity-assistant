@@ -1,3 +1,11 @@
+export {
+  checkCreditsForAction,
+  refreshCreditsFromStore,
+  SERVER_AI_CREDIT_COSTS,
+} from "./creditPrecheck";
+
+export type { CreditPrecheckResult, LiveCreditPrecheckAction } from "./creditPrecheck";
+
 // ─── Credits Manager ──────────────────────────────────────────────────────────
 export {
   checkCredits,

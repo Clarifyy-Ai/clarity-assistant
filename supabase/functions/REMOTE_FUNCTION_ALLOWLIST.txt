@@ -4,6 +4,7 @@ ai-coach-chat
 ai-feedback
 ai-hub-router
 ai-key-check
+admin-finance-report
 analytics-dashboard
 analyze-paper-trends
 analyze-test-performance
@@ -14,6 +15,7 @@ bulk-import-questions
 cancel-document-processing-job
 cancel-paper-generation-job
 cancel-subscription
+check-assessment-availability
 check-exam-paper-availability
 collect-exam-papers
 company-research
@@ -47,20 +49,24 @@ get-exam-details
 get-exam-pattern
 get-exam-syllabus
 get-paper-generation-job
+get-user-storage-usage
 health
 hostinger-mail
 hybrid-health
 hybrid-ping
 ingest-source-document
 issue-course-certificate
+issue-share-token
 list-previous-papers
 list-public-promos
+list-session-debriefs
 moderate-content
 mfa-recovery
 mock-tts
 parse-document
 parse-question-pdf
 parse-resume
+pause-test
 ping
 polish-star-section
 prep-tool
@@ -74,6 +80,7 @@ reconcile-paper-quality
 record-referral
 report-question
 resume-subscription
+resume-test
 retry-document-processing-job
 run-daily-exam-scrape
 save-answer
@@ -94,3 +101,4 @@ submit-test
 support-chat
 sync-calendar
 validate-api-key
+validate-referral-code

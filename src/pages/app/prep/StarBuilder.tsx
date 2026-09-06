@@ -2,7 +2,7 @@ import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { withPrepToolContext } from "@/lib/prep/prepToolContext";
 import { prepToolContentIdempotencyKey } from "@/lib/network/idempotency";
 import { sha256 } from "@/lib/utils/hashUtils";
-import { refreshCredits } from "@/lib/billing/creditsManager";
+import { refreshCreditsFromStore } from "@/lib/billing/creditPrecheck";
 import { useCredits } from "@/hooks/useCredits";
 import { evaluateActionCreditGate } from "@/lib/billing/actionCreditGate";
 import { InsufficientCreditsAction } from "@/components/billing/InsufficientCreditsAction";
@@ -231,7 +231,7 @@ export default function StarBuilder() {
         setAiPhase("GENERATION_FAILED");
         setPolishError(AI_REWRITE_UNAVAILABLE);
         toast.error(AI_REWRITE_UNAVAILABLE);
-        await refreshCredits().catch(() => undefined);
+        await refreshCreditsFromStore().catch(() => undefined);
         return;
       }
 
@@ -246,7 +246,7 @@ export default function StarBuilder() {
         setAiPhase("GENERATION_FAILED");
         setPolishError(AI_REWRITE_UNAVAILABLE);
         toast.error(AI_REWRITE_UNAVAILABLE);
-        await refreshCredits().catch(() => undefined);
+        await refreshCreditsFromStore().catch(() => undefined);
         return;
       }
 
@@ -262,7 +262,7 @@ export default function StarBuilder() {
         setAiPhase("GENERATION_FAILED");
         setPolishError(AI_REWRITE_UNAVAILABLE);
         toast.error(AI_REWRITE_UNAVAILABLE);
-        await refreshCredits().catch(() => undefined);
+        await refreshCreditsFromStore().catch(() => undefined);
         return;
       }
 
@@ -276,7 +276,7 @@ export default function StarBuilder() {
       } else {
         toast.success("Answer polished. Save to keep it.");
       }
-      await refreshCredits().catch(() => undefined);
+      await refreshCreditsFromStore().catch(() => undefined);
     } catch (err) {
       if (originalStarRef.current) setStar(originalStarRef.current);
       if (isInsufficientCreditsError(err)) {
@@ -289,7 +289,7 @@ export default function StarBuilder() {
       setAiPhase("GENERATION_FAILED");
       setPolishError(message);
       toast.error(message);
-      await refreshCredits().catch(() => undefined);
+      await refreshCreditsFromStore().catch(() => undefined);
     } finally {
       polishInFlightRef.current = false;
     }

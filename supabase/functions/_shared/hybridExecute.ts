@@ -88,6 +88,11 @@ export type HybridExecuteInput<T = unknown> = {
   runPython?: (ctx: PythonRunContext) => Promise<T | null>;
   runAi?: () => Promise<T>;
   validate?: (data: T, source: OperationSource) => T | Promise<T>;
+  /**
+   * Optional pre-charge gate — runs after idempotency/database preflight and
+   * before deductCreditsAtomic. Throw DomainError to block charge.
+   */
+  assertBeforeCharge?: () => void | Promise<void>;
   /** Optional provider / model labels for logging (never secrets). */
   aiMeta?: { provider?: string; modelVersion?: string };
 };
@@ -422,6 +427,9 @@ export async function executeHybridOperation<T = unknown>(
   const creditAction = input.creditAction ?? route.creditCostKey ?? operation;
 
   if (creditCost > 0) {
+    if (input.assertBeforeCharge) {
+      await input.assertBeforeCharge();
+    }
     // Unique per attempt so a refunded reservation cannot stick as a free replay.
     // Successful operation replay is handled above via opKey before we reach here.
     const credit = await deductCreditsAtomic({
@@ -788,6 +796,9 @@ export async function prepareHybridStreamOperation<T = unknown>(
   const creditAction = input.creditAction ?? route.creditCostKey ?? operation;
 
   if (creditCost > 0) {
+    if (input.assertBeforeCharge) {
+      await input.assertBeforeCharge();
+    }
     const credit = await deductCreditsAtomic({
       userId,
       action: creditAction,

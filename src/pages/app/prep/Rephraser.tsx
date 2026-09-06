@@ -12,7 +12,7 @@ import {
   parseStructuredJson,
   type RephraseAlternatives,
 } from "@/lib/ai/structuredParse";
-import { refreshCredits } from "@/lib/billing/creditsManager";
+import { refreshCreditsFromStore } from "@/lib/billing/creditPrecheck";
 import { useEffect, useRef, useState } from "react";
 import { useCredits } from "@/hooks/useCredits";
 import { useAuthStore } from "@/store/userStore";
@@ -155,7 +155,7 @@ export default function Rephraser() {
         throw Object.assign(new Error(AI_RESPONSE_INVALID_MESSAGE), { code: "AI_RESPONSE_INVALID" });
       }
       setAlternatives(fromServer);
-      await refreshCredits();
+      await refreshCreditsFromStore();
       if (user?.id) {
         try {
           await upsertPrepRephraseHistory({

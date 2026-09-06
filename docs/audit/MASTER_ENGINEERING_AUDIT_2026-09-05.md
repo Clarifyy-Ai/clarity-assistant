@@ -4,6 +4,8 @@
 **Scope:** Full-stack audit (business → UI → state → API → Edge → DB → RLS → AI → Python → credits → billing → auth → security)  
 **Product decision (confirmed):** Free tier = **50 credits at signup (one-time)** — no monthly reset job.
 
+> **Canonical audit (2026-09-06):** Release decisions and full §61–§64 coverage live in **[COMPLETE_APPLICATION_AUDIT_2026-09-06.md](./COMPLETE_APPLICATION_AUDIT_2026-09-06.md)**. This file retains the historical fix log and extended matrices from the 2026-09-05/06 cycles.
+
 ---
 
 ## Executive Summary

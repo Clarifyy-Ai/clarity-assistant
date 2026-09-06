@@ -30,6 +30,8 @@ describe("live copilot streaming contracts", () => {
     expect(source).toContain("executeHybridOperation");
     expect(source).toContain("AI returned empty hints");
     expect(source).toContain("hybridResult.response");
-    expect(source).toContain("livePythonTimeoutMs");
+    // Hints are AI-required; Python coach path is intentionally stubbed (runPython: null).
+    expect(source).toContain("runPython: async () => null");
+    expect(source).not.toContain("livePythonTimeoutMs");
   });
 });

@@ -24,8 +24,8 @@ vi.mock("@/lib/referrals", async (importOriginal) => {
   };
 });
 
-vi.mock("@/lib/billing/creditsManager", () => ({
-  refreshCredits: vi.fn(async () => null),
+vi.mock("@/lib/billing/creditPrecheck", () => ({
+  refreshCreditsFromStore: vi.fn(async () => undefined),
 }));
 
 vi.mock("@/lib/auth/emailVerification", () => ({
@@ -43,7 +43,7 @@ vi.mock("@/lib/logger", () => ({
   logger: { warn: vi.fn() },
 }));
 
-import { refreshCredits } from "@/lib/billing/creditsManager";
+import { refreshCreditsFromStore } from "@/lib/billing/creditPrecheck";
 import { useAuthStore } from "@/store/authStore";
 import { useClaimStoredReferral } from "@/hooks/useClaimStoredReferral";
 
@@ -91,7 +91,7 @@ describe("useClaimStoredReferral", () => {
       );
     });
 
-    expect(vi.mocked(refreshCredits)).toHaveBeenCalled();
+    expect(vi.mocked(refreshCreditsFromStore)).toHaveBeenCalled();
   });
 
   it("shows error toast on terminal self_referral", async () => {

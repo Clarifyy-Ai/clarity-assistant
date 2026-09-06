@@ -202,7 +202,7 @@ export const PLANS: Record<PlanId, Plan> = {
     id: "pro",
     name: "Pro",
     displayName: "Pro",
-    tagline: "Everything you need to land the role",
+    tagline: "One-time credit packs via Razorpay (not a recurring subscription)",
     monthlyPrice: PLAN_PRICE_CENTS_MONTHLY.pro,
     yearlyPrice: PLAN_PRICE_CENTS_YEARLY.pro,
     creditsPerMonth: PLAN_MONTHLY_CREDITS.pro,

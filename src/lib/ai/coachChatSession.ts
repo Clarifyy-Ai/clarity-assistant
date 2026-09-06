@@ -4,8 +4,8 @@ import { streamCoachChat } from "@/lib/ai/openaiClient";
 import { createIdempotencyKey } from "@/lib/api/functions";
 import {
   checkCreditsForAction,
-  refreshCredits,
-} from "@/lib/billing/creditsManager";
+  refreshCreditsFromStore,
+} from "@/lib/billing/creditPrecheck";
 import { getAiUserFacingError, openUpgradeIfInsufficientCredits } from "@/lib/network/aiErrorUx";
 import { ApiClientError } from "@/lib/api/apiClient";
 import { generateId } from "@/lib/utils";
@@ -171,7 +171,8 @@ export async function submitCoachChatMessage(
             .getState()
             .setCoachConversationId(result.conversation_id);
         }
-        const remaining = await refreshCredits();
+        await refreshCreditsFromStore();
+        const remaining = useAuthStore.getState().profile?.credits ?? null;
         if (remaining !== null) {
           useSessionStore.getState().consumeCredit(creditCheck.creditsRequired);
         }

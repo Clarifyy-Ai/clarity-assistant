@@ -4,79 +4,24 @@ import { useAuthStore } from "@/store/userStore";
 import { useUIStore } from "@/store/uiStore";
 import type { PreferredAIModel } from "@/types/user.types";
 import { isPaidPlan as isPaidPlanId } from "@/lib/billing/planIds";
+import {
+  checkCreditsForAction as checkCreditsForActionPrecheck,
+  refreshCreditsFromStore,
+  SERVER_AI_CREDIT_COSTS as PRECHECK_SERVER_COSTS,
+} from "@/lib/billing/creditPrecheck";
 
-/** Server-aligned credit costs (see supabase/functions/_shared/creditEconomics.ts). */
-export const SERVER_AI_CREDIT_COSTS = {
-  hint: AI_CREDIT_COSTS.live_hint,
-  fullAnswer: AI_CREDIT_COSTS.live_answer,
-  /** resolveActionCost("liveanswerlong") */
-  longAnswer: LIVE_ANSWER_LONG_CREDITS,
-  screenshotAnswer: AI_CREDIT_COSTS.screenshot_answer,
-  coachMessage: AI_CREDIT_COSTS.ai_coach_message,
-} as const;
+/** @deprecated Import from @/lib/billing/creditPrecheck */
+export const SERVER_AI_CREDIT_COSTS = PRECHECK_SERVER_COSTS;
 
-/**
- * Legacy model-based precheck defaults to live_answer cost (not hint).
- * Prefer checkCreditsForAction / CREDIT_COSTS for accurate gating.
- */
-function getCreditCost(_model: PreferredAIModel): number {
-  return SERVER_AI_CREDIT_COSTS.fullAnswer;
-}
-
+/** @deprecated Import from @/lib/billing/creditPrecheck */
 export function checkCreditsForAction(
   action: keyof typeof SERVER_AI_CREDIT_COSTS,
-): CreditCheckResult {
-  const { profile } = useAuthStore.getState();
-  const required = SERVER_AI_CREDIT_COSTS[action];
+) {
+  return checkCreditsForActionPrecheck(action);
+}
 
-  if (!profile) {
-    return {
-      canProceed: false,
-      creditsRequired: required,
-      creditsAvailable: 0,
-      isLow: false,
-      isBYOKActive: false,
-      reason: "Not authenticated",
-    };
-  }
-
-  const planKey = (profile as { plan_id?: string; plan?: string }).plan_id ?? profile.plan;
-  const paid = isPaidPlanId(planKey);
-  const subStatus = profile.subscription_status as string | undefined;
-
-  if (paid && subStatus && !["active", "trialing"].includes(subStatus)) {
-    return {
-      canProceed: false,
-      creditsRequired: required,
-      creditsAvailable: profile.credits,
-      isLow: profile.credits < LOW_CREDIT_THRESHOLD,
-      isBYOKActive: false,
-      reason: `Subscription is ${subStatus}. Complete checkout to use credits.`,
-    };
-  }
-
-  const available = profile.credits;
-  const isLow = available - required < LOW_CREDIT_THRESHOLD;
-
-  if (available < required) {
-    return {
-      canProceed: false,
-      creditsRequired: required,
-      creditsAvailable: available,
-      isLow: true,
-      isBYOKActive: false,
-      reason: `Not enough credits. Need ${required}, have ${available}.`,
-    };
-  }
-
-  return {
-    canProceed: true,
-    creditsRequired: required,
-    creditsAvailable: available,
-    isLow,
-    isBYOKActive: false,
-    reason: null,
-  };
+function getCreditCost(_model: PreferredAIModel): number {
+  return SERVER_AI_CREDIT_COSTS.fullAnswer;
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -428,6 +373,7 @@ function syncLocalCreditFields(patch: {
   }
 }
 
+/** @deprecated Prefer refreshCreditsFromStore() from @/lib/billing/creditPrecheck */
 export async function refreshCredits(): Promise<number | null> {
   const { user } = useAuthStore.getState();
   if (!user) return null;

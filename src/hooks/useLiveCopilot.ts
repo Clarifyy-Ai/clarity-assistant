@@ -23,7 +23,7 @@ import {
   mapSeniorityToExperienceLevel,
 } from "@/lib/session/liveSessionPreferences";
 import { answerBankDB } from "@/lib/supabase/database";
-import { checkCreditsForAction, refreshCredits } from "@/lib/billing/creditsManager";
+import { checkCreditsForAction, refreshCreditsFromStore } from "@/lib/billing/creditPrecheck";
 import { captureCodingQuestionAndGenerateAnswer } from "@/lib/audio/screenshotCapture";
 import { assertOnlineForCapture } from "@/lib/overlay/captureGating";
 import { parseResumeContentString, formatParsedResumeForAI } from "@/lib/documents/resumeParse";
@@ -700,7 +700,7 @@ export function useLiveCopilot({
     const context = await enrichContextForAi(baseContext as Record<string, unknown>);
 
     const selectedModel = useOverlayStore.getState().active_model;
-    await refreshCredits().catch(() => undefined);
+    await refreshCreditsFromStore().catch(() => undefined);
     // Match generate-answer charge path: screenshot_answer (10) when capture present, else live_answer (8).
     const creditCheck = checkCreditsForAction(
       screenshotBase64 ? "screenshotAnswer" : "fullAnswer",
@@ -748,10 +748,8 @@ export function useLiveCopilot({
           pendingCaptureMetaRef.current = null;
         }
 
-        const remaining = await refreshCredits();
-        if (remaining !== null) {
-          useSessionStore.getState().consumeCredit(creditCheck.creditsRequired);
-        }
+        await refreshCreditsFromStore().catch(() => undefined);
+        useSessionStore.getState().consumeCredit(creditCheck.creditsRequired);
       },
       onError: (err) => {
         if (sessionEndedRef.current) return;
@@ -766,7 +764,7 @@ export function useLiveCopilot({
           getAiUserFacingError(err) || "AI Help is temporarily unavailable. Please try again.",
         );
         useOverlayStore.getState().setHintState("idle");
-        void refreshCredits().catch(() => undefined);
+        void refreshCreditsFromStore().catch(() => undefined);
       },
       signal,
     });
@@ -815,7 +813,7 @@ export function useLiveCopilot({
 
       const selectedModel = useOverlayStore.getState().active_model;
       const answerMode = useOverlayStore.getState().answer_mode;
-      await refreshCredits().catch(() => undefined);
+      await refreshCreditsFromStore().catch(() => undefined);
       const creditCheck = checkCreditsForAction(
         answerMode === "full_answer" ? "fullAnswer" : "hint",
       );
@@ -894,8 +892,8 @@ export function useLiveCopilot({
             markAnswerLatency("t6", { feature: "live_hint" });
             useOverlayStore.getState().commitStreamedHint(operationId);
             checkpointLiveSession();
-            const remaining = await refreshCredits();
-            if (remaining !== null && stillCurrent()) {
+            await refreshCreditsFromStore().catch(() => undefined);
+            if (stillCurrent()) {
               useSessionStore.getState().consumeCredit(creditCheck.creditsRequired);
             }
           },
@@ -909,7 +907,7 @@ export function useLiveCopilot({
             openUpgradeIfInsufficientCredits(error);
             noteProviderFailureFromError(error);
             useOverlayStore.getState().setError(getAiUserFacingError(error));
-            void refreshCredits().catch(() => undefined);
+            void refreshCreditsFromStore().catch(() => undefined);
           },
           signal: controller.signal,
         });
@@ -924,7 +922,7 @@ export function useLiveCopilot({
             useOverlayStore.getState().setError(
               getAiUserFacingError(err) || "Hint generation failed",
             );
-            void refreshCredits().catch(() => undefined);
+            void refreshCreditsFromStore().catch(() => undefined);
           }
         }
       } finally {

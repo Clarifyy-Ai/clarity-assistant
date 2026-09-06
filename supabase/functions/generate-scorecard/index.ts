@@ -1201,18 +1201,21 @@ Deno.serve(async (req: Request) => {
     const answers = hasAnswers(allAnswerRows);
     const questionCount = allAnswerRows.length;
     const answerCount = answers.length;
+    const scorableAnswerCount = answers.filter(
+      (row) => !isNonResponsiveAnswer(sanitizeText(row.answer, 20_000)),
+    ).length;
 
     const sessionCompleted = isAuthoritativeSessionComplete({
       status,
       lifecycle_status: lifecycle,
       terminal_reason: terminalReason,
       ended_at: endedAt,
-      scorableAnswerCount: answerCount,
+      scorableAnswerCount,
     });
 
     const eligibility = resolveScorecardEligibility({
       sessionCompleted,
-      scorableAnswerCount: answerCount,
+      scorableAnswerCount,
       planAllowed: true,
       // Failed rows remain retryable; processing was handled above.
       evaluationStatus: null,
@@ -1312,6 +1315,14 @@ Deno.serve(async (req: Request) => {
       idempotencyKey,
       creditCost: CREDIT_COST,
       creditAction: "scorecard_generate",
+      assertBeforeCharge: () => {
+        if (scorableAnswerCount <= 0) {
+          throw new DomainError(
+            "INVALID_REQUEST",
+            "No scorable answers — scorecard charge blocked",
+          );
+        }
+      },
       body: {
         session_id: sessionId,
         answered: answers.length,

@@ -10,7 +10,7 @@ import { toggleAppStealthMode } from "@/lib/stealth/stealthActions";
 import { formatHotkeyLabel } from "@/lib/overlay/hotkeys";
 import { OVERLAY_HOTKEY_CATALOG } from "@/lib/overlay/hotkeyCatalog";
 import { isCapturePrimaryForInterviewType } from "@/lib/constants/interviewTypes";
-import { SERVER_AI_CREDIT_COSTS } from "@/lib/billing/creditsManager";
+import { SERVER_AI_CREDIT_COSTS } from "@/lib/billing/creditPrecheck";
 import { isCaptureBlockedByNetwork } from "@/lib/overlay/captureGating";
 import { cn } from "@/lib/utils";
 

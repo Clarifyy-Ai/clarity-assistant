@@ -54,7 +54,7 @@
 | `node_modules_mcp/`, `tmp-mcp-runner/` | MCP tooling residue |
 | `dist/`, `release/`, `release-new/` | Build/installer outputs |
 | `playwright-report/`, `test-results/`, `_qa_*`, QA workbooks | Audit/QA artifacts |
-| `supabase/functions/parakeet-token/` | Folder exists; **no `index.ts`** (orphan vs live functions) |
+| `supabase/functions/parakeet-token/` | **Removed** — retired STT path; live audio uses `deepgram-token` only |
 | `.lovable/` | Lovable platform metadata |
 
 ### 1.3 Missing hosting configs

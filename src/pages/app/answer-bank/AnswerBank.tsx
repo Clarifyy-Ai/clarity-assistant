@@ -33,7 +33,7 @@ import {
   getAiUserFacingError,
   openUpgradeIfInsufficientCredits,
 } from "@/lib/network/aiErrorUx";
-import { refreshCredits } from "@/lib/billing/creditsManager";
+import { refreshCreditsFromStore } from "@/lib/billing/creditPrecheck";
 import { useCredits, type CreditAction } from "@/hooks/useCredits";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 import {
@@ -752,7 +752,7 @@ function AddAnswerModal({
       setAnswer(text.slice(0, MAX_ANSWER_LENGTH));
       setAiDraft(true);
       generateKeyRef.current = null;
-      await refreshCredits().catch(() => undefined);
+      await refreshCreditsFromStore().catch(() => undefined);
       const usedFallback =
         parsed.source === "deterministic" ||
         parsed.source === "fallback" ||
@@ -766,7 +766,7 @@ function AddAnswerModal({
       generateKeyRef.current = null;
       openUpgradeIfInsufficientCredits(err);
       toast.error(getAiUserFacingError(err));
-      await refreshCredits().catch(() => undefined);
+      await refreshCreditsFromStore().catch(() => undefined);
     } finally {
       generateInFlightRef.current = false;
       setGenerating(false);

@@ -843,8 +843,8 @@ export async function fetchEdgeJson<T>(
 
   if (!CREDIT_REFRESH_SKIP.has(fnName)) {
     // Dynamic import avoids fetchEdge ↔ creditsManager at module init (boot TDZ).
-    const { refreshCredits } = await import("@/lib/billing/creditsManager");
-    void refreshCredits();
+    const { refreshCreditsFromStore } = await import("@/lib/billing/creditPrecheck");
+    void refreshCreditsFromStore();
   }
 
   return unwrapHybridPayload(payload) as T;

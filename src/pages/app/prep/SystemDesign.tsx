@@ -8,7 +8,7 @@ import {
   openUpgradeIfInsufficientCredits,
 } from "@/lib/network/aiErrorUx";
 import { supabase } from "@/integrations/supabase/client";
-import { refreshCredits } from "@/lib/billing/creditsManager";
+import { refreshCreditsFromStore } from "@/lib/billing/creditPrecheck";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useCredits } from "@/hooks/useCredits";
 import { useAuthStore } from "@/store/userStore";
@@ -244,7 +244,7 @@ export default function SystemDesign() {
         setGenPhase("FAILED");
         setError(validation.reason);
         toast.error(validation.reason);
-        await refreshCredits().catch(() => undefined);
+        await refreshCreditsFromStore().catch(() => undefined);
         return;
       }
 
@@ -253,7 +253,7 @@ export default function SystemDesign() {
       diagramLoadedRef.current = null;
       setGenPhase("COMPLETED");
       inflightKeyRef.current = null;
-      await refreshCredits().catch(() => undefined);
+      await refreshCreditsFromStore().catch(() => undefined);
     } catch (err) {
       if (controller.signal.aborted || seq !== generationSeqRef.current) return;
       openUpgradeIfInsufficientCredits(err);
@@ -263,7 +263,7 @@ export default function SystemDesign() {
       setGenPhase("FAILED");
       setError(message);
       toast.error(message);
-      await refreshCredits().catch(() => undefined);
+      await refreshCreditsFromStore().catch(() => undefined);
     } finally {
       if (seq === generationSeqRef.current) {
         genInFlightRef.current = false;

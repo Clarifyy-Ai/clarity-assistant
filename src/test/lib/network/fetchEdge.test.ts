@@ -44,8 +44,8 @@ vi.mock("@/lib/env", () => ({
   SUPABASE_PUBLISHABLE_KEY: "anon-key",
 }));
 
-vi.mock("@/lib/billing/creditsManager", () => ({
-  refreshCredits: (...args: unknown[]) => mockRefreshCredits(...args),
+vi.mock("@/lib/billing/creditPrecheck", () => ({
+  refreshCreditsFromStore: (...args: unknown[]) => mockRefreshCredits(...args),
 }));
 
 const originalFetch = global.fetch;

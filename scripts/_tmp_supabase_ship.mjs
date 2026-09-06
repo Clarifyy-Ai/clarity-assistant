@@ -21,6 +21,9 @@ const migrationsOnly = args.has("--migrations-only");
 const functionsOnly = args.has("--functions-only");
 const onlySlug = process.argv.find((a) => a.startsWith("--only="))?.slice("--only=".length);
 
+/** Retired or scaffold-only slugs — never deploy (frees plan slots, avoids missing index.ts failures). */
+const DEPLOY_SKIP_SLUGS = new Set(["parakeet-token"]);
+
 
 const API = `https://api.supabase.com/v1/projects/${REF}`;
 const headers = { Authorization: `Bearer ${TOKEN}`, Accept: "application/json" };
@@ -160,7 +163,12 @@ async function deployAllFunctions() {
       ? [onlySlug]
       : fs
           .readdirSync(fnRoot)
-          .filter((n) => !n.startsWith("_") && fs.statSync(path.join(fnRoot, n)).isDirectory())
+          .filter(
+            (n) =>
+              !n.startsWith("_") &&
+              !DEPLOY_SKIP_SLUGS.has(n) &&
+              fs.statSync(path.join(fnRoot, n)).isDirectory(),
+          )
   ).sort();
   console.log(`\nDeploying ${slugs.length} functions via Management API...`);
   const ok = [];

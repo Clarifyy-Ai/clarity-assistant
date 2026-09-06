@@ -21,7 +21,7 @@ import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PAGE_SHELL } from "@/lib/ui/responsivePage";
 import { answerBankDB } from "@/lib/supabase/database";
-import { refreshCredits } from "@/lib/billing/creditsManager";
+import { refreshCreditsFromStore } from "@/lib/billing/creditPrecheck";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { withPrepToolContext } from "@/lib/prep/prepToolContext";
 import { generateCompanyBrief, userFacingCompanyBriefError, cancelCompanyResearchJob, isCompanyBriefInFlight, type CompanyBriefJob } from "@/lib/company/companyResearchJob";
@@ -203,7 +203,7 @@ function STARBuilder() {
       if (!polished) throw new Error("AI rewrite returned empty content.");
       setStar((p) => ({ ...p, [key]: polished }));
       polishKeysRef.current[key] = undefined;
-      await refreshCredits();
+      await refreshCreditsFromStore();
     } catch (err) {
       const prior = originalSectionRef.current[key];
       if (typeof prior === "string") {
@@ -214,7 +214,7 @@ function STARBuilder() {
         ? "AI improvement is temporarily unavailable."
         : getAiUserFacingError(err);
       toast.error(msg);
-      await refreshCredits().catch(() => undefined);
+      await refreshCreditsFromStore().catch(() => undefined);
     } finally {
       setAiLoading(null);
     }
@@ -259,14 +259,14 @@ function STARBuilder() {
       }));
       setGenerated(buildStarAnswerText(parts) || text);
       generateKeyRef.current = null;
-      await refreshCredits();
+      await refreshCreditsFromStore();
     } catch (err) {
       openUpgradeIfInsufficientCredits(err);
       const msg = isAiProviderUnavailableError(err)
         ? "AI improvement is temporarily unavailable."
         : getAiUserFacingError(err);
       toast.error(msg);
-      await refreshCredits().catch(() => undefined);
+      await refreshCreditsFromStore().catch(() => undefined);
     } finally {
       setLoading(false);
     }
@@ -728,7 +728,7 @@ function AIToolModal({
         },
       });
       setOutput(data.result ?? "");
-      await refreshCredits();
+      await refreshCreditsFromStore();
     } catch (err) {
       console.error("AI tool run() failed:", err);
       openUpgradeIfInsufficientCredits(err);
@@ -859,7 +859,7 @@ function CompanyPrep() {
       clearActiveCompanyJob(jobIdRef.current ?? undefined);
       setBrief(result.brief);
       setBriefSource(result.source ?? null);
-      await refreshCredits();
+      await refreshCreditsFromStore();
     } catch (err) {
       openUpgradeIfInsufficientCredits(err);
       toast.error(userFacingCompanyBriefError(err));

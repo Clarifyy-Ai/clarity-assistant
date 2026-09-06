@@ -55,10 +55,13 @@ const retired = [
   "ai-feedback",
   "generate-practice-questions",
   "validate-api-key",
-  "end-session",
   "save-answer",
   "save-transcript",
   "billing-status",
+  "create-checkout",
+  "create-billing-portal",
+  "cancel-subscription",
+  "resume-subscription",
 ];
 for (const slug of retired) {
   const src = fs.readFileSync(path.join(fnRoot, slug, "index.ts"), "utf8");

@@ -4,7 +4,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
 import { CREDIT_COSTS as UI_CREDIT_COSTS } from "@/hooks/useCredits";
-import { CREDIT_COSTS as MANAGER_COSTS, SERVER_AI_CREDIT_COSTS } from "@/lib/billing/creditsManager";
+import { CREDIT_COSTS as MANAGER_COSTS } from "@/lib/billing/creditsManager";
+import { SERVER_AI_CREDIT_COSTS } from "@/lib/billing/creditPrecheck";
 import { CREDIT_COSTS as PRICE_COSTS } from "@/lib/billing/priceCalculator";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");

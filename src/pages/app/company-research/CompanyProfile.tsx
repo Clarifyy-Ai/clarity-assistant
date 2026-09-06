@@ -456,11 +456,20 @@ export default function CompanyProfile() {
           ]}
         />
         {job && isCompanyBriefInFlight(job.status) ? (
-          <JobProgressCard
-            title="Company research"
-            progress={mapCompanyBriefJobToProgress(job)}
-            onCancel={() => void cancelInFlight()}
-          />
+          <>
+            <JobProgressCard
+              title="Company research"
+              progress={mapCompanyBriefJobToProgress(job)}
+              onCancel={() => void cancelInFlight()}
+            />
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => void cancelInFlight()}
+            >
+              Cancel generation
+            </Button>
+          </>
         ) : job ? (
           <JobProgressCard
             title="Company research"

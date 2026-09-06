@@ -5,7 +5,7 @@ import {
   getAiUserFacingError,
   openUpgradeIfInsufficientCredits,
 } from "@/lib/network/aiErrorUx";
-import { refreshCredits } from "@/lib/billing/creditsManager";
+import { refreshCreditsFromStore } from "@/lib/billing/creditPrecheck";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useCredits } from "@/hooks/useCredits";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -206,7 +206,7 @@ export default function CodingHints() {
         setRestoredFromDb(false);
       }
       hintKeyRef.current = null;
-      await refreshCredits();
+      await refreshCreditsFromStore();
     } catch (err) {
       openUpgradeIfInsufficientCredits(err);
       const message = getAiUserFacingError(err);
@@ -248,7 +248,7 @@ export default function CodingHints() {
         setRestoredFromDb(false);
       }
       solutionKeyRef.current = null;
-      await refreshCredits();
+      await refreshCreditsFromStore();
     } catch (err) {
       openUpgradeIfInsufficientCredits(err);
       const message = getAiUserFacingError(err);

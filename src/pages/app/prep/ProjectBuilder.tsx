@@ -7,7 +7,7 @@ import {
   isInsufficientCreditsError,
   openUpgradeIfInsufficientCredits,
 } from "@/lib/network/aiErrorUx";
-import { refreshCredits } from "@/lib/billing/creditsManager";
+import { refreshCreditsFromStore } from "@/lib/billing/creditPrecheck";
 import { useState, useEffect } from "react";
 import { useCredits } from "@/hooks/useCredits";
 import { useAuthStore } from "@/store/userStore";
@@ -260,7 +260,7 @@ export default function ProjectBuilder() {
         setEditingId(entry.id);
         await reloadProjects();
       }
-      await refreshCredits();
+      await refreshCreditsFromStore();
     } catch (err) {
       openUpgradeIfInsufficientCredits(err);
       if (isInsufficientCreditsError(err)) {
