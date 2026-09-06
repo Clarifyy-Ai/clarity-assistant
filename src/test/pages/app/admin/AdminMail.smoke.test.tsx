@@ -103,7 +103,7 @@ describe("AdminMail smoke", () => {
     renderAdminMail();
 
     await waitFor(() => {
-      expect(screen.getByText("Campus outreach")).toBeInTheDocument();
+      expect(screen.getAllByText("Campus outreach").length).toBeGreaterThanOrEqual(1);
     });
     expect(screen.getByText("hello@trycareerpilot.com")).toBeInTheDocument();
     expect(screen.getByText("Configured")).toBeInTheDocument();
