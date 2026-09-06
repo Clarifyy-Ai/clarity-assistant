@@ -447,15 +447,18 @@ export type AssessmentAvailabilityItem = {
 
 export async function checkAssessmentAvailability(
   templateIds: string[],
+  options?: { timeoutMs?: number },
 ): Promise<AssessmentAvailabilityItem[]> {
   if (templateIds.length === 0) return [];
   const result = await fetchEdgeJson<{
     items?: AssessmentAvailabilityItem[];
     template_id?: string;
     startable?: boolean;
-  } & AssessmentAvailabilityItem>("check-assessment-availability", {
-    template_ids: templateIds,
-  });
+  } & AssessmentAvailabilityItem>(
+    "check-assessment-availability",
+    { template_ids: templateIds },
+    { timeoutMs: options?.timeoutMs ?? 45_000 },
+  );
   if (Array.isArray(result.items)) return result.items;
   if (result.template_id) return [result];
   return [];

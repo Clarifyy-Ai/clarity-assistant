@@ -39,6 +39,7 @@ import {
   getOrBuildSessionAiContext,
   lastTranscriptSlice,
 } from "@/lib/ai/sessionAiContext";
+import { loadSessionHistoryContext } from "@/lib/ai/userApplicationContext";
 import { sanitizeCoachTone } from "@/lib/ai/practiceCoachContract";
 import { loadCompanyResearchBriefBlock } from "@/lib/company/loadCompanyResearchBrief";
 import {
@@ -375,9 +376,29 @@ export function useLiveCopilot({
             .filter(Boolean)
             .join("\n\n");
 
+      const history = await loadSessionHistoryContext(userId).catch(() => ({
+        block: "",
+        snippets: [],
+        recentAnswerSummaries: [],
+      }));
+      const resumeWithApplication = [resumeWithPrefs, history.block]
+        .filter(Boolean)
+        .join("\n\n");
+
+      const priorSummaries =
+        history.recentAnswerSummaries.length > 0
+          ? history.recentAnswerSummaries
+          : Array.isArray(base.last_3_answer_summaries)
+            ? (base.last_3_answer_summaries as Array<{
+                question?: string;
+                score?: number;
+                key_weakness?: string | null;
+              }>)
+            : [];
+
       return {
         ...base,
-        resume_experience_summary: resumeWithPrefs || String(base.resume_experience_summary ?? ""),
+        resume_experience_summary: resumeWithApplication || String(base.resume_experience_summary ?? ""),
         resume_skills: cached.parsedSkills.length
           ? cached.parsedSkills
           : parsed?.skills ?? base.resume_skills,
@@ -398,6 +419,7 @@ export function useLiveCopilot({
         jd_text: frozen?.jd_text ?? docs.jd ?? null,
         ai_context_snapshot_id: frozen?.snapshot_id ?? null,
         ai_context_checksum: frozen?.checksum ?? null,
+        last_3_answer_summaries: priorSummaries,
       };
     },
     [profile],
@@ -1121,10 +1143,7 @@ export function useLiveCopilot({
 
     try {
       const privateMode = getPrivateMode();
-      if (reusableSessionId && !privateMode) {
-        sessionIdRef.current = reusableSessionId;
-        await activateSession(reusableSessionId);
-      } else if (!privateMode) {
+      if (!privateMode) {
         const apiSessionType = sessionType;
         if (!startAttemptKeyRef.current) {
           try {
@@ -1491,7 +1510,26 @@ export function useLiveCopilot({
       }
     }
 
+    // Drop overlay UI immediately — finalize runs on the snapshot above.
+    useSessionStore.getState().setStatus("completed");
+    useOverlayStore.getState().hideOverlay();
+    teardownOverlayProductSession(gen);
+
     if (userId && session.session_id && !getPrivateMode()) {
+      // Close coach thread in background — finalize-session is the source of truth.
+      void (async () => {
+        try {
+          const { supabase } = await import("@/lib/supabase/client");
+          await supabase
+            .from("coach_conversations")
+            .update({ status: "closed", updated_at: new Date().toISOString() })
+            .eq("session_id", session.session_id)
+            .eq("user_id", userId);
+        } catch {
+          /* non-fatal */
+        }
+      })();
+
       try {
         const fullTranscript = audioState.transcript?.full_transcript ?? "";
         const utterances = audioState.transcript?.utterances ?? [];
@@ -1502,18 +1540,6 @@ export function useLiveCopilot({
         const saveTranscript =
           overlay.save_transcript &&
           parsePrivacyPrefs(profile?.privacy_prefs).store_transcripts;
-
-        // Mark coach conversation closed (history rows retained for the session).
-        try {
-          const { supabase } = await import("@/lib/supabase/client");
-          await supabase
-            .from("coach_conversations")
-            .update({ status: "closed", updated_at: new Date().toISOString() })
-            .eq("session_id", session.session_id)
-            .eq("user_id", userId);
-        } catch {
-          /* non-fatal — finalization below is the source of truth for history */
-        }
 
         const result = await finalizeSessionApi({
           session_id: session.session_id,
@@ -1544,26 +1570,29 @@ export function useLiveCopilot({
         toast.success("Session saved");
         notifySessionsChanged();
 
-        try {
-          const { data: streakData, error: streakError } = await supabase.rpc(
-            "record_practice_activity",
-            { p_user_id: userId },
-          );
-          if (!streakError && streakData && typeof streakData === "object") {
-            const row = streakData as {
-              streak_current?: number;
-              streak_longest?: number;
-              last_activity?: string | null;
-            };
-            useGamificationStore.getState().setStreak(
-              row.streak_current ?? 0,
-              row.streak_longest ?? 0,
-              row.last_activity ?? null,
+        void (async () => {
+          try {
+            const { supabase } = await import("@/lib/supabase/client");
+            const { data: streakData, error: streakError } = await supabase.rpc(
+              "record_practice_activity",
+              { p_user_id: userId },
             );
+            if (!streakError && streakData && typeof streakData === "object") {
+              const row = streakData as {
+                streak_current?: number;
+                streak_longest?: number;
+                last_activity?: string | null;
+              };
+              useGamificationStore.getState().setStreak(
+                row.streak_current ?? 0,
+                row.streak_longest ?? 0,
+                row.last_activity ?? null,
+              );
+            }
+          } catch {
+            /* streak update is best-effort */
           }
-        } catch {
-          /* streak update is best-effort */
-        }
+        })();
 
         // Populate Analytics scorecards when answers or transcript evidence exist.
         const hasTranscriptEvidence =
@@ -1587,7 +1616,6 @@ export function useLiveCopilot({
     }
 
     useOverlayStore.getState().setSessionPipelineState("session_saved");
-    teardownOverlayProductSession(gen);
     return { answersRecorded };
   }, [audio, profile?.id]);
 

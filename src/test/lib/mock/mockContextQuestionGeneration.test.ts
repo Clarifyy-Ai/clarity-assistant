@@ -39,6 +39,8 @@ describe("BUG 10 — mock questions use resume/domain context", () => {
     expect(source).toContain("resume_digest");
     expect(source).toContain("phase:");
     expect(source).toContain("competency:");
+    expect(source).toContain("MOST RECENT ANSWER");
+    expect(source).toContain("previous_answers_digest");
   });
 
   it("requestHash includes distinct digests for different resumes", () => {

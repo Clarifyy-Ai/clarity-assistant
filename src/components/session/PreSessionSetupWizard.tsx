@@ -171,11 +171,15 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
 
   const lastSetup = useMemo(() => loadLastPracticeSetup(), []);
   const practiceContextId = searchParams.get("context");
-  const [showWizard, setShowWizard] = useState(
-    // Mock always uses the full wizard so options cards and Practice Coach
-    // quick-start never stack/bleed on the same page.
-    () => sessionType === "mock" || sessionType === "live" || !lastSetup || Boolean(practiceContextId),
-  );
+  const [showWizard, setShowWizard] = useState(() => {
+    if (practiceContextId) return true;
+    if (sessionType === "mock") {
+      // Mock page stacks option cards above the wizard — quick-start is opt-in via link.
+      return true;
+    }
+    // Live Practice Coach: returning users get one-click start when a setup is saved.
+    return !lastSetup;
+  });
   const [practiceQuestion, setPracticeQuestion] = useState<string | null>(null);
   const [contextLoadError, setContextLoadError] = useState<string | null>(null);
   const [quickAudioReady, setQuickAudioReady] = useState(false);
@@ -844,7 +848,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
     );
   }
 
-  if (sessionType === "mock" && !showWizard && lastSetup && !practiceContextId) {
+  if (!showWizard && lastSetup && !practiceContextId) {
     const quickResumeTitle =
       resumes.find((r) => r.id === (lastSetup.resume_id ?? activeResumeId))?.title ?? null;
     const quickLanguage = lastSetup.language ?? "English";
@@ -946,7 +950,11 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
           {lastSetup && !practiceContextId && (
             <button
               type="button"
-              onClick={() => setShowWizard(false)}
+              onClick={() => {
+                applyLastSetup(lastSetup);
+                setShowWizard(false);
+                setStep(1);
+              }}
               className="mt-2 text-xs text-primary hover:underline"
             >
               Back to one-click start

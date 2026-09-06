@@ -7,6 +7,8 @@ import { Card } from "@/components/ui/Card";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/authStore";
 import { PAGE_SHELL } from "@/lib/ui/responsivePage";
+import { YoutubeEmbed } from "@/components/learning/YoutubeEmbed";
+import { isYoutubeUrl } from "@/lib/learning/youtube";
 
 type Lesson = {
   id: string;
@@ -82,9 +84,13 @@ export default function LessonPlayerPage() {
           <p className="mt-4 whitespace-pre-wrap text-sm leading-6">{lesson.content_text}</p>
         )}
         {lesson?.resource_url && (lesson.lesson_type === "video_url" || lesson.lesson_type === "external") && (
-          <a className="mt-4 inline-block break-all text-sm text-primary underline" href={lesson.resource_url} target="_blank" rel="noreferrer">
-            Open resource
-          </a>
+          isYoutubeUrl(lesson.resource_url) ? (
+            <YoutubeEmbed url={lesson.resource_url} title={lesson.title} className="mt-4" />
+          ) : (
+            <a className="mt-4 inline-block break-all text-sm text-primary underline" href={lesson.resource_url} target="_blank" rel="noreferrer">
+              Open resource
+            </a>
+          )
         )}
         {lesson?.resource_url && ["pdf", "ppt", "doc"].includes(lesson.lesson_type) && (
           <a className="mt-4 inline-block break-all text-sm text-primary underline" href={lesson.resource_url} target="_blank" rel="noreferrer">

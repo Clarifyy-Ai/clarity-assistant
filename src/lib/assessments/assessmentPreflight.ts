@@ -166,7 +166,7 @@ export function mapAvailabilityItem(
  */
 export async function preflightAssessmentTemplates(
   templateIds: string[],
-  opts?: { requestedByTemplateId?: Record<string, number> },
+  opts?: { requestedByTemplateId?: Record<string, number>; timeoutMs?: number },
 ): Promise<AssessmentPreflightResult> {
   const ids = [...new Set(templateIds.filter(Boolean))];
   const byTemplateId: Record<string, AssessmentPreflightItem> = {};
@@ -176,7 +176,9 @@ export async function preflightAssessmentTemplates(
   }
 
   try {
-    const items = await checkAssessmentAvailability(ids);
+    const items = await checkAssessmentAvailability(ids, {
+      timeoutMs: opts?.timeoutMs,
+    });
     const found = new Map<string, AssessmentAvailabilityItem>();
     for (const item of items) {
       if (item.template_id) found.set(item.template_id, item);

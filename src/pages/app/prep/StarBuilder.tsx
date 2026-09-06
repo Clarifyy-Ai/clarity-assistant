@@ -215,7 +215,7 @@ export default function StarBuilder() {
 
     try {
 
-      const data = await fetchEdgeJson<Record<string, unknown>>("prep-tool", withPrepToolContext({
+      const data = await fetchEdgeJson<Record<string, unknown>>("prep-tool", await withPrepToolContext({
         tool_id: "star_method",
         input,
       }), {

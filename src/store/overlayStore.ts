@@ -955,11 +955,12 @@ export const useOverlayStore = create<OverlayStore>()(
       setSessionLanguage: (session_language) => set({ session_language }),
       setActiveTab: (active_tab) =>
         set((s) => {
+          // Dismiss the pulse/badge when user opens Chat, but keep the recovery
+          // reason so typed input still routes to AI Help (not generic coach chat).
           if (active_tab === "chat" && s.chat_attention) {
             return {
               active_tab,
               chat_attention: false,
-              chat_attention_reason: null,
             };
           }
           return { active_tab };

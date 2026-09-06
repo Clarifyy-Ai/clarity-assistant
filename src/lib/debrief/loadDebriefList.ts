@@ -23,6 +23,28 @@ import type {
   DebriefSessionEligibility,
 } from "@/lib/debrief/debriefPageState";
 
+const LIST_TIMEOUT_MS = 45_000;
+const LIST_RETRY_TIMEOUT_MS = 60_000;
+
+async function fetchDebriefListFromEdge(): Promise<EdgeListPayload> {
+  try {
+    return await fetchEdgeJson<EdgeListPayload>("list-session-debriefs", {}, {
+      timeoutMs: LIST_TIMEOUT_MS,
+    });
+  } catch (firstErr) {
+    if (
+      firstErr instanceof ApiClientError &&
+      (firstErr.code === "FEATURE_NOT_AVAILABLE_FOR_PLAN" ||
+        firstErr.code === "CAPABILITY_REQUIRED")
+    ) {
+      throw firstErr;
+    }
+    return await fetchEdgeJson<EdgeListPayload>("list-session-debriefs", {}, {
+      timeoutMs: LIST_RETRY_TIMEOUT_MS,
+    });
+  }
+}
+
 export type DebriefListLoadResult = {
   source: "edge" | "client";
   access: DebriefListAccess;
@@ -62,9 +84,7 @@ export async function loadDebriefListPage(input: {
   planId: string;
 }): Promise<DebriefListLoadResult> {
   try {
-    const edge = await fetchEdgeJson<EdgeListPayload>("list-session-debriefs", {}, {
-      timeoutMs: 20_000,
-    });
+    const edge = await fetchDebriefListFromEdge();
     if (edge?.access) {
       return {
         source: "edge",

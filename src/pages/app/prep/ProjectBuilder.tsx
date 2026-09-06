@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { AiFormattedOutput } from "@/components/common/AiFormattedOutput";
 import { ProcessingStatus } from "@/components/async/ProcessingStatus";
 import { AI_OP_STAGES } from "@/lib/async/aiOpStages";
@@ -36,14 +37,14 @@ function rowToProject(row: Tables<"prep_projects">): SavedProject {
   const stack = row.tech_stack;
   return {
     id: row.id,
-    projectName: row.project_name,
-    role: row.role,
+    projectName: row.project_name ?? "",
+    role: row.role ?? "",
     techStack: Array.isArray(stack) ? (stack as string[]) : [],
-    description: row.description,
-    impact: row.impact,
-    githubUrl: row.github_url,
-    showcase: row.showcase,
-    updatedAt: row.updated_at,
+    description: row.description ?? "",
+    impact: row.impact ?? "",
+    githubUrl: row.github_url ?? "",
+    showcase: row.showcase ?? "",
+    updatedAt: row.updated_at ?? new Date().toISOString(),
   };
 }
 
@@ -236,7 +237,7 @@ export default function ProjectBuilder() {
     try {
       const techList = techStack.length > 0 ? techStack.join(", ") : "not specified";
       const input = `Project: ${projectName}\nRole: ${role}\nTech Stack: ${techList}\n\nWhat I did:\n${description}${impact ? `\n\nImpact & Metrics:\n${impact}` : ""}${githubUrl ? `\n\nGitHub/Portfolio URL: ${githubUrl}` : ""}`;
-      const data = await fetchEdgeJson<{ result?: string }>("prep-tool", withPrepToolContext({
+      const data = await fetchEdgeJson<{ result?: string }>("prep-tool", await withPrepToolContext({
         tool_id: "project_build",
         input,
       }), {

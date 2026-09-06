@@ -42,8 +42,21 @@ function httpStatusForShareCode(code: SessionShareabilityCode): number {
 function parsePrivacyShareAllowed(raw: unknown): boolean {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return true;
   const prefs = raw as Record<string, unknown>;
-  if (!("share_scorecard" in prefs)) return true;
-  return prefs.share_scorecard === true;
+  if ("share_scorecard" in prefs) {
+    const v = prefs.share_scorecard;
+    if (typeof v === "boolean") return v;
+    if (v === "true" || v === 1) return true;
+    if (v === "false" || v === 0) return false;
+    return true;
+  }
+  if ("allow_scorecard_sharing" in prefs) {
+    const v = prefs.allow_scorecard_sharing;
+    if (typeof v === "boolean") return v;
+    if (v === "true" || v === 1) return true;
+    if (v === "false" || v === 0) return false;
+    return true;
+  }
+  return true;
 }
 
 function hasMeaningfulAnswer(row: { answer?: unknown }): boolean {

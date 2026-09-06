@@ -1,10 +1,13 @@
-import { Outlet, useSearchParams } from "react-router-dom";
+import { Outlet, useLocation, useSearchParams } from "react-router-dom";
 import { ErrorBoundary } from "@/components/layout/ErrorBoundary";
 import { InShellErrorPanel } from "@/components/layout/RouteErrorFallback";
 
 /**
  * Nested under AppShell / AdminLayout so chrome stays mounted when a child page throws.
  * Also used as the React Router path that owns `errorElement`.
+ *
+ * Remount the boundary on each pathname change so a prior page crash does not block
+ * client-side navigation (refresh worked because it remounted the whole tree).
  */
 export function ShellRouteOutlet({
   homeTo = "/app/dashboard",
@@ -13,8 +16,11 @@ export function ShellRouteOutlet({
   homeTo?: string;
   scope?: string;
 }): JSX.Element {
+  const location = useLocation();
+
   return (
     <ErrorBoundary
+      key={location.pathname}
       fallback={(error, retry) => (
         <InShellErrorPanel
           error={error}

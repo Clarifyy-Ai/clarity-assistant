@@ -239,7 +239,7 @@ function STARBuilder() {
     generateKeyRef.current = idempotencyKey;
 
     try {
-      const data = await fetchEdgeJson<Record<string, unknown>>("prep-tool", withPrepToolContext({
+      const data = await fetchEdgeJson<Record<string, unknown>>("prep-tool", await withPrepToolContext({
         tool_id: "star_method",
         input,
       }), {
@@ -719,7 +719,7 @@ function AIToolModal({
 
     try {
 
-      const data = await fetchEdgeJson<{ result?: string }>("prep-tool", withPrepToolContext({
+      const data = await fetchEdgeJson<{ result?: string }>("prep-tool", await withPrepToolContext({
         tool_id: toolId,
         input,
       }), {

@@ -1,9 +1,13 @@
 /**
- * Shared profile/resume/JD context for Prep Lab Edge calls.
+ * Shared application context for Prep Lab Edge calls (profile + documents + history).
  */
 import { useAuthStore } from "@/store/userStore";
 import { useDocumentStore } from "@/store/documentStore";
 import { buildPrepProfileContext } from "@/lib/ai/buildFeatureContext";
+import {
+  loadUserApplicationContext,
+  userApplicationContextForPrep,
+} from "@/lib/ai/userApplicationContext";
 
 export function getPrepToolProfileContext(): Record<string, unknown> {
   const profile = useAuthStore.getState().profile;
@@ -27,12 +31,28 @@ export function getPrepToolProfileContext(): Record<string, unknown> {
   });
 }
 
-/** Merge structured context into prep-tool request body. */
-export function withPrepToolContext<T extends Record<string, unknown>>(
+/** Merge full application context into prep-tool request body. */
+export async function withPrepToolContext<T extends Record<string, unknown>>(
   body: T,
-): T & { context: Record<string, unknown> } {
-  return {
-    ...body,
-    context: getPrepToolProfileContext(),
-  };
+): Promise<T & { context: Record<string, unknown> }> {
+  const userId = useAuthStore.getState().user?.id;
+  if (!userId) {
+    return {
+      ...body,
+      context: getPrepToolProfileContext(),
+    };
+  }
+
+  try {
+    const app = await loadUserApplicationContext(userId, { includeHistory: true });
+    return {
+      ...body,
+      context: userApplicationContextForPrep(app),
+    };
+  } catch {
+    return {
+      ...body,
+      context: getPrepToolProfileContext(),
+    };
+  }
 }

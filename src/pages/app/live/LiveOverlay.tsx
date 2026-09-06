@@ -21,6 +21,7 @@ import type { MicPermissionState } from "@/lib/audio/micPermission";
 import { Skeleton } from "@/components/ui/SkeletonLoader";
 import type { LiveSessionConfig } from "@/types/session.types";
 import { notifyOverlayVisibilityOnMobile } from "@/lib/overlay/overlayVisibilityNotice";
+import { resolveChatRecoveryReason } from "@/lib/overlay/sessionConversation";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { setGenerateAnswerHandler } from "@/lib/overlay/hotkeys";
 import { isElectronApp } from "@/lib/platform/isElectron";
@@ -50,6 +51,7 @@ import { syncOverlayAuthReady } from "@/lib/session/overlayProductSession";
 import { resetTransientOverlaySessionStores } from "@/lib/session/resetOverlaySessionStores";
 import { useOverlaySessionAuthorityStore } from "@/store/overlaySessionAuthorityStore";
 import { OverlaySessionPreparing } from "@/components/overlay/OverlaySessionPreparing";
+import { FullPageProcessingState } from "@/components/async/FullPageProcessingState";
 
 const HEARTBEAT_INTERVAL_MS = 50_000;
 
@@ -416,6 +418,7 @@ function LiveOverlaySession() {
     didEndRef.current = true;
     setPhase("ending");
     clearPendingPracticeSetup();
+    useOverlayStore.getState().hideOverlay();
 
     // Snapshot ids/duration before ending — store reset may clear them.
     // Answer count comes from persist so the summary does not offer a dead scorecard.
@@ -495,18 +498,16 @@ function LiveOverlaySession() {
   const handleManualQuestion = useCallback(
     async (question: string) => {
       const store = useOverlayStore.getState();
-      const reason = store.chat_attention_reason;
       const trimmed = question.trim();
       if (!trimmed) return false;
 
+      const recoveryReason = resolveChatRecoveryReason({
+        chatAttentionReason: store.chat_attention_reason,
+        sessionPipelineState: store.session_pipeline_state,
+      });
+
       // Recovery from listen/question failure: treat typed text as the interview question.
-      if (
-        reason === "low_confidence" ||
-        reason === "manual_needed" ||
-        reason === "listening_timeout" ||
-        reason === "audio_unavailable" ||
-        reason === "stt_reconnect_failed"
-      ) {
+      if (recoveryReason) {
         store.clearChatAttention();
         store.clearAiHelpConfirm();
         store.setCurrentQuestion(trimmed);
@@ -628,7 +629,13 @@ function LiveOverlaySession() {
           {IS_ELECTRON ? "Open web app" : "Dashboard"}
         </button>
         <span className="text-xs text-muted-foreground truncate">
-          {isActive ? "Session active" : isPaused ? "Session paused" : "Session ended"}
+          {phase === "ending"
+            ? "Saving session…"
+            : isActive
+              ? "Session active"
+              : isPaused
+                ? "Session paused"
+                : "Session ended"}
         </span>
       </header>
 
@@ -653,7 +660,7 @@ function LiveOverlaySession() {
         </div>
       )}
 
-      {canMountOverlay && (
+      {canMountOverlay && phase === "active" && (
         <OverlayWindow
           key={`live-overlay-${sessionId ?? lastSessionId ?? "pending"}`}
           onToggleMic={copilot.toggleMute}
@@ -718,6 +725,13 @@ function LiveOverlaySession() {
       )}
 
       {/* Centre content */}
+      {phase === "ending" ? (
+        <FullPageProcessingState
+          title="Saving your session"
+          message="Writing transcript, answers, and session history. This usually takes a few seconds."
+          stage="finalize"
+        />
+      ) : (
       <div className="flex items-center justify-center min-h-[60vh] pt-14 px-4">
         <div className="text-center space-y-3">
           {isActive || isPaused ? (
@@ -789,6 +803,7 @@ function LiveOverlaySession() {
           )}
         </div>
       </div>
+      )}
     </>
   );
 }

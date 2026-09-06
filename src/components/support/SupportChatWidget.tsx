@@ -784,6 +784,12 @@ export function SupportChatWidget() {
               <textarea
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    void submitMessage();
+                  }
+                }}
                 rows={2}
                 maxLength={SUPPORT_MAX_BODY}
                 placeholder={SUPPORT_COMPOSER_PLACEHOLDER}

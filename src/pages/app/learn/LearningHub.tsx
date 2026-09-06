@@ -9,6 +9,7 @@ import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/authStore";
 import { PAGE_SHELL, STACK_GRID } from "@/lib/ui/responsivePage";
 import { listPublishedLearningCourses } from "@/lib/learning/catalog";
+import { FeaturedYoutubeSection } from "@/components/learning/FeaturedYoutubeSection";
 
 type Course = {
   id: string;
@@ -69,26 +70,34 @@ export default function LearningHubPage() {
         <EmptyState title="Learning Hub unavailable" description={error} actionLabel="Retry" onAction={() => void load()} />
       )}
       {!error && isPreview ? (
-        <EmptyState
-          icon={BookOpen}
-          title="No published courses yet"
-          description="Preview only — no published Career Pilot courses are available. Content will appear here after an admin publishes a course."
-          actionLabel={isAdmin ? "Create a course" : undefined}
-          onAction={isAdmin ? () => navigate("/app/admin/learning") : undefined}
-        />
+        <div className="space-y-8">
+          <EmptyState
+            icon={BookOpen}
+            title="No published courses yet"
+            description="Preview only — no published Career Pilot courses are available. Content will appear here after an admin publishes a course."
+            actionLabel={isAdmin ? "Create a course" : undefined}
+            onAction={isAdmin ? () => navigate("/app/admin/learning") : undefined}
+          />
+          <FeaturedYoutubeSection />
+        </div>
       ) : !error ? (
-      <div className={STACK_GRID}>
-        {courses.map((course) => (
-          <Card key={course.id} className="flex min-w-0 flex-col">
-            <h2 className="text-base font-semibold">{course.title}</h2>
-            <p className="mt-1 text-sm text-muted-foreground">{course.description}</p>
-            <p className="mt-3 text-sm">Duration {course.duration_hours ?? 0} hours</p>
-            <p className="text-sm font-medium">Course progress: {progress[course.id] ?? 0}%</p>
-            <Link to={`/app/learn/${course.id}`} className="mt-4">
-              <Button fullWidth>Open course</Button>
-            </Link>
-          </Card>
-        ))}
+      <div className="space-y-8">
+        {courses.length > 0 ? (
+          <div className={STACK_GRID}>
+            {courses.map((course) => (
+              <Card key={course.id} className="flex min-w-0 flex-col">
+                <h2 className="text-base font-semibold">{course.title}</h2>
+                <p className="mt-1 text-sm text-muted-foreground">{course.description}</p>
+                <p className="mt-3 text-sm">Duration {course.duration_hours ?? 0} hours</p>
+                <p className="text-sm font-medium">Course progress: {progress[course.id] ?? 0}%</p>
+                <Link to={`/app/learn/${course.id}`} className="mt-4">
+                  <Button fullWidth>Open course</Button>
+                </Link>
+              </Card>
+            ))}
+          </div>
+        ) : null}
+        <FeaturedYoutubeSection />
       </div>
       ) : null}
     </div>

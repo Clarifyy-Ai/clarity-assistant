@@ -140,7 +140,7 @@ export default function Rephraser() {
       const data = await fetchEdgeJson<{
         result?: string;
         alternatives?: Alternatives;
-      }>("prep-tool", withPrepToolContext({
+      }>("prep-tool", await withPrepToolContext({
         tool_id: "rephrase",
         input: original,
       }), {

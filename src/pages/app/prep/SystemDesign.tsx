@@ -224,7 +224,7 @@ export default function SystemDesign() {
       inflightKeyRef.current = idempotencyKey;
 
       setGenPhase("GENERATING");
-      const data = await fetchEdgeJson<Record<string, unknown>>("prep-tool", withPrepToolContext({
+      const data = await fetchEdgeJson<Record<string, unknown>>("prep-tool", await withPrepToolContext({
         tool_id: "system_design",
         input,
       }), {

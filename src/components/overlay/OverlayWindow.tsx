@@ -24,7 +24,7 @@ import {
 import { useIsMobile } from "@/hooks/use-mobile";
 
 import { cn } from "@/lib/utils";
-import { AlertCircle, GripVertical, Loader2, Mic, MicOff, Pause, Play, RefreshCw, Sparkles, Square } from "lucide-react";
+import { AlertCircle, GripVertical, Maximize2, RefreshCw, Shield, Sparkles } from "lucide-react";
 
 import type { LiveSessionConfig } from "@/types/session.types";
 import { OverlayComplianceBanner } from "./OverlayComplianceBanner";
@@ -51,6 +51,7 @@ import { OverlaySessionStats } from "./OverlaySessionStats";
 import { OverlayHotkeyHelp } from "./OverlayHotkeyHelp";
 import { OverlayAnswerTimer } from "./OverlayAnswerTimer";
 import { OverlayAudioStatusBar } from "./OverlayAudioStatusBar";
+import { OverlayMinimalPanel } from "./OverlayMinimalPanel";
 import { OverlaySystemAudioBanner } from "./OverlaySystemAudioBanner";
 import { OverlaySpeakerSeparationBanner } from "./OverlaySpeakerSeparationBanner";
 import { OverlaySessionPreparing } from "./OverlaySessionPreparing";
@@ -442,7 +443,7 @@ export function OverlayWindow({
   const showAudioStatusBar = isOverlayAudioSessionStatus(sessionStatus);
 
   const isGenerating = hintState === "generating" || hintState === "streaming";
-  const showFullHeaderChrome = !isMobile || !isMinimalMode;
+  const showFullHeaderChrome = !isMinimalMode;
 
   /** Mid-session SR announcements (generating / errors). Minimal mode has no HintPanel. */
   const sessionStatusAnnouncement = useMemo(() => {
@@ -555,15 +556,15 @@ export function OverlayWindow({
     : 1;
 
   // Pill width constraints
-  const pillWidth = isMobile ? "100%" : Math.min(640, Math.max(420, overlayWidth));
+  const pillWidth = isMobile ? "100%" : Math.min(680, Math.max(460, overlayWidth));
 
   // Keep overlay within viewport bounds (desktop browser mode)
   useEffect(() => {
     if (typeof window === "undefined" || isProctorSafe) return;
 
     const clamp = () => {
-      const w = isMinimalMode ? Math.min(640, Math.max(420, overlayWidth)) : overlayWidth;
-      const h = isMinimalMode ? 56 : overlayHeight;
+      const w = isMinimalMode ? Math.min(680, Math.max(460, overlayWidth)) : overlayWidth;
+      const h = isMinimalMode ? 220 : overlayHeight;
       const maxX = Math.max(8, window.innerWidth - w - 8);
       const maxY = Math.max(8, window.innerHeight - h - 8);
 
@@ -603,7 +604,7 @@ export function OverlayWindow({
       ref={resizeContainerRef}
       className={cn(
         "overlay-panel no-select relative flex flex-col gap-0 min-h-0 max-h-full overflow-hidden",
-        isMinimalMode ? (isMobile ? "rounded-t-2xl" : "rounded-full") : isMobile ? "rounded-t-2xl" : "rounded-2xl overflow-hidden",
+        isMinimalMode ? (isMobile ? "rounded-t-2xl" : "rounded-2xl") : isMobile ? "rounded-t-2xl" : "rounded-2xl overflow-hidden",
         "border border-white/10",
         "bg-[#0b0b18] backdrop-blur-2xl",
         "shadow-[0_12px_48px_rgba(0,0,0,0.6),0_0_0_1px_rgba(255,255,255,0.05)]",
@@ -675,12 +676,24 @@ export function OverlayWindow({
             Career Pilot
           </span>
 
-          <span
-            className="font-mono text-[9px] font-bold text-sky-300 bg-sky-500/15 border border-sky-500/20 px-1.5 py-0.5 rounded shrink-0"
-            title="Session context"
-          >
-            {contextModeLabel}
-          </span>
+          {isMinimalMode && isSessionLive && (
+            <span
+              className="inline-flex items-center gap-1 font-mono text-[9px] font-bold text-red-300 shrink-0"
+              title="Session live"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" aria-hidden />
+              LIVE
+            </span>
+          )}
+
+          {!isMinimalMode && (
+            <span
+              className="font-mono text-[9px] font-bold text-sky-300 bg-sky-500/15 border border-sky-500/20 px-1.5 py-0.5 rounded shrink-0"
+              title="Session context"
+            >
+              {contextModeLabel}
+            </span>
+          )}
 
           {privateModeEnabled && showFullHeaderChrome && (
             <span
@@ -724,6 +737,27 @@ export function OverlayWindow({
 
           {showFullHeaderChrome && <OverlayAnswerTimer />}
         </div>
+
+        {isMinimalMode && (
+          <div className="flex items-center gap-1.5 shrink-0" data-no-drag>
+            <OverlayAnswerTimer />
+            <span
+              className="inline-flex items-center justify-center w-7 h-7 rounded-lg border border-white/10 bg-white/[0.04] text-white/35"
+              title="Visible on screen share — not hidden from viewers."
+            >
+              <Shield className="w-3.5 h-3.5" aria-hidden />
+            </span>
+            <button
+              type="button"
+              onClick={() => useOverlayStore.getState().setMinimalMode(false)}
+              aria-label="Expand overlay"
+              title="Expand for Chat, transcript, and settings"
+              className="inline-flex items-center justify-center w-7 h-7 rounded-lg border border-indigo-500/25 bg-indigo-500/10 text-indigo-200 hover:bg-indigo-500/15"
+            >
+              <Maximize2 className="w-3.5 h-3.5" aria-hidden />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Context + listening — always visible on main chrome */}
@@ -776,91 +810,22 @@ export function OverlayWindow({
 
       {/* Compact pill body */}
       {isMinimalMode && isVisible && (
-        <div className="px-3 py-2 space-y-2 shrink-0" data-no-drag>
-          <OverlayComplianceBanner variant="pill" />
-          <SessionContextChip compact />
-          {(displayText || currentQuestion) && (
-            <p className="text-[11px] text-white/75 line-clamp-2 leading-snug">
-              {currentQuestion ? (
-                <span className="text-white/50">{currentQuestion.slice(0, 80)}… </span>
-              ) : null}
-              {displayText}
-            </p>
-          )}
-          <div className="flex items-center gap-2">
-            <OverlayListeningIndicator />
-            {isSessionPaused && onResumeSession ? (
-              <button
-                type="button"
-                onClick={() => void onResumeSession()}
-                title="Resume session"
-                aria-label="Resume session"
-                className="w-8 h-8 flex items-center justify-center rounded-xl border border-emerald-500/25 bg-emerald-500/15 text-emerald-400 shrink-0"
-              >
-                <Play className="w-3.5 h-3.5" aria-hidden />
-              </button>
-            ) : isSessionActive && onPauseSession ? (
-              <button
-                type="button"
-                onClick={onPauseSession}
-                title="Pause session"
-                aria-label="Pause session"
-                className="w-8 h-8 flex items-center justify-center rounded-xl border border-amber-500/25 bg-amber-500/15 text-amber-400 shrink-0"
-              >
-                <Pause className="w-3.5 h-3.5" aria-hidden />
-              </button>
-            ) : null}
-            {onToggleMic && (
-              <button
-                type="button"
-                onClick={onToggleMic}
-                title={isMuted ? "Unmute mic" : "Mute mic"}
-                aria-label={isMuted ? "Unmute microphone" : "Mute microphone"}
-                aria-pressed={!isMuted}
-                className={cn(
-                  "w-8 h-8 flex items-center justify-center rounded-xl border transition-all shrink-0",
-                  isCapturing && !isMuted
-                    ? "bg-red-500/15 border-red-500/25 text-red-400"
-                    : isMuted
-                      ? "bg-white/5 border-white/10 text-white/35"
-                      : "bg-white/5 border-white/10 text-white/50",
-                )}
-              >
-                {isMuted ? (
-                  <MicOff className="w-3.5 h-3.5" aria-hidden />
-                ) : (
-                  <Mic className="w-3.5 h-3.5" aria-hidden />
-                )}
-              </button>
-            )}
-            <div className="flex-1 min-w-0">
-              <FloatingAIButton
-                onGenerate={onGenerate}
-                isGenerating={isGenerating}
-                compact
-              />
-            </div>
-            {onEndSession && isSessionLive && (
-              <button
-                type="button"
-                onClick={onEndSession}
-                title="End session"
-                aria-label="End session"
-                className="w-8 h-8 flex items-center justify-center rounded-xl border border-red-500/20 bg-red-600/15 text-red-400 shrink-0"
-              >
-                <Square className="w-3 h-3 fill-current" aria-hidden />
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => useOverlayStore.getState().setMinimalMode(false)}
-              aria-label="Expand overlay for more tools"
-              className="text-[10px] font-semibold text-indigo-300 hover:text-indigo-200 px-2 py-1 rounded-lg border border-indigo-500/20 bg-indigo-500/10 shrink-0"
-            >
-              More
-            </button>
-          </div>
-        </div>
+        <OverlayMinimalPanel
+          onToggleMic={onToggleMic}
+          onGenerate={onGenerate}
+          onEndSession={onEndSession}
+          onPauseSession={onPauseSession}
+          onResumeSession={onResumeSession}
+          isMuted={isMuted}
+          isCapturing={isCapturing}
+          isGenerating={isGenerating}
+          isSessionActive={isSessionActive}
+          isSessionPaused={isSessionPaused}
+          isSessionLive={isSessionLive}
+          currentQuestion={currentQuestion ?? ""}
+          displayText={displayText}
+          errorMessage={errorMessage}
+        />
       )}
 
       {/* BODY */}
@@ -1074,7 +1039,7 @@ export function OverlayWindow({
 
       {isSessionLive && !isMinimalMode && !isMobile && <OverlaySessionStats />}
 
-      {showAudioStatusBar && <OverlayAudioStatusBar />}
+      {showAudioStatusBar && !isMinimalMode && <OverlayAudioStatusBar />}
 
       {isSessionActive && !isMinimalMode && !isMobile && (
         <div className="flex items-center justify-between border-t border-white/[0.04] px-3 py-1 shrink-0">
@@ -1155,48 +1120,6 @@ export function OverlayWindow({
 // ─────────────────────────────────────────────────────────────────
 // Sub-components
 // ─────────────────────────────────────────────────────────────────
-
-function FloatingAIButton({
-  onGenerate,
-  isGenerating,
-  compact = false,
-}: {
-  onGenerate?: () => void;
-  isGenerating: boolean;
-  compact?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onGenerate}
-      disabled={isGenerating}
-      className={cn(
-        "w-full flex items-center justify-center gap-2 font-semibold rounded-xl transition-all",
-        "bg-gradient-to-r from-indigo-600 to-primary hover:from-indigo-500 hover:to-primary/90",
-        "text-white shadow-lg shadow-indigo-500/25 disabled:opacity-70 disabled:cursor-not-allowed",
-        "border border-white/10 hover:border-white/20",
-        isGenerating && "overlay-fab-glow",
-        compact ? "py-1.5 text-[11px]" : "py-2.5 text-[13px]"
-      )}
-      title="Get AI Answer (Ctrl+Shift+A)"
-      aria-label={isGenerating ? "Generating answer" : "Get AI answer"}
-      aria-busy={isGenerating}
-    >
-      {isGenerating ? (
-        <>
-          <Loader2 className={cn("animate-spin shrink-0", compact ? "w-3 h-3" : "w-4 h-4")} aria-hidden />
-          <span>Generating…</span>
-        </>
-      ) : (
-        <>
-          <Sparkles className={compact ? "w-3 h-3" : "w-4 h-4"} aria-hidden />
-          <span>Get AI Answer</span>
-        </>
-      )}
-    </button>
-  );
-}
-
 
 function ScreenCaptureBanner() {
   const [detected, setDetected] = useState<"recording" | "sharing" | null>(null);

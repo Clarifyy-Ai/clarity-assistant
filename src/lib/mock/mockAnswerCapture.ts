@@ -194,6 +194,34 @@ export function finalizeMockAnswer(options: {
   };
 }
 
+const NON_SUBSTANTIVE_ANSWERS = new Set([
+  "hello",
+  "hi",
+  "hey",
+  "um",
+  "uh",
+  "hmm",
+  "yes",
+  "no",
+  "ok",
+  "okay",
+  "thanks",
+  "thank you",
+]);
+
+/** Greetings / fillers that should not count as a real answer to an interview question. */
+export function isNonSubstantiveAnswer(text: string): boolean {
+  const normalized = text
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, "")
+    .replace(/\s+/g, " ");
+  if (!normalized) return true;
+  if (NON_SUBSTANTIVE_ANSWERS.has(normalized)) return true;
+  const words = normalized.split(" ").filter(Boolean);
+  return words.length <= 2 && normalized.length < 16;
+}
+
 /** Soft draft status while the candidate is still speaking / typing. */
 export function draftMockAnswerStatus(text: string): MockAnswerStatus {
   const t = text.trim();

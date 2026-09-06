@@ -42,12 +42,20 @@ const DIFFICULTY_LEVELS = [
 
 const QUESTION_COUNTS = [3, 5, 8, 10, 15];
 
-async function loadFrozenDocs(config: LiveSessionConfig): Promise<{ resume: string; jd: string }> {
+async function loadFrozenDocs(config: LiveSessionConfig): Promise<{
+  resume: string;
+  jd: string;
+  resumeLabel: string | null;
+  jdLabel: string | null;
+}> {
   let resume = "";
   let jd = "";
+  let resumeLabel: string | null = null;
+  let jdLabel: string | null = null;
   if (config.resume_id) {
     try {
       const row = await resumesDB.getByIdMaybe(config.resume_id);
+      resumeLabel = String(row?.name ?? "").trim() || null;
       resume = freezeResumeTextForInterview(row?.content, {
         role: config.role,
         company: config.company,
@@ -59,6 +67,7 @@ async function loadFrozenDocs(config: LiveSessionConfig): Promise<{ resume: stri
   if (config.jd_id) {
     try {
       const row = await jobDescriptionsDB.getByIdMaybe(config.jd_id);
+      jdLabel = String(row?.title ?? "").trim() || null;
       const r = row as Record<string, unknown> | null;
       jd =
         String(r?.description ?? r?.content ?? r?.raw_text ?? r?.jd_text ?? "").trim();
@@ -66,7 +75,7 @@ async function loadFrozenDocs(config: LiveSessionConfig): Promise<{ resume: stri
       /* ignore */
     }
   }
-  return { resume, jd };
+  return { resume, jd, resumeLabel, jdLabel };
 }
 
 async function loadAnswerBankSnippets(userId: string, ids: string[]): Promise<string[]> {
@@ -133,6 +142,8 @@ export default function MockInterview() {
         durationMinutes: config.duration_minutes ?? 5,
         resumeText: docs.resume,
         jdText: docs.jd,
+        resumeLabel: docs.resumeLabel,
+        jdLabel: docs.jdLabel,
         answerBankSnippets: bankSnippets,
       });
 

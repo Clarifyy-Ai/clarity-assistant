@@ -47,6 +47,13 @@ describe("coach chat continuity", () => {
     expect(input).toContain("initialValue");
   });
 
+  it("preserves chat recovery reason when opening Chat tab", () => {
+    const live = read("src/pages/app/live/LiveOverlay.tsx");
+    const store = read("src/store/overlayStore.ts");
+    expect(live).toContain("resolveChatRecoveryReason");
+    expect(store).toContain("keep the recovery");
+  });
+
   /**
    * Browser verification (manual after deploy):
    * - /app/live/overlay → send coach message

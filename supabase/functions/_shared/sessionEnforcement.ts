@@ -53,6 +53,20 @@ export function sessionHasPracticeFlag(session: SessionRowForAiCheck): boolean {
   return tags.includes("practice") || tags.includes("rehearsal");
 }
 
+/** Merge practice/rehearsal tags onto a live row when the client started Practice Coach. */
+export function mergePracticeTags(
+  existing: string[] | null | undefined,
+  options: { sessionType: string; isPractice: boolean },
+): string[] | null {
+  const sessionType = normalizeSessionType(options.sessionType);
+  const needsPractice =
+    options.isPractice &&
+    sessionType === "live" &&
+    !sessionHasPracticeFlag({ tags: existing ?? [] });
+  if (!needsPractice) return existing?.length ? existing : null;
+  return Array.from(new Set([...(existing ?? []), "practice"]));
+}
+
 export function isSessionTypeAllowedForAi(
   session: SessionRowForAiCheck,
 ): { allowed: boolean; code?: string; message?: string } {

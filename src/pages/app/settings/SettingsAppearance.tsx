@@ -17,6 +17,10 @@ import { toast } from "sonner";
 import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
 import { SettingsSaveBar } from "@/components/settings/SettingsSaveBar";
 import { mergeUiPreferences } from "@/lib/settings/uiPreferences";
+import {
+  saveProfileSettings,
+  settingsSaveError,
+} from "@/lib/settings/saveProfileSettings";
 
 const THEMES = [
   { id: "light"  as const, label: "Light",  icon: Sun,     preview: "bg-[#fafafa]" },
@@ -42,7 +46,6 @@ export default function SettingsAppearance() {
   const extras       = useThemeStore();
   const stealthMode  = useUIStore((s) => s.stealth_mode);
   const profile = useAuthStore((s) => s.profile);
-  const updateProfile = useAuthStore((s) => s.updateProfile);
 
   const [accent,   setAccent]   = useState(extras.accentColor ?? "violet");
   const [fontSize, setFontSize] = useState(extras.fontSize ?? "Default");
@@ -76,11 +79,10 @@ export default function SettingsAppearance() {
   }
 
   async function handleSave() {
-    if (!profile?.id) return;
     setSaving(true);
     try {
-      await updateProfile({
-        ui_preferences: mergeUiPreferences(profile.ui_preferences, {
+      await saveProfileSettings({
+        ui_preferences: mergeUiPreferences(profile?.ui_preferences, {
           theme: currentTheme,
           accentColor: accent,
           fontSize,
@@ -93,8 +95,9 @@ export default function SettingsAppearance() {
       applyAppearancePreferences({ accentColor: accent, fontSize, density });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
+      toast.success("Appearance saved");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to save appearance settings.");
+      toast.error(settingsSaveError(err));
     } finally {
       setSaving(false);
     }

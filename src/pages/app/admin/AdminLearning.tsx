@@ -12,6 +12,7 @@ import { useAuthStore } from "@/store/authStore";
 import { writeAdminAudit } from "@/lib/admin/writeAdminAudit";
 import { adminActionFailedMessage, toAdminUserMessage } from "@/lib/admin/adminErrors";
 import { validateCourseForPublish } from "@/lib/learning/publishValidation";
+import { isYoutubeUrl, normalizeVideoResourceUrl } from "@/lib/learning/youtube";
 import { invalidatePublicContentCache } from "@/lib/cms/publicContentCache";
 import { AdminStatGrid } from "@/components/admin/AdminStatGrid";
 import { BookOpen, Eye, EyeOff, Layers, HelpCircle } from "lucide-react";
@@ -162,7 +163,10 @@ export default function AdminLearningPage() {
           title: editLessonTitle.trim(),
           lesson_type: editLessonType,
           content_text: editLessonType === "text" ? editLessonBody : null,
-          resource_url: editLessonType === "video_url" ? editResourceUrl.trim() || null : null,
+          resource_url:
+            editLessonType === "video_url"
+              ? normalizeVideoResourceUrl(editResourceUrl) || null
+              : null,
         })
         .eq("id", editingLessonId);
       if (err) throw err;
@@ -216,7 +220,7 @@ export default function AdminLearningPage() {
         title: lessonTitle || "Lesson 1",
         lesson_type: lessonType,
         content_text: lessonType === "text" ? lessonBody : null,
-        resource_url: lessonType === "video_url" ? resourceUrl.trim() : null,
+        resource_url: lessonType === "video_url" ? normalizeVideoResourceUrl(resourceUrl) : null,
         duration_minutes: 10,
         sort_order: 0,
         created_by: user.id,
@@ -458,7 +462,14 @@ export default function AdminLearningPage() {
               <Input value={moduleTitle} onChange={(e) => setModuleTitle(e.target.value)} placeholder="First module title" />
               <Input value={lessonTitle} onChange={(e) => setLessonTitle(e.target.value)} placeholder="First lesson title" />
               <Textarea value={lessonBody} onChange={(e) => setLessonBody(e.target.value)} placeholder="Lesson text (required unless resource URL)" />
-              <Input value={resourceUrl} onChange={(e) => setResourceUrl(e.target.value)} placeholder="Optional resource URL (video)" />
+              <Input
+                value={resourceUrl}
+                onChange={(e) => setResourceUrl(e.target.value)}
+                placeholder="Optional YouTube or video URL (e.g. youtube.com/watch?v=…)"
+              />
+              {resourceUrl.trim() && !isYoutubeUrl(resourceUrl) && /^https?:\/\//i.test(resourceUrl.trim()) ? (
+                <p className="text-xs text-muted-foreground">Non-YouTube links open externally in the lesson player.</p>
+              ) : null}
               <Button disabled={saving} onClick={() => void createCourse()}>Create draft</Button>
             </>
           )}
@@ -559,8 +570,11 @@ export default function AdminLearningPage() {
                             <Input
                               value={editResourceUrl}
                               onChange={(e) => setEditResourceUrl(e.target.value)}
-                              placeholder="https://…"
+                              placeholder="YouTube or video URL (youtube.com/watch?v=…)"
                             />
+                            {editResourceUrl.trim() && isYoutubeUrl(editResourceUrl) ? (
+                              <p className="text-xs text-muted-foreground">YouTube links play inline in the lesson player.</p>
+                            ) : null}
                           )}
                           <div className="flex gap-2">
                             <Button size="sm" disabled={saving} onClick={() => void saveLesson()}>Save lesson</Button>

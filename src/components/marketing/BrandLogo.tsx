@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 
@@ -24,7 +25,7 @@ export function BrandLogo({
   size = "md",
 }: BrandLogoProps) {
   const s = SIZES[size];
-  const src = "/brand/logo-192.png";
+  const src = `${import.meta.env.BASE_URL}brand/logo-192.png`;
   const alt = PRODUCT_NAMES.brand;
   const [imageFailed, setImageFailed] = useState(false);
 
@@ -35,11 +36,13 @@ export function BrandLogo({
           role="img"
           aria-label={alt}
           className={cn(
-            "shrink-0 rounded-xl bg-gradient-to-br from-sky-blue to-electric-blue shadow-lg shadow-primary/20 ring-1 ring-white/10",
+            "inline-flex shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-sky-blue to-electric-blue shadow-lg shadow-primary/20 ring-1 ring-white/10",
             s.icon,
             iconClassName,
           )}
-        />
+        >
+          <Sparkles className="h-1/2 w-1/2 text-white" aria-hidden />
+        </span>
       ) : (
         <img
           src={src}

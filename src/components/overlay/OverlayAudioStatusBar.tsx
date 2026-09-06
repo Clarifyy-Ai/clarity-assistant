@@ -149,7 +149,11 @@ function tabBadgeClass(status: AudioChannelHealthStatus): string {
   return "text-amber-300/80 bg-amber-500/10 border-amber-500/20";
 }
 
-export const OverlayAudioStatusBar = memo(function OverlayAudioStatusBar() {
+export const OverlayAudioStatusBar = memo(function OverlayAudioStatusBar({
+  compact = false,
+}: {
+  compact?: boolean;
+}) {
   const isCapturing = useAudioStore((s) => s.streams?.is_capturing ?? false);
   const interviewerStatus = useAudioStore(
     (s) => s.channel_health?.interviewer?.status ?? "disconnected",
@@ -195,6 +199,66 @@ export const OverlayAudioStatusBar = memo(function OverlayAudioStatusBar() {
   );
   const providerOk = transcription.key === "connected";
   const micActive = mic.key === "active";
+
+  const micShort =
+    mic.key === "active"
+      ? "Mic OK"
+      : mic.key === "connecting"
+        ? "Mic…"
+        : mic.key === "paused"
+          ? "Mic paused"
+          : "Mic off";
+  const tabShort =
+    interviewerStatus === "active"
+      ? "Tab OK"
+      : interviewerStatus === "connecting"
+        ? "Tab…"
+        : interviewerStatus === "silent_source"
+          ? "Tab silent"
+          : "Tab off";
+  const sttShort =
+    transcription.key === "connected"
+      ? "STT OK"
+      : transcription.key === "connecting"
+        ? "STT…"
+        : "STT off";
+
+  if (compact) {
+    return (
+      <div
+        className="flex flex-wrap items-center gap-1.5 rounded-xl border border-white/[0.06] bg-[#080812]/60 px-2 py-1.5"
+        role="status"
+        aria-live="polite"
+      >
+        <CompactChip
+          ok={mic.key === "active"}
+          warn={mic.key === "connecting" || mic.key === "paused"}
+          label={micShort}
+          title={mic.label}
+        />
+        <CompactChip
+          ok={interviewerStatus === "active"}
+          warn={interviewerStatus === "connecting" || interviewerStatus === "silent_source"}
+          label={tabShort}
+          title={tabAudioTitle(interviewerStatus)}
+        />
+        <CompactChip
+          ok={transcription.key === "connected"}
+          warn={transcription.key === "connecting"}
+          label={sttShort}
+          title={transcription.label}
+        />
+        {streamError?.message ? (
+          <span
+            className="text-[10px] text-red-300/90 truncate max-w-[140px] ml-auto"
+            title={streamError.message}
+          >
+            Audio error
+          </span>
+        ) : null}
+      </div>
+    );
+  }
 
   return (
     <div
@@ -275,3 +339,31 @@ export const OverlayAudioStatusBar = memo(function OverlayAudioStatusBar() {
     </div>
   );
 });
+
+function CompactChip({
+  label,
+  title,
+  ok,
+  warn,
+}: {
+  label: string;
+  title: string;
+  ok: boolean;
+  warn?: boolean;
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-md px-1.5 py-0.5 font-mono text-[9px] font-bold border",
+        ok
+          ? "text-emerald-300/90 bg-emerald-500/10 border-emerald-500/25"
+          : warn
+            ? "text-amber-300/85 bg-amber-500/10 border-amber-500/20"
+            : "text-red-300/85 bg-red-500/10 border-red-500/20",
+      )}
+      title={title}
+    >
+      {label}
+    </span>
+  );
+}

@@ -22,6 +22,8 @@ describe("Live Practice Coach — start-session contracts", () => {
     expect(source).toContain('tags.push("rehearsal")');
     expect(source).toContain("const isPractice = body.is_practice || sessionType !== \"live\"");
     expect(source).toContain("p_tags: sessionTags");
+    expect(source).toContain("ensurePracticeTagsOnSession");
+    expect(source).toContain("mergePracticeTags");
   });
 
   it("passes idempotency key into start_owned_session RPC", () => {
@@ -149,6 +151,12 @@ describe("Live Practice Coach — useLiveCopilot client contracts", () => {
     expect(source).not.toContain('sessionType === "live" ? "rehearsal"');
     expect(source).toContain('is_practice: sessionType === "live" ? true : undefined');
     expect(source).toContain("practiceCoachStartIdempotencyKey");
+    expect(source).not.toContain("await activateSession(reusableSessionId)");
+  });
+
+  it("restore passes is_practice for live Practice Coach rows", () => {
+    const source = readSrc("src/lib/api/sessions.ts");
+    expect(source).toContain('is_practice: input?.session_type === "live" ? true : undefined');
   });
 
   it("passes sessionless AI mode derived from session type", () => {
@@ -162,6 +170,19 @@ describe("Live Practice Coach — useLiveCopilot client contracts", () => {
     expect(source).toContain('terminal_reason: "CANCELLED"');
     expect(source).toContain("finalizeSessionApi");
     expect(source).toContain("restoreOwnedSession");
+  });
+
+  it("ends session with immediate overlay teardown before finalize-session", () => {
+    const source = readSrc("src/hooks/useLiveCopilot.ts");
+    const live = readSrc("src/pages/app/live/LiveOverlay.tsx");
+    expect(source).toContain("teardownOverlayProductSession(gen)");
+    expect(source).toContain("await finalizeSessionApi");
+    expect(source.indexOf("teardownOverlayProductSession(gen)")).toBeLessThan(
+      source.indexOf("await finalizeSessionApi"),
+    );
+    expect(source).toContain("record_practice_activity");
+    expect(live).toContain('phase === "ending"');
+    expect(live).toContain("Saving your session");
   });
 
   it("reuses existingSessionId even when practice_context_id is set", () => {

@@ -22,12 +22,12 @@ import {
   hasLoadedProviderFlags,
   useProviderFlags,
 } from "@/lib/ai/providerAvailability";
+import { saveProfileSettings, settingsSaveError } from "@/lib/settings/saveProfileSettings";
 import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
 
 export default function SettingsModels() {
   const profile = useAuthStore((s) => s.profile);
   const planId = useAuthStore((s) => s.planId);
-  const updateProfile = useAuthStore((s) => s.updateProfile);
 
   const [selected, setSelected] = useState<PreferredAIModel>(
     normalizePreferredModel(profile?.preferred_model)
@@ -49,7 +49,6 @@ export default function SettingsModels() {
   }, [profile?.preferred_model]);
 
   async function handleSave() {
-    if (!profile?.id) return;
     if (getModelLockReason(selected, planId) === "plan") {
       toast.error("Upgrade to Pro to use GPT-4o and Claude.");
       return;
@@ -60,14 +59,14 @@ export default function SettingsModels() {
     }
     setSaving(true);
     try {
-      await updateProfile({
+      await saveProfileSettings({
         preferred_model: toDbPreferredModel(selected) as any,
       });
       useOverlayStore.getState().setActiveModel(normalizePreferredModel(selected));
 
       toast.success("AI model preference saved.");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to save model");
+      toast.error(settingsSaveError(err));
     } finally {
       setSaving(false);
     }

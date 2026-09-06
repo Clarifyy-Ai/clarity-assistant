@@ -183,7 +183,7 @@ export default function CodingHints() {
 
     try {
       const input = `Problem: ${activeProblem.title}\n\n${activeProblem.description}\n\nExamples:\n${activeProblem.examples}\n\nTags: ${activeProblem.tags.join(", ")}`;
-      const data = await fetchEdgeJson<{ result?: string }>("prep-tool", withPrepToolContext({
+      const data = await fetchEdgeJson<{ result?: string }>("prep-tool", await withPrepToolContext({
         tool_id: "coding_hint",
         input,
         depth,
@@ -229,7 +229,7 @@ export default function CodingHints() {
 
     try {
       const input = `Problem: ${activeProblem.title}\n\n${activeProblem.description}\n\nExamples:\n${activeProblem.examples}\n\nTags: ${activeProblem.tags.join(", ")}`;
-      const data = await fetchEdgeJson<{ result?: string }>("prep-tool", withPrepToolContext({
+      const data = await fetchEdgeJson<{ result?: string }>("prep-tool", await withPrepToolContext({
         tool_id: "coding_solution",
         input,
       }), {

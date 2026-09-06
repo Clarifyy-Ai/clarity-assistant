@@ -58,12 +58,17 @@ import {
 import { isCompletedScorecard } from "@/hooks/useScorecard";
 import { useDocumentStore } from "@/store/documentStore";
 import { buildResumeContextForAI } from "@/lib/documents/interviewContext";
+import {
+  loadSessionHistoryContext,
+  mergeApplicationContextIntoResumeBlock,
+} from "@/lib/ai/userApplicationContext";
 import { getOrCreateSession, activateSession, isServerExpired } from "@/lib/session/sessionLifecycle";
 import { sessionDurationSeconds as sharedSessionDurationSeconds } from "@/lib/session/sessionStartEligibility";
 import { handleSessionStartError } from "@/lib/billing/sessionStartErrors";
 import {
   createMockQuestionOperationId,
   generateMockInterviewQuestion,
+  buildMockPreviousAnswersPayload,
   QUESTION_GENERATION_USER_ERROR,
 } from "@/lib/mock/generateMockQuestion";
 import { createMockPrefetchController } from "@/lib/mock/mockQuestionPrefetch";
@@ -118,6 +123,7 @@ import {
   collectCandidateAnswerText,
   draftMockAnswerStatus,
   finalizeMockAnswer,
+  isNonSubstantiveAnswer,
   streamListeningWatermarkMs,
 } from "@/lib/mock/mockAnswerCapture";
 import {
@@ -455,11 +461,18 @@ export default function MockSession() {
   const generationAbortRef = useRef<AbortController | null>(null);
   const activeOperationIdRef = useRef<string | null>(null);
   const prefetchRef = useRef(createMockPrefetchController());
-  const mockDocCacheRef = useRef<{ key: string; resume: string; jd: string } | null>(null);
+  const mockDocCacheRef = useRef<{
+    key: string;
+    resume: string;
+    jd: string;
+    historySnippets: string[];
+  } | null>(null);
   const interviewContextRef = useRef<InterviewContextSnapshot | null>(null);
   const interviewBlueprintRef = useRef<InterviewBlueprint | null>(null);
   const followUpsUsedRef = useRef(0);
   const parentQuestionIdRef = useRef<string | null>(null);
+  /** Per-question re-ask count when the candidate didn't hear or give a substantive answer. */
+  const reAskCountByQuestionRef = useRef<Map<number, number>>(new Map());
   const ttsPlaybackRef = useRef<TtsPlaybackRecord | null>(null);
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSpeechAtRef = useRef<number | null>(null);
@@ -517,18 +530,36 @@ export default function MockSession() {
       snapshot: interviewContextRef.current,
     });
     if (frozen.fromSnapshot && (frozen.resume || frozen.jd)) {
-      return { resume: frozen.resume, jd: frozen.jd };
+      return { resume: frozen.resume, jd: frozen.jd, historySnippets: [] };
     }
     const key = `${config.resume_id ?? ""}|${config.jd_id ?? ""}`;
     if (mockDocCacheRef.current?.key === key) {
-      return { resume: mockDocCacheRef.current.resume, jd: mockDocCacheRef.current.jd };
+      return {
+        resume: mockDocCacheRef.current.resume,
+        jd: mockDocCacheRef.current.jd,
+        historySnippets: mockDocCacheRef.current.historySnippets,
+      };
     }
     const [resume, jd] = await Promise.all([
       loadResumeContextText(config, userId),
       loadJobDescriptionText(config),
     ]);
-    mockDocCacheRef.current = { key, resume, jd };
-    return { resume, jd };
+    let enrichedResume = resume;
+    let historySnippets: string[] = [];
+    if (userId) {
+      try {
+        const history = await loadSessionHistoryContext(userId);
+        historySnippets = history.snippets;
+        enrichedResume = mergeApplicationContextIntoResumeBlock(resume, {
+          answerBankSummary: "",
+          sessionHistoryBlock: history.block,
+        });
+      } catch {
+        enrichedResume = resume;
+      }
+    }
+    mockDocCacheRef.current = { key, resume: enrichedResume, jd, historySnippets };
+    return { resume: enrichedResume, jd, historySnippets };
   }, [userId]);
 
   // Overlay mount only after authoritative mock session context is ready — one instance per session.
@@ -755,67 +786,8 @@ export default function MockSession() {
       }
       setAnswerNextState((s) => reduceAnswerNext(s, { type: "SPEAKING_DONE" }));
       setAnswerNextState((s) => reduceAnswerNext(s, { type: "START_LISTENING" }));
-
-      const sessionId = useSessionStore.getState().session_id;
-      const cfg = sessionConfigRef.current as MockConfig | null;
-      const idx = useSessionStore.getState().current_question_index ?? 0;
-      const last = idx >= totalQ - 1;
-      if (last || !sessionId || !cfg) return;
-      const nextNumber = idx + 2;
-      if (prefetchRef.current.get(nextNumber)) return;
-      const operationId = createMockQuestionOperationId(sessionId, nextNumber);
-      const usedTexts = useSessionStore
-        .getState()
-        .questions.map((q) => q.question_text)
-        .filter(Boolean);
-      const { interviewType, role, company, difficulty } = resolveMockConfigFields(cfg);
-      const signal = prefetchRef.current.getAbortSignal();
-      const promise = (async () => {
-        const docs = await getCachedMockDocuments(cfg);
-        const result = await generateMockInterviewQuestion({
-          type: interviewType,
-          count: 1,
-          difficulty,
-          company,
-          role,
-          session_id: sessionId,
-          resume_context: docs.resume,
-          job_description: docs.jd,
-          exclude_questions: usedTexts,
-          allow_fallback: true,
-          questionNumber: nextNumber,
-          usedTexts,
-          signal,
-          idempotencyKey: operationId,
-          follow_up_depth: interviewContextRef.current?.follow_up_depth ?? "light",
-          previous_answers: answersRef.current.slice(-6).map((a) => ({
-            question_text: a.question_text,
-            answer_text: a.answer_text,
-            skipped: a.skipped,
-          })),
-          blueprint_slot: getBlueprintSlot(
-            interviewBlueprintRef.current ??
-              ({
-                version: "interview_blueprint_v1",
-                created_at: "",
-                total_questions: totalQ,
-                max_follow_ups_per_topic: 1,
-                follow_up_depth: "light",
-                slots: [],
-                time_budget_minutes: 5,
-              } as InterviewBlueprint),
-            nextNumber,
-          ),
-          interview_context: interviewContextRef.current,
-        });
-        return result.question;
-      })();
-      prefetchRef.current.set({ questionNumber: nextNumber, operationId, promise });
-      void promise.catch(() => {
-        /* Next falls back to runQuestionGeneration */
-      });
     },
-    [getCachedMockDocuments, totalQ],
+    [],
   );
 
   const handleRequestHint = useCallback(async (questionText?: string) => {
@@ -966,6 +938,10 @@ export default function MockSession() {
           ttsPlaybackRef.current = reduceTtsPlayback(ttsPlaybackRef.current, {
             type: "FAIL",
           });
+          toast.message(
+            "Read the question on screen — you can answer by speaking or typing.",
+          );
+          beginCandidateListening(qId);
           return;
         }
         setTtsState("unavailable");
@@ -1578,9 +1554,14 @@ export default function MockSession() {
     const { interviewType, role, company, difficulty } = resolveMockConfigFields(
       options.config,
     );
+    const previousAnswers = buildMockPreviousAnswersPayload(answersRef.current);
     const operationId = createMockQuestionOperationId(
       options.dbSessionId,
       options.questionNumber,
+      {
+        priorAnswerCount: previousAnswers.length,
+        isFollowUp: options.isFollowUp,
+      },
     );
 
     if (activeOperationIdRef.current) {
@@ -1636,11 +1617,7 @@ export default function MockSession() {
           ? parentQuestionIdRef.current
           : null,
         is_follow_up: Boolean(options.isFollowUp),
-        previous_answers: answersRef.current.slice(-6).map((a) => ({
-          question_text: a.question_text,
-          answer_text: a.answer_text,
-          skipped: a.skipped,
-        })),
+        previous_answers: previousAnswers,
         blueprint_slot: getBlueprintSlot(
           interviewBlueprintRef.current ??
             ({
@@ -1657,6 +1634,7 @@ export default function MockSession() {
             : options.questionNumber,
         ),
         interview_context: interviewContextRef.current,
+        session_history_snippets: docs.historySnippets,
       });
 
       if (controller.signal.aborted) {
@@ -1791,6 +1769,7 @@ export default function MockSession() {
     interviewBlueprintRef.current = null;
     followUpsUsedRef.current = 0;
     parentQuestionIdRef.current = null;
+    reAskCountByQuestionRef.current.clear();
     ttsPlaybackRef.current = null;
     hasSpokenRef.current = false;
     lastSpeechAtRef.current = null;
@@ -1847,6 +1826,7 @@ export default function MockSession() {
 
     let dbSessionId: string | null = existingSessionId ?? null;
     let restored = false;
+    let audioPreparedDuringLoad = false;
     try {
       if (dbSessionId) {
         await activateSession(dbSessionId);
@@ -1894,7 +1874,24 @@ export default function MockSession() {
       setSetupStep("questions");
       restored = await tryRestoreMockProgress(dbSessionId!, mockConfig);
       if (!restored) {
-        await loadQuestions(dbSessionId!, mockConfig);
+        markOverlayProductSessionReady(generation);
+        unlockBrowserTts();
+        await Promise.all([
+          loadQuestions(dbSessionId!, mockConfig),
+          (async () => {
+            try {
+              const permission = await getMicPermissionState();
+              if (!getOverlaySessionAuthority().matchesGeneration(generation)) return;
+              setAudioSetupHint(microphoneSetupHint(permission, { restore: false }));
+              setSetupStep("audio");
+              await audio.start({ restore: false });
+              void ensureVoiceAgent();
+              audioPreparedDuringLoad = true;
+            } catch (audioErr) {
+              console.warn("[MockSession] parallel audio prep failed:", audioErr);
+            }
+          })(),
+        ]);
       }
     } catch (err) {
       console.error("[MockSession] setup failed:", err);
@@ -1934,13 +1931,15 @@ export default function MockSession() {
         isStartingRef.current = false;
         return;
       }
-      markOverlayProductSessionReady(generation);
-      const permission = await getMicPermissionState();
-      setAudioSetupHint(microphoneSetupHint(permission, { restore: restored }));
-      setSetupStep("audio");
-      unlockBrowserTts();
-      await audio.start({ restore: restored });
-      void ensureVoiceAgent();
+      if (!audioPreparedDuringLoad) {
+        markOverlayProductSessionReady(generation);
+        const permission = await getMicPermissionState();
+        setAudioSetupHint(microphoneSetupHint(permission, { restore: restored }));
+        setSetupStep("audio");
+        unlockBrowserTts();
+        await audio.start({ restore: restored });
+        void ensureVoiceAgent();
+      }
       const restoredElapsed = restoredElapsedRef.current;
       sessionElapsedRef.current = restoredElapsed;
       setSessionElapsed(restoredElapsed);
@@ -2261,7 +2260,42 @@ export default function MockSession() {
       }
 
       if (!options?.skipCapture) {
-        captureAnswer(Boolean(options?.skipped), captureSnapshot);
+        const capturedEntry = captureAnswer(Boolean(options?.skipped), captureSnapshot);
+        const MAX_REASKS = 2;
+        const reAskUsed = reAskCountByQuestionRef.current.get(qIndex) ?? 0;
+        const answerTextForReAsk = capturedEntry.answer_text.trim();
+        const shouldReAskSameQuestion =
+          !options?.skipped &&
+          reAskUsed < MAX_REASKS &&
+          (capturedEntry.outcome === "UNANSWERED" ||
+            capturedEntry.outcome === "NO_SIGNAL" ||
+            isNonSubstantiveAnswer(answerTextForReAsk));
+
+        if (shouldReAskSameQuestion) {
+          reAskCountByQuestionRef.current.set(qIndex, reAskUsed + 1);
+          const answerIdx = answersRef.current.findIndex((a) => a.question_index === qIndex);
+          if (answerIdx >= 0 && !answersRef.current[answerIdx].answer_text.trim()) {
+            answersRef.current.splice(answerIdx, 1);
+          }
+          audio.suspendCandidateCapture();
+          cleanupQuestionAudio();
+          userTypedOverrideRef.current = false;
+          setTypedAnswer("");
+          typedAnswerRef.current = "";
+          setNoAnswerPrompt(false);
+          setSilenceHint("Didn't catch that — listen again and answer when ready.");
+          setCurrentAnswerStatus("unanswered");
+          setAnswerNextState((s) => reduceAnswerNext(s, { type: "READY" }));
+          setAnswerNextState((s) => reduceAnswerNext(s, { type: "QUESTION_READY" }));
+          setAnswerNextState((s) => reduceAnswerNext(s, { type: "START_SPEAKING" }));
+          const qText =
+            typeof question === "string" ? question : question?.question_text ?? "";
+          const qId =
+            typeof question === "string" ? ttsIdentity.id : question?.id ?? ttsIdentity.id;
+          toast.message("Repeating the question — take your time.");
+          playInterviewerVoice(qText, qId, false);
+          return;
+        }
       }
       audio.suspendCandidateCapture();
       try {
@@ -2318,6 +2352,7 @@ export default function MockSession() {
       } else {
         followUpsUsedRef.current = 0;
         parentQuestionIdRef.current = null;
+        reAskCountByQuestionRef.current.delete(qIndex);
       }
 
       setNextQuestionError(null);
@@ -2337,31 +2372,14 @@ export default function MockSession() {
       const usedIds = new Set(usedQuestions.map((q) => q.id).filter(Boolean));
       const nextNumber = qIndex + 2;
 
-      const slot = wantFollowUp ? null : prefetchRef.current.consume(nextNumber);
-      let nextQ: SessionQuestion;
-      if (slot) {
-        try {
-          nextQ = await slot.promise;
-        } catch {
-          nextQ = await runQuestionGeneration({
-            dbSessionId: sessionId,
-            config: cfg,
-            questionNumber: nextNumber,
-            usedTexts,
-            isFollowUp: wantFollowUp,
-            expectedOpId: opId,
-          });
-        }
-      } else {
-        nextQ = await runQuestionGeneration({
-          dbSessionId: sessionId,
-          config: cfg,
-          questionNumber: nextNumber,
-          usedTexts,
-          isFollowUp: wantFollowUp,
-          expectedOpId: opId,
-        });
-      }
+      const nextQ = await runQuestionGeneration({
+        dbSessionId: sessionId,
+        config: cfg,
+        questionNumber: nextNumber,
+        usedTexts,
+        isFollowUp: wantFollowUp,
+        expectedOpId: opId,
+      });
 
       if (opId !== answerNextOpRef.current) return;
       if (!isMockSessionMutable(lifecycleRef.current)) return;
@@ -2515,6 +2533,7 @@ export default function MockSession() {
         hasSpoken: hasSpokenRef.current,
         answerDurationMs,
         transcriptLooksComplete: transcriptLooksComplete(answerText),
+        answerTextLength: answerText.length,
         interviewerSpeaking: interviewerAudioActiveRef.current,
         paused: isPausedRef.current,
         isSpeechActive:

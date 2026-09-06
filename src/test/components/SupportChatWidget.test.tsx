@@ -66,6 +66,53 @@ describe("SupportChatWidget", () => {
     expect(actions).not.toContain("start");
   });
 
+  it("sends on Enter and keeps Shift+Enter as a newline", async () => {
+    fetchEdgeJson.mockImplementation(async (_fn: string, body: { action?: string }) => {
+      if (body.action === "bootstrap") return { thread_id: null, messages: [] };
+      return {
+        thread_id: "t1",
+        guest_token: "g1",
+        messages: [
+          {
+            id: "m1",
+            thread_id: "t1",
+            sender_role: "user",
+            body: "hi",
+            created_at: new Date().toISOString(),
+          },
+        ],
+        mode: "ai",
+      };
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/app/settings/billing"]}>
+        <SupportChatWidget />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Contact support" }));
+    await screen.findByPlaceholderText("Write a message…");
+
+    fireEvent.change(screen.getByPlaceholderText("Your name"), { target: { value: "Ada" } });
+    fireEvent.change(screen.getByPlaceholderText("Email"), { target: { value: "ada@example.com" } });
+
+    const composer = screen.getByPlaceholderText("Write a message…");
+    fireEvent.change(composer, { target: { value: "hi" } });
+    fireEvent.keyDown(composer, { key: "Enter", shiftKey: false });
+
+    await waitFor(() => {
+      const startCall = fetchEdgeJson.mock.calls.find(
+        (c) => (c[1] as { action?: string }).action === "start",
+      );
+      expect(startCall?.[1]).toMatchObject({ message: "hi" });
+    });
+
+    fetchEdgeJson.mockClear();
+    fireEvent.change(composer, { target: { value: "line one" } });
+    fireEvent.keyDown(composer, { key: "Enter", shiftKey: true });
+    expect(fetchEdgeJson).not.toHaveBeenCalled();
+  });
+
   it("retries a failed send with the same client_message_id", async () => {
     fetchEdgeJson.mockImplementation(async (_fn: string, body: { action?: string }) => {
       if (body.action === "bootstrap") return { thread_id: null, messages: [] };

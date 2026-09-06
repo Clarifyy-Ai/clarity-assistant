@@ -54,6 +54,7 @@ import {
   shouldReuseExistingOnConflict,
   PRACTICE_SESSION_DB_TYPES,
 } from "../_shared/sessionLifecycleRpc.ts";
+import { mergePracticeTags } from "../_shared/sessionEnforcement.ts";
 import { refundCredits } from "../_shared/supabase.ts";
 
 const FUNCTION_NAME = "start-session";
@@ -518,6 +519,40 @@ function buildSessionTags(options: {
   return tags;
 }
 
+/** Backfill practice tag on reused live rows created before tagging shipped. */
+async function ensurePracticeTagsOnSession(
+  db: ReturnType<typeof createServiceClient>,
+  sessionId: string,
+  options: { sessionType: SessionType; isPractice: boolean },
+): Promise<void> {
+  if (!options.isPractice || options.sessionType !== "live") return;
+
+  const { data, error } = await db
+    .from("sessions")
+    .select("tags")
+    .eq("id", sessionId)
+    .maybeSingle();
+
+  if (error || !data) {
+    if (error) {
+      console.warn("[start-session] practice tag lookup failed:", error.message);
+    }
+    return;
+  }
+
+  const nextTags = mergePracticeTags(data.tags, options);
+  if (!nextTags || nextTags.length === (data.tags ?? []).length) return;
+
+  const { error: updateErr } = await db
+    .from("sessions")
+    .update({ tags: nextTags })
+    .eq("id", sessionId);
+
+  if (updateErr) {
+    console.warn("[start-session] practice tag backfill failed:", updateErr.message);
+  }
+}
+
 /** Only keep IDs that exist in public.documents (sessions.document_id / jd_id FK). */
 async function resolveDocumentsFk(
   db: ReturnType<typeof createServiceClient>,
@@ -949,6 +984,13 @@ Deno.serve(async (req: Request) => {
         .eq("user_id", user.id)
         .in("status", ["pending", "active", "paused"]);
     }
+    const isPracticeRestore = body.is_practice || sessionType !== "live";
+    if (data.found && data.session_id && isPracticeRestore) {
+      await ensurePracticeTagsOnSession(db, data.session_id, {
+        sessionType,
+        isPractice: isPracticeRestore,
+      });
+    }
     return json(corsHeaders, 200, {
       found: true,
       reason: "ACTIVE",
@@ -1055,6 +1097,10 @@ Deno.serve(async (req: Request) => {
     practiceContextId,
   );
   if (canReturnReusablePracticeRow(reusable)) {
+    await ensurePracticeTagsOnSession(db, reusable.id, {
+      sessionType,
+      isPractice,
+    });
     return jsonOkSession(
       corsHeaders,
       {
@@ -1096,6 +1142,10 @@ Deno.serve(async (req: Request) => {
         practiceContextId,
       );
       if (canReturnReusablePracticeRow(existing)) {
+        await ensurePracticeTagsOnSession(db, existing.id, {
+          sessionType,
+          isPractice,
+        });
         return jsonOkSession(
           corsHeaders,
           {
@@ -1125,6 +1175,10 @@ Deno.serve(async (req: Request) => {
       practiceContextId,
     );
     if (canReturnReusablePracticeRow(existing)) {
+      await ensurePracticeTagsOnSession(db, existing.id, {
+        sessionType,
+        isPractice,
+      });
       return jsonOkSession(
         corsHeaders,
         {
@@ -1210,6 +1264,13 @@ Deno.serve(async (req: Request) => {
     });
   } catch (auditErr) {
     console.warn("[start-session] audit failed:", auditErr);
+  }
+
+  if (started.session_id) {
+    await ensurePracticeTagsOnSession(db, started.session_id, {
+      sessionType,
+      isPractice,
+    });
   }
 
   return jsonOkSession(corsHeaders, started, config, nowIso);

@@ -55,8 +55,9 @@ const DEFAULT_MAX_POLLS = 36;
 const BACKOFF_START_MS = 1_500;
 const BACKOFF_CAP_MS = 8_000;
 const TRANSIENT_FAIL_LIMIT = 8;
-const START_TIMEOUT_MS = 20_000;
-const NUDGE_TIMEOUT_MS = 20_000;
+const START_TIMEOUT_MS = 45_000;
+const NUDGE_TIMEOUT_MS = 30_000;
+const STATUS_TIMEOUT_MS = 25_000;
 
 export function sessionDebriefIdempotencyKey(input: {
   userId: string;
@@ -80,6 +81,10 @@ function pollDelayMs(polls: number, transientHits: number): number {
 }
 
 export function userFacingSessionDebriefError(err: unknown): string {
+  const rawMsg = err instanceof Error ? err.message : String(err ?? "");
+  if (/abort|timeout|timed out|failed to fetch|network|offline|signal is aborted/i.test(rawMsg)) {
+    return "Your connection is slow or unstable. Tap Retry — debrief generation can take up to a minute on weak networks.";
+  }
   const code = String(
     (err as { code?: unknown } | null)?.code ??
       (err instanceof ApiClientError ? err.code : "") ??
@@ -291,7 +296,7 @@ export async function getSessionDebriefJob(jobId: string): Promise<SessionDebrie
     await fetchEdgeJson<SessionDebriefJob>(
       "generate-debrief",
       { action: "status", jobId },
-      { timeoutMs: 15_000 },
+      { timeoutMs: STATUS_TIMEOUT_MS },
     ),
     jobId,
   );

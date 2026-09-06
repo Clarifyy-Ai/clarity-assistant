@@ -7,7 +7,8 @@ import { Badge } from "@/components/ui/Badge";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/Tabs";
 import { PlanGate } from "@/components/layout/PlanGate";
-import { SkeletonCard } from "@/components/ui/SkeletonLoader";
+import { FullPageProcessingState } from "@/components/async/FullPageProcessingState";
+import { ProcessingStatus } from "@/components/async/ProcessingStatus";
 import {
   BarChart2, TrendingUp, TrendingDown,
   Flame, Mic,
@@ -119,7 +120,7 @@ export default function Analytics() {
     }
   }, [analytics, batchAnalyzing]);
 
-  if (analytics.loadStatus === "loading") {
+  if (analytics.loadStatus === "loading" || (analytics.loadStatus === "error" && analytics.isReloading)) {
     return (
       <div data-testid="page-width-root" className={`${PAGE_SHELL} space-y-4`}>
         <PageHeader
@@ -130,12 +131,11 @@ export default function Analytics() {
             { label: "Analytics" },
           ]}
         />
-        <div className="space-y-4">
-          <SkeletonCard />
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {[...Array(4)].map((_, i) => <SkeletonCard key={i} />)}
-          </div>
-        </div>
+        <FullPageProcessingState
+          title="Loading Skills Analytics"
+          message="Fetching your performance trends and session history…"
+          stage="analytics"
+        />
       </div>
     );
   }
@@ -152,7 +152,7 @@ export default function Analytics() {
           ]}
         />
         <InlineErrorRetry
-          message={analytics.error}
+          message={analytics.error ?? "We couldn't load your analytics."}
           onRetry={() => void analytics.reload()}
         />
       </div>
@@ -242,7 +242,14 @@ export default function Analytics() {
         actions={<AnalyticsFilterControls analytics={analytics} />}
       />
 
-      {analytics.error && analytics.data && (
+      {analytics.isReloading && (
+        <ProcessingStatus
+          message="Refreshing analytics…"
+          stage="analytics"
+        />
+      )}
+
+      {analytics.error && analytics.data && !analytics.isReloading && (
         <div className="space-y-2">
           {analytics.isStale && (
             <Badge variant="amber" size="sm">Showing last known data</Badge>
@@ -1339,8 +1346,8 @@ function SessionComparePanel({
       </Card>
 
       {analytics.isComparing && !comparison && (
-        <Card className="text-center py-8">
-          <p className="text-sm text-muted-foreground">Comparing sessions…</p>
+        <Card className="py-8">
+          <ProcessingStatus message="Comparing sessions…" stage="compare" />
         </Card>
       )}
 

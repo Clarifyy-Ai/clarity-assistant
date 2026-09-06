@@ -85,7 +85,25 @@ let crashReportingEnabled = DEFAULT_PRIVACY_PREFS.crash_reporting;
 let allowAiTrainingEnabled = DEFAULT_PRIVACY_PREFS.allow_ai_training;
 
 function readBool(raw: unknown, fallback: boolean): boolean {
-  return typeof raw === "boolean" ? raw : fallback;
+  if (typeof raw === "boolean") return raw;
+  if (raw === "true" || raw === 1) return true;
+  if (raw === "false" || raw === 0) return false;
+  return fallback;
+}
+
+/** Coerce profile privacy JSON — supports legacy keys and string booleans. */
+export function resolveShareScorecardAllowed(raw: unknown): boolean {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return DEFAULT_PRIVACY_PREFS.share_scorecard;
+  }
+  const src = raw as Record<string, unknown>;
+  if ("share_scorecard" in src) {
+    return readBool(src.share_scorecard, DEFAULT_PRIVACY_PREFS.share_scorecard);
+  }
+  if ("allow_scorecard_sharing" in src) {
+    return readBool(src.allow_scorecard_sharing, DEFAULT_PRIVACY_PREFS.share_scorecard);
+  }
+  return DEFAULT_PRIVACY_PREFS.share_scorecard;
 }
 
 export function parsePrivacyPrefs(raw: unknown): PrivacyPrefs {
@@ -98,7 +116,7 @@ export function parsePrivacyPrefs(raw: unknown): PrivacyPrefs {
     store_transcripts: readBool(src.store_transcripts, DEFAULT_PRIVACY_PREFS.store_transcripts),
     analytics_tracking: readBool(src.analytics_tracking, DEFAULT_PRIVACY_PREFS.analytics_tracking),
     crash_reporting: readBool(src.crash_reporting, DEFAULT_PRIVACY_PREFS.crash_reporting),
-    share_scorecard: readBool(src.share_scorecard, DEFAULT_PRIVACY_PREFS.share_scorecard),
+    share_scorecard: resolveShareScorecardAllowed(src),
   };
 }
 
@@ -115,7 +133,7 @@ export function shouldStoreTranscripts(raw: unknown): boolean {
 }
 
 export function canShareScorecard(raw: unknown): boolean {
-  return parsePrivacyPrefs(raw).share_scorecard;
+  return resolveShareScorecardAllowed(raw);
 }
 
 export function isCrashReportingEnabled(): boolean {

@@ -28,6 +28,10 @@ export type InterviewContextSnapshot = {
   follow_up_depth: "none" | "light" | "deep";
   resume_id: string | null;
   jd_id: string | null;
+  /** Human-readable resume name at start (from DB `name`). */
+  resume_label?: string | null;
+  /** Human-readable JD title at start. */
+  jd_label?: string | null;
   /** Frozen resume text at start (may be truncated). */
   resume_text: string;
   /** Frozen JD text at start (may be truncated). */
@@ -81,6 +85,8 @@ export function buildInterviewContextSnapshot(input: {
   durationMinutes?: number;
   resumeText?: string;
   jdText?: string;
+  resumeLabel?: string | null;
+  jdLabel?: string | null;
   answerBankSnippets?: string[];
   now?: Date;
 }): InterviewContextSnapshot {
@@ -112,6 +118,8 @@ export function buildInterviewContextSnapshot(input: {
     follow_up_depth: config.follow_up_depth ?? "light",
     resume_id: config.resume_id ?? null,
     jd_id: config.jd_id ?? null,
+    resume_label: input.resumeLabel?.trim() || null,
+    jd_label: input.jdLabel?.trim() || null,
     resume_text: resume,
     jd_text: jd,
     resume_hash: simpleHash(resume),

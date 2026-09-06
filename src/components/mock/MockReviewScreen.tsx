@@ -37,7 +37,7 @@ export function MockReviewScreen({
     {
       label: "Resume",
       value: snapshot.resume_id
-        ? `Selected (${snapshot.resume_hash.slice(0, 8)})`
+        ? snapshot.resume_label?.trim() || "Selected resume"
         : snapshot.resume_text
           ? "Pasted / loaded text"
           : "None",
@@ -45,7 +45,7 @@ export function MockReviewScreen({
     {
       label: "Job description",
       value: snapshot.jd_id
-        ? `Selected (${snapshot.jd_hash.slice(0, 8)})`
+        ? snapshot.jd_label?.trim() || "Selected job description"
         : snapshot.jd_text
           ? "Provided"
           : "None",

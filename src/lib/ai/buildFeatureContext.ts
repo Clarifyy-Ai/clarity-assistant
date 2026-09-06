@@ -22,6 +22,10 @@ import {
 import type { InterviewContextSnapshot } from "@/lib/mock/interviewContext";
 import { resolveFrozenDocuments } from "@/lib/mock/liveContextShare";
 import { answerBankDB } from "@/lib/supabase/database";
+import {
+  loadSessionHistoryContext,
+  mergeApplicationContextIntoResumeBlock,
+} from "@/lib/ai/userApplicationContext";
 import type { ParsedResume } from "@/types/ai.types";
 
 export type FeatureContextInput = {
@@ -175,6 +179,18 @@ export async function buildFeatureContext(
     const starBlock = await loadRelevantStarBlock(input.userId, question, preferBankIds);
     if (starBlock && !resumeBlock.includes("Relevant saved STAR stories")) {
       resumeBlock += starBlock;
+    }
+  }
+
+  if (!contextChecksum && input.userId) {
+    try {
+      const history = await loadSessionHistoryContext(input.userId);
+      resumeBlock = mergeApplicationContextIntoResumeBlock(resumeBlock, {
+        answerBankSummary: "",
+        sessionHistoryBlock: history.block,
+      });
+    } catch {
+      // optional enrichment
     }
   }
 

@@ -17,6 +17,7 @@ import {
   mergeUiPreferences,
   readHotkeysFromUiPreferences,
 } from "@/lib/settings/uiPreferences";
+import { saveProfileSettings } from "@/lib/settings/saveProfileSettings";
 import { HOTKEY_STORAGE_KEY } from "@/lib/overlay/hotkeyOverrides";
 
 type Overrides = Partial<Record<HotkeyId, string>>;
@@ -57,7 +58,6 @@ function findConflicts(overrides: Overrides): Map<string, HotkeyId[]> {
 export default function SettingsHotkeys() {
   const isMobile = useIsMobile();
   const profile = useAuthStore((s) => s.profile);
-  const updateProfile = useAuthStore((s) => s.updateProfile);
   const [overrides, setOverrides] = useState<Overrides>(() => loadOverrides());
   const [recordingId, setRecordingId] = useState<HotkeyId | null>(null);
 
@@ -73,15 +73,15 @@ export default function SettingsHotkeys() {
   const persistOverrides = useCallback(async (next: Overrides) => {
     setOverrides(next);
     saveLocal(next);
-    if (!profile?.id) return;
+    if (!useAuthStore.getState().user?.id) return;
     try {
-      await updateProfile({
-        ui_preferences: mergeUiPreferences(profile.ui_preferences, { hotkeys: next }),
+      await saveProfileSettings({
+        ui_preferences: mergeUiPreferences(profile?.ui_preferences, { hotkeys: next }),
       });
     } catch {
       toast.error("Saved on this device, but we couldn't sync shortcuts to your account.");
     }
-  }, [profile?.id, profile?.ui_preferences, updateProfile]);
+  }, [profile?.ui_preferences]);
 
   useEffect(() => {
     if (!recordingId) return;

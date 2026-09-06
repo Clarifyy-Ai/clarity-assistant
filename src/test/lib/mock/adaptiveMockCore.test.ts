@@ -4,6 +4,7 @@ import {
   DEFAULT_SILENCE_POLICY,
   transcriptLooksComplete,
 } from "@/lib/mock/silencePolicy";
+import { isNonSubstantiveAnswer } from "@/lib/mock/mockAnswerCapture";
 import { isDuplicateQuestion, questionSimilarity } from "@/lib/mock/questionDuplicate";
 import {
   buildInterviewBlueprint,
@@ -17,6 +18,10 @@ import {
   reduceTtsPlayback,
 } from "@/lib/mock/ttsPlayback";
 import { shouldRequestFollowUp, followUpCapForDepth } from "@/lib/mock/followUpPolicy";
+import {
+  buildMockPreviousAnswersPayload,
+  createMockQuestionOperationId,
+} from "@/lib/mock/generateMockQuestion";
 import { reduceAnswerNext } from "@/lib/mock/answerNextFsm";
 import {
   buildDurableTurnsFromProgress,
@@ -95,9 +100,52 @@ describe("silencePolicy", () => {
     ).toBe("wait");
   });
 
+  it("does not auto-finalize thin partial answers", () => {
+    expect(
+      decideSilenceAdvance({
+        silenceMs: DEFAULT_SILENCE_POLICY.silenceMaxMs,
+        hasSpoken: true,
+        answerDurationMs: 4000,
+        transcriptLooksComplete: false,
+        answerTextLength: 5,
+        interviewerSpeaking: false,
+        paused: false,
+      }),
+    ).toBe("confirm_incomplete");
+  });
+
   it("detects complete transcripts", () => {
     expect(transcriptLooksComplete("I led a migration for six months.")).toBe(true);
     expect(transcriptLooksComplete("um")).toBe(false);
+  });
+});
+
+describe("mockAnswerCapture", () => {
+  it("treats greetings as non-substantive answers", () => {
+    expect(isNonSubstantiveAnswer("Hello.")).toBe(true);
+    expect(isNonSubstantiveAnswer("I built a React dashboard for 50k users.")).toBe(false);
+  });
+});
+
+describe("generateMockQuestion adaptive context", () => {
+  it("includes prior answers in operation id so next Q refreshes after each reply", () => {
+    expect(createMockQuestionOperationId("sess", 3)).toBe("gq:sess:q3:a0");
+    expect(createMockQuestionOperationId("sess", 3, { priorAnswerCount: 2 })).toBe(
+      "gq:sess:q3:a2",
+    );
+    expect(
+      createMockQuestionOperationId("sess", 3, { priorAnswerCount: 2, isFollowUp: true }),
+    ).toBe("gq:sess:q3:a2:fu");
+  });
+
+  it("builds previous-answers payload for the edge function", () => {
+    const payload = buildMockPreviousAnswersPayload([
+      { question_text: "Tell me about yourself.", answer_text: "I build React apps." },
+      { question_text: "Debug story?", answer_text: "", skipped: true },
+    ]);
+    expect(payload).toHaveLength(2);
+    expect(payload[0].answer_text).toContain("React");
+    expect(payload[1].skipped).toBe(true);
   });
 });
 

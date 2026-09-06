@@ -11,7 +11,7 @@ import {
 import { enrichDetailedReport } from "@/lib/debrief/enrichDetailedReport";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { SkeletonCard } from "@/components/ui/SkeletonLoader";
+import { FullPageProcessingState } from "@/components/async/FullPageProcessingState";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/common/EmptyState";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
@@ -42,6 +42,8 @@ import {
   userFacingSessionDebriefError,
   type SessionDebriefJob,
 } from "@/lib/debrief/debriefJob";
+import { debriefFetchErrorMessage } from "@/lib/debrief/debriefPageState";
+import { withTimeout } from "@/lib/auth/accountBootstrap";
 import { DebriefExtras } from "@/components/session/DebriefExtras";
 import { DebriefLoadingSteps } from "@/components/debrief/DebriefLoadingSteps";
 import {
@@ -56,10 +58,13 @@ import {
   type DetailedReport,
 } from "@/components/debrief/DebriefAnalyticsPanels";
 
+const DEBRIEF_FETCH_TIMEOUT_MS = 20_000;
+
 export default function DebriefDetail() {
   const { id }   = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
+  const authLoading = useAuthStore((s) => s.isLoading);
 
   const [debrief,    setDebrief]    = useState<any>(null);
   const [session,    setSession]    = useState<any>(null);
@@ -88,69 +93,78 @@ export default function DebriefDetail() {
     }
 
     try {
-      if (!options?.silent) setLoadStep(1);
-      let db = await sessionDebriefsDB.getByIdForUser(id, user.id);
-      if (!db) {
-        db = await sessionDebriefsDB.getBySessionIdForUser(id, user.id);
-      }
+      await withTimeout(
+        (async () => {
+          if (!options?.silent) setLoadStep(1);
+          let db = await sessionDebriefsDB.getByIdForUser(id, user.id);
+          if (!db) {
+            db = await sessionDebriefsDB.getBySessionIdForUser(id, user.id);
+          }
 
-      if (db) {
-        setDebrief(db);
-        if (db.session_id) {
+          if (db) {
+            setDebrief(db);
+            if (db.session_id) {
+              try {
+                const [sess, ans, sc, segments] = await Promise.all([
+                  sessionsDB.getByIdForUser(db.session_id, user.id),
+                  sessionAnswersDB.listBySessionIdForUser(db.session_id, user.id),
+                  scorecardsDB.getBySessionIdForUser(db.session_id, user.id).catch(() => null),
+                  sessionTranscriptsDB.listSegmentsBySessionIdForUser(db.session_id, user.id).catch(() => []),
+                ]);
+                setSession(sess);
+                setAnswers(ans);
+                setScorecard(sc);
+                setTranscriptSegments(segments);
+                try {
+                  const tx = await sessionTranscriptsDB.getBySessionIdForUser(db.session_id, user.id);
+                  setTranscript(tx ?? sess?.notes ?? null);
+                } catch {
+                  setTranscript(sess?.notes ?? null);
+                }
+              } catch {
+                setSession(null);
+                setTranscript(null);
+                setAnswers([]);
+                setScorecard(null);
+                setTranscriptSegments([]);
+              }
+            }
+            return;
+          }
+
+          const sess = await sessionsDB.getByIdForUser(id, user.id);
+          if (!sess) {
+            setFetchError("Session not found.");
+            setDebrief(null);
+            setSession(null);
+            return;
+          }
+          setSession(sess);
+          setDebrief(null);
           try {
-            const [sess, ans, sc, segments] = await Promise.all([
-              sessionsDB.getByIdForUser(db.session_id, user.id),
-              sessionAnswersDB.listBySessionIdForUser(db.session_id, user.id),
-              scorecardsDB.getBySessionIdForUser(db.session_id, user.id).catch(() => null),
-              sessionTranscriptsDB.listSegmentsBySessionIdForUser(db.session_id, user.id).catch(() => []),
+            const [ans, sc, segments] = await Promise.all([
+              sessionAnswersDB.listBySessionIdForUser(id, user.id),
+              scorecardsDB.getBySessionIdForUser(id, user.id).catch(() => null),
+              sessionTranscriptsDB.listSegmentsBySessionIdForUser(id, user.id).catch(() => []),
             ]);
-            setSession(sess);
             setAnswers(ans);
             setScorecard(sc);
             setTranscriptSegments(segments);
             try {
-              const tx = await sessionTranscriptsDB.getBySessionIdForUser(db.session_id, user.id);
+              const tx = await sessionTranscriptsDB.getBySessionIdForUser(id, user.id);
               setTranscript(tx ?? sess?.notes ?? null);
             } catch {
               setTranscript(sess?.notes ?? null);
             }
           } catch {
-            setSession(null);
-            setTranscript(null);
-            setAnswers([]);
-            setScorecard(null);
-            setTranscriptSegments([]);
+            // Artifacts are optional; user can still generate a debrief.
           }
-        }
-      } else {
-        const sess = await sessionsDB.getByIdForUser(id, user.id);
-        if (!sess) {
-          setFetchError("Session not found.");
-          return;
-        }
-        setSession(sess);
-        try {
-          const [ans, sc, segments] = await Promise.all([
-            sessionAnswersDB.listBySessionIdForUser(id, user.id),
-            scorecardsDB.getBySessionIdForUser(id, user.id).catch(() => null),
-            sessionTranscriptsDB.listSegmentsBySessionIdForUser(id, user.id).catch(() => []),
-          ]);
-          setAnswers(ans);
-          setScorecard(sc);
-          setTranscriptSegments(segments);
-          try {
-            const tx = await sessionTranscriptsDB.getBySessionIdForUser(id, user.id);
-            setTranscript(tx ?? sess?.notes ?? null);
-          } catch {
-            setTranscript(sess?.notes ?? null);
-          }
-        } catch {
-          // Artifacts are optional; user can still generate a debrief.
-        }
-        // Persist-first: never spend AI credits just because this page mounted.
-      }
+        })(),
+        DEBRIEF_FETCH_TIMEOUT_MS,
+        "Debrief load",
+      );
     } catch (err: unknown) {
-      const msg = getAiUserFacingError(err);
+      const msg = debriefFetchErrorMessage(err);
       console.error("[DebriefDetail] fetchDebrief error:", err);
       setFetchError(msg);
     } finally {
@@ -167,7 +181,7 @@ export default function DebriefDetail() {
       balance: creditKnown ? creditBalance : null,
       balanceKnown: creditKnown,
     });
-    if (gate.status === "insufficient" || gate.status === "unknown_balance") {
+    if (gate.status === "insufficient") {
       setCreditGateDenied(true);
       openUpgradeIfInsufficientCredits(
         new ApiClientError({
@@ -239,8 +253,13 @@ export default function DebriefDetail() {
 
   // FIX 3: include user?.id in dep array so it re-runs if user loads after id
   useEffect(() => {
+    if (authLoading) return;
+    if (!user?.id) {
+      setLoading(false);
+      return;
+    }
     void fetchDebrief();
-  }, [fetchDebrief]);
+  }, [authLoading, fetchDebrief, user?.id]);
 
   // ── Derived values ────────────────────────────────────────────
 
@@ -290,7 +309,7 @@ export default function DebriefDetail() {
   ];
 
   // ── Loading state — initial DB fetch ─────────────────────────
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <div className="max-w-3xl space-y-5">
         <PageHeader
@@ -298,8 +317,15 @@ export default function DebriefDetail() {
           description="Loading debrief…"
           breadcrumbs={debriefBreadcrumbs.slice(0, 2).concat([{ label: "Loading…" }])}
         />
-        <DebriefLoadingSteps activeIndex={loadStep} debriefJob={debriefJob} />
-        <SkeletonCard />
+        <FullPageProcessingState
+          title={authLoading ? "Loading your account" : "Loading session debrief"}
+          message={
+            authLoading
+              ? "Checking sign-in status…"
+              : "Fetching session details and any saved debrief…"
+          }
+          stage="debrief"
+        />
       </div>
     );
   }
@@ -389,8 +415,12 @@ export default function DebriefDetail() {
             <EmptyState
               icon={Brain}
               title="No debrief yet"
-              description="This session has no saved debrief. Generate one when you are ready — it uses AI credits."
-              actionLabel="Generate debrief"
+              description={
+                creditKnown
+                  ? "This session has no saved debrief. Generate one when you are ready — it uses AI credits."
+                  : "This session has no saved debrief. Checking your credit balance…"
+              }
+              actionLabel={genning ? "Starting…" : "Generate debrief"}
               onAction={() => void generateDebrief(id)}
               secondaryActionLabel="Back to debriefs"
               onSecondaryAction={() => navigate("/app/debriefs")}

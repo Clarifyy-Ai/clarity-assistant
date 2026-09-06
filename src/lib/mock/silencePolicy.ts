@@ -47,6 +47,8 @@ export function decideSilenceAdvance(input: {
   transcriptLooksComplete: boolean;
   interviewerSpeaking: boolean;
   paused: boolean;
+  /** Current captured answer length — used to avoid auto-skipping thin partial replies. */
+  answerTextLength?: number;
   /** VAD or STT indicates the candidate is still speaking — block finalize. */
   isSpeechActive?: boolean;
   policy?: SilencePolicy;
@@ -60,6 +62,11 @@ export function decideSilenceAdvance(input: {
   if (input.answerDurationMs < policy.minAnswerMs) return "wait";
   if (input.silenceMs < policy.briefPauseMs) return "wait";
   if (input.silenceMs < policy.silenceConfirmMs) return "wait";
+
+  const answerLen = input.answerTextLength ?? 0;
+  const thinPartial =
+    answerLen > 0 && answerLen < 40 && !input.transcriptLooksComplete;
+
   if (
     input.silenceMs >= policy.silenceConfirmMs &&
     input.silenceMs < policy.silenceMaxMs &&
@@ -67,7 +74,13 @@ export function decideSilenceAdvance(input: {
   ) {
     return "confirm_incomplete";
   }
-  if (input.silenceMs >= policy.silenceConfirmMs) return "finalize";
+  if (input.silenceMs >= policy.silenceConfirmMs) {
+    // Never auto-advance on thin partial answers — wait for explicit Next or re-ask.
+    if (thinPartial) {
+      return input.silenceMs >= policy.noAnswerMs ? "no_answer_prompt" : "confirm_incomplete";
+    }
+    return "finalize";
+  }
   return "wait";
 }
 

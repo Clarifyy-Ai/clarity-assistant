@@ -20,7 +20,11 @@ import { cn } from "@/lib/utils";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useAuthStore } from "@/store/userStore";
-import { canShareScorecard } from "@/lib/privacy/privacyPrefs";
+import {
+  canShareScorecard,
+  parsePrivacyPrefs,
+  toStoredPrivacyPrefs,
+} from "@/lib/privacy/privacyPrefs";
 import { FullPageProcessingState } from "@/components/async/FullPageProcessingState";
 import { InsufficientCreditsAction } from "@/components/billing/InsufficientCreditsAction";
 import { AI_OP_STAGES } from "@/lib/async/aiOpStages";
@@ -106,22 +110,60 @@ export default function Scorecard() {
   const shareAllowed = canShareScorecard(
     useAuthStore((s) => s.profile?.privacy_prefs),
   );
+  const updateProfile = useAuthStore((s) => s.updateProfile);
 
   const [expandedQ, setExpandedQ] = useState<string | null>(null);
   const [copyFeedback, setCopyFeedback] = useState(false);
+  const [shareEnabling, setShareEnabling] = useState(false);
+
+  async function enableScorecardSharing(): Promise<boolean> {
+    const profile = useAuthStore.getState().profile;
+    if (!profile?.id) return false;
+    setShareEnabling(true);
+    try {
+      const stored = toStoredPrivacyPrefs({
+        ...parsePrivacyPrefs(profile.privacy_prefs),
+        share_scorecard: true,
+      });
+      await updateProfile({ privacy_prefs: stored });
+      toast.success("Scorecard sharing enabled");
+      return true;
+    } catch {
+      toast.error("Could not update privacy settings. Open Settings → Privacy.");
+      return false;
+    } finally {
+      setShareEnabling(false);
+    }
+  }
 
   async function handleShare() {
+    if (!shareAllowed) {
+      const enabled = await enableScorecardSharing();
+      if (!enabled) {
+        navigate("/app/settings/privacy");
+        return;
+      }
+    }
     const url = await shareScorecard();
     if (url) {
       await navigator.clipboard.writeText(url);
       setCopyFeedback(true);
       setTimeout(() => setCopyFeedback(false), 2000);
+      toast.success("Share link copied to clipboard");
       return;
     }
-    toast.error(
-      shareBlockedReason ??
-        "Scorecard sharing is turned off in Settings → Privacy.",
-    );
+    const blocked = shareBlockedReason ?? "";
+    if (/privacy|sharing is turned off/i.test(blocked)) {
+      toast.error(blocked, {
+        duration: 8000,
+        action: {
+          label: "Enable sharing",
+          onClick: () => void enableScorecardSharing().then((ok) => ok && handleShare()),
+        },
+      });
+      return;
+    }
+    toast.error(blocked || "Could not create a share link. Please try again.");
   }
 
   // ── Loading / pending ─────────────────────────────────────────
@@ -379,18 +421,29 @@ export default function Scorecard() {
         ]}
         actions={
           <div className="flex items-center gap-2 flex-wrap">
-            {shareAllowed ? (
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                aria-label={isShared ? "Share scorecard link again" : "Share scorecard link"}
-                onClick={() => void handleShare()}
-                leftIcon={<Share2 className="w-3.5 h-3.5" />}
-              >
-                {copyFeedback ? "Copied!" : isShared ? "Share again" : "Share"}
-              </Button>
-            ) : null}
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              loading={shareEnabling}
+              aria-label={
+                shareAllowed
+                  ? isShared
+                    ? "Share scorecard link again"
+                    : "Share scorecard link"
+                  : "Enable scorecard sharing and copy link"
+              }
+              onClick={() => void handleShare()}
+              leftIcon={<Share2 className="w-3.5 h-3.5" />}
+            >
+              {copyFeedback
+                ? "Copied!"
+                : shareAllowed
+                  ? isShared
+                    ? "Share again"
+                    : "Share"
+                  : "Enable & share"}
+            </Button>
             <Button
               type="button"
               variant="secondary"

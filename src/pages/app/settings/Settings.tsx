@@ -10,6 +10,9 @@ import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 import { assignLoginWithReturnTo } from "@/lib/auth/safeReturnTo";
+import { useSettingsBootstrap } from "@/hooks/useSettingsBootstrap";
+import { FullPageProcessingState } from "@/components/async/FullPageProcessingState";
+import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 
 // ─────────────────────────────────────────────────────────────────
 // Settings — sidebar layout wrapper (grouped IA)
@@ -110,9 +113,11 @@ export default function Settings() {
   const location = useLocation();
   const { pathname } = location;
   const signOut = useAuthStore((s) => s.signOut);
+  const { ready, loading, slowHint, retrying, error, retry } = useSettingsBootstrap();
   const isRoot = pathname === "/app/settings" || pathname === "/app/settings/";
   const activeNav = SETTINGS_NAV.find((item) => pathname.startsWith(item.to));
   const showSettingsHeader = !pathname.includes("/billing");
+  const isBilling = pathname.includes("/billing");
 
   async function handleSignOut() {
     const returnTo = `${pathname}${location.search}${location.hash}`;
@@ -204,6 +209,24 @@ export default function Settings() {
 
       {/* Content — Outlet always mounted so nested settings routes resolve */}
       <div data-testid="settings-content" className="flex-1 min-w-0">
+        {!isBilling && !ready && loading ? (
+          <FullPageProcessingState
+            title="Loading settings"
+            message={
+              slowHint
+                ? "Still loading your profile on a slow connection…"
+                : "Loading your profile and preferences…"
+            }
+          />
+        ) : !isBilling && !ready && error ? (
+          <InlineErrorRetry
+            message={error ?? "Settings could not load your profile."}
+            onRetry={() => void retry()}
+            retryLabel={retrying ? "Retrying…" : "Retry"}
+          />
+        ) : null}
+        {(ready || isRoot || isBilling) && (
+        <>
         {isRoot && (
           <div className="lg:hidden space-y-4 mb-4">
             <button
@@ -254,7 +277,9 @@ export default function Settings() {
             ))}
           </div>
         )}
-        <Outlet />
+        {ready || isBilling ? <Outlet /> : null}
+        </>
+        )}
       </div>
       </div>
     </div>

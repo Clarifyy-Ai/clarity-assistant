@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   buildSessionConversationTimeline,
   chatAttentionBannerCopy,
+  isChatRecoveryReason,
   isLowConfidenceInterviewerSpeech,
+  resolveChatRecoveryReason,
 } from "@/lib/overlay/sessionConversation";
 
 describe("buildSessionConversationTimeline", () => {
@@ -56,6 +58,37 @@ describe("buildSessionConversationTimeline", () => {
 describe("chatAttentionBannerCopy", () => {
   it("returns actionable copy for low confidence", () => {
     expect(chatAttentionBannerCopy("low_confidence")).toMatch(/Chat/i);
+  });
+});
+
+describe("resolveChatRecoveryReason", () => {
+  it("keeps explicit recovery reasons", () => {
+    expect(
+      resolveChatRecoveryReason({
+        chatAttentionReason: "audio_unavailable",
+        sessionPipelineState: "listening",
+      }),
+    ).toBe("audio_unavailable");
+  });
+
+  it("falls back to pipeline state when opening Chat cleared the pulse only", () => {
+    expect(
+      resolveChatRecoveryReason({
+        chatAttentionReason: null,
+        sessionPipelineState: "audio_unavailable",
+      }),
+    ).toBe("audio_unavailable");
+  });
+
+  it("returns null for normal coach chat", () => {
+    expect(
+      resolveChatRecoveryReason({
+        chatAttentionReason: null,
+        sessionPipelineState: "listening",
+      }),
+    ).toBeNull();
+    expect(isChatRecoveryReason(null)).toBe(false);
+    expect(isChatRecoveryReason("audio_unavailable")).toBe(true);
   });
 });
 

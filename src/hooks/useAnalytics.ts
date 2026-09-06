@@ -3,7 +3,7 @@ import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
 import { subscribeFocusRecovery } from "@/lib/focusRecovery";
-import { toSafeUiError } from "@/lib/focusRecovery";
+import { classifyRequestError, toSafeUiError } from "@/lib/focusRecovery";
 import { ApiClientError } from "@/lib/api/apiClient";
 import type {
   AnalyticsDashboardData,
@@ -38,11 +38,30 @@ import {
 // Fetches, filters, and computes all analytics dashboard data.
 // ─────────────────────────────────────────────────────────────────
 
+const ANALYTICS_TIMEOUT_MS = 45_000;
+const ANALYTICS_RETRY_TIMEOUT_MS = 60_000;
+
+function analyticsLoadKey(
+  userId: string | undefined,
+  filter: AnalyticsFilter,
+): string {
+  return `${userId ?? ""}:${filter.period}:${filter.session_filter}:${filter.interview_type}`;
+}
+
+function analyticsLoadErrorMessage(err: unknown): string {
+  if (classifyRequestError(err).kind === "network") {
+    return "Your connection is slow or unstable. Wait a moment and tap Retry — loading can take up to a minute on weak networks.";
+  }
+  return toSafeUiError(err, "We couldn't load your analytics.");
+}
+
 export function useAnalytics() {
-  const { user } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
+  const authLoading = useAuthStore((s) => s.isLoading);
 
   const [data,         setData]         = useState<AnalyticsDashboardData | null>(null);
   const [isLoading,    setIsLoading]    = useState(true);
+  const [isReloading,  setIsReloading]  = useState(false);
   const [error,        setError]        = useState<string | null>(null);
   const [isStale,      setIsStale]      = useState(false);
   const [filter,       setFilterState]  = useState<AnalyticsFilter>({
@@ -56,16 +75,23 @@ export function useAnalytics() {
 
   const hasDataRef = useRef(false);
   const analyticsInflightRef = useRef<Promise<void> | null>(null);
+  const analyticsInflightKeyRef = useRef<string>("");
+  const loadGenerationRef = useRef(0);
   const compareInflightRef = useRef(false);
 
   // ── Load on mount + filter change ────────────────────────────
 
   useEffect(() => {
-    if (!user) return;
+    if (authLoading) return;
+    if (!user?.id) {
+      setIsLoading(false);
+      setIsReloading(false);
+      return;
+    }
     void loadAnalytics();
     // loadAnalytics closes over current filter; re-run when the user or filters change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, filter.period, filter.session_filter, filter.interview_type]);
+  }, [authLoading, user?.id, filter.period, filter.session_filter, filter.interview_type]);
 
   useEffect(() => {
     return subscribeFocusRecovery((plan) => {
@@ -77,28 +103,30 @@ export function useAnalytics() {
   }, [user?.id]);
 
   async function loadAnalytics(): Promise<void> {
-    if (analyticsInflightRef.current) return analyticsInflightRef.current;
+    const loadKey = analyticsLoadKey(user?.id, filter);
+    if (analyticsInflightRef.current && analyticsInflightKeyRef.current === loadKey) {
+      return analyticsInflightRef.current;
+    }
+
+    const generation = ++loadGenerationRef.current;
+    analyticsInflightKeyRef.current = loadKey;
+    const requestFilter = filter;
+    const timeZone = resolveDisplayTimeZone(
+      useAuthStore.getState().profile?.timezone,
+    );
 
     analyticsInflightRef.current = (async () => {
       if (!hasDataRef.current) {
         setIsLoading(true);
+      } else {
+        setIsReloading(true);
       }
       setError(null);
 
-      try {
-        const result = normalizeAnalyticsDashboard(
-          await fetchEdgeJson<AnalyticsDashboardData>(
-            "analytics-dashboard",
-            {
-              filter,
-              timezone: resolveDisplayTimeZone(
-                useAuthStore.getState().profile?.timezone,
-              ),
-            },
-            { timeoutMs: 25_000 },
-          ),
-        );
-        if (result?.recent_sessions) {
+      const applyResult = (raw: Partial<AnalyticsDashboardData> | null | undefined) => {
+        if (generation !== loadGenerationRef.current) return;
+        const result = normalizeAnalyticsDashboard(raw);
+        if (result.recent_sessions) {
           result.recent_sessions = result.recent_sessions.filter(
             (s) => !(s as { tags?: string[] }).tags?.includes("private"),
           );
@@ -108,6 +136,16 @@ export function useAnalytics() {
         setCompareError(null);
         hasDataRef.current = true;
         setIsStale(false);
+      };
+
+      try {
+        applyResult(
+          await fetchEdgeJson<AnalyticsDashboardData>(
+            "analytics-dashboard",
+            { filter: requestFilter, timezone: timeZone },
+            { timeoutMs: ANALYTICS_TIMEOUT_MS },
+          ),
+        );
       } catch (err) {
         const retryable =
           err instanceof ApiClientError
@@ -116,45 +154,37 @@ export function useAnalytics() {
                 err instanceof Error ? err.message : String(err ?? ""),
               );
 
-        if (retryable && !hasDataRef.current) {
+        if (retryable && generation === loadGenerationRef.current) {
           try {
-            const retryResult = normalizeAnalyticsDashboard(
+            applyResult(
               await fetchEdgeJson<AnalyticsDashboardData>(
                 "analytics-dashboard",
-                {
-                  filter,
-                  timezone: resolveDisplayTimeZone(
-                    useAuthStore.getState().profile?.timezone,
-                  ),
-                },
-                { timeoutMs: 40_000 },
+                { filter: requestFilter, timezone: timeZone },
+                { timeoutMs: ANALYTICS_RETRY_TIMEOUT_MS },
               ),
             );
-            if (retryResult?.recent_sessions) {
-              retryResult.recent_sessions = retryResult.recent_sessions.filter(
-                (s) => !(s as { tags?: string[] }).tags?.includes("private"),
-              );
-            }
-            setData(retryResult);
-            setComparison(null);
-            setCompareError(null);
-            hasDataRef.current = true;
-            setIsStale(false);
             return;
           } catch {
             /* fall through to error state */
           }
         }
 
+        if (generation !== loadGenerationRef.current) return;
+
         // Keep last-known data so optional 503s do not blank the shell.
-        setError(toSafeUiError(err, "We couldn't load your analytics."));
+        setError(analyticsLoadErrorMessage(err));
         setData((prev) => {
           setIsStale(Boolean(prev));
           return prev;
         });
       } finally {
-        setIsLoading(false);
-        analyticsInflightRef.current = null;
+        if (generation === loadGenerationRef.current) {
+          setIsLoading(false);
+          setIsReloading(false);
+        }
+        if (analyticsInflightKeyRef.current === loadKey) {
+          analyticsInflightRef.current = null;
+        }
       }
     })();
     return analyticsInflightRef.current;
@@ -321,6 +351,7 @@ export function useAnalytics() {
   return {
     data,
     isLoading,
+    isReloading,
     error,
     isStale,
     loadStatus,

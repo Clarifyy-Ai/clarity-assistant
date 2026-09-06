@@ -37,6 +37,8 @@ import {
   packPracticeAnswers,
   safeTrim,
 } from "@/lib/practice/workspaceAnswers";
+import { FullPageProcessingState } from "@/components/async/FullPageProcessingState";
+import { withTimeout } from "@/lib/auth/accountBootstrap";
 import { PAGE_SHELL } from "@/lib/ui/responsivePage";
 import {
   AlertDialog,
@@ -57,8 +59,11 @@ type HistoryRow = {
   status?: string;
 };
 
+const RESTORE_TIMEOUT_MS = 12_000;
+
 export default function PracticeWorkspacePage() {
   const user = useAuthStore((s) => s.user);
+  const authLoading = useAuthStore((s) => s.isLoading);
   const [role, setRole] = useState("Software Engineer");
   const [difficulty, setDifficulty] = useState<"easy" | "medium" | "hard">("medium");
   const [interviewType, setInterviewType] = useState<InterviewType>("Behavioral");
@@ -107,18 +112,38 @@ export default function PracticeWorkspacePage() {
 
   // Restore active draft on mount
   useEffect(() => {
+    if (authLoading) return;
     if (!user?.id) {
       setRestoring(false);
       return;
     }
     let cancelled = false;
     void (async () => {
-      const { data, error } = await supabase
-        .from("practice_workspace_sessions")
-        .select("*")
-        .eq("user_id", user.id)
-        .eq("status", "active")
-        .maybeSingle();
+      let data: Record<string, unknown> | null = null;
+      let error: { message: string } | null = null;
+      try {
+        const result = await withTimeout(
+          supabase
+            .from("practice_workspace_sessions")
+            .select("*")
+            .eq("user_id", user.id)
+            .eq("status", "active")
+            .maybeSingle(),
+          RESTORE_TIMEOUT_MS,
+          "Practice session restore",
+        );
+        data = result.data as Record<string, unknown> | null;
+        error = result.error;
+      } catch (err) {
+        console.warn("[practice-workspace] restore:", err);
+        if (!cancelled) {
+          toast.message("Could not restore your last session", {
+            description: "Start a new practice session below.",
+          });
+        }
+        setRestoring(false);
+        return;
+      }
       if (cancelled) return;
       if (error) {
         console.warn("[practice-workspace] restore:", error.message);
@@ -173,7 +198,7 @@ export default function PracticeWorkspacePage() {
     return () => {
       cancelled = true;
     };
-  }, [user?.id]);
+  }, [authLoading, user?.id]);
 
   const persistDraft = useCallback(async () => {
     if (!user?.id || !draftId || !started || staleTab) return;
@@ -413,11 +438,19 @@ export default function PracticeWorkspacePage() {
     void persistDraft();
   }
 
-  if (restoring) {
+  if (authLoading || restoring) {
     return (
       <div className={PAGE_SHELL}>
-        <PageHeader title="Interview Practice Workspace" description="Restoring your session…" />
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <PageHeader title="Interview Practice Workspace" />
+        <FullPageProcessingState
+          title={authLoading ? "Loading your account" : "Restoring your session"}
+          message={
+            authLoading
+              ? "Checking sign-in status…"
+              : "Looking for an in-progress practice session…"
+          }
+          stage={authLoading ? "auth" : "restore"}
+        />
       </div>
     );
   }

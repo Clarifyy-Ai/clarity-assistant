@@ -1,6 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { Bell, Zap, AlertTriangle, Eye, EyeOff, LogOut, Settings, User, Search, X } from "lucide-react";
+import { Bell, Zap, AlertTriangle, Eye, EyeOff, LogOut, Settings, User, Search, X, Briefcase } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
 import { useCreditBalance } from "@/components/billing/useCreditState";
 import { useNotificationStore } from "@/store/notificationStore";
@@ -20,8 +20,26 @@ import { cn } from "@/lib/utils";
 import { BrandLogo } from "@/components/marketing";
 import { ProductModePill } from "@/components/layout/ProductModePill";
 import { assignLoginWithReturnTo } from "@/lib/auth/safeReturnTo";
+import { STEALTH_BRAND } from "@/lib/stealth/stealthConfig";
+import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 
 const CMDK_TIP_KEY = "clarify:cmdk-tip-dismissed";
+
+function AppTopBarBrand({ stealthMode }: { stealthMode: boolean }) {
+  if (stealthMode) {
+    return (
+      <>
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-600">
+          <Briefcase className="h-4 w-4 text-white" aria-hidden />
+        </div>
+        <span className="truncate text-base font-bold tracking-tight text-foreground">
+          {STEALTH_BRAND.name}
+        </span>
+      </>
+    );
+  }
+  return <BrandLogo size="sm" />;
+}
 
 export function AppTopBar() {
   const { profile, signOut, signOutThisTab } = useAuthStore();
@@ -95,10 +113,10 @@ export function AppTopBar() {
       <div style={noDragStyle} className="flex items-center gap-1.5 min-w-0 shrink-0 md:hidden">
         <Link
           to="/app/dashboard"
-          className="flex items-center gap-1.5 pr-1"
-          aria-label="Career Pilot home"
+          className="flex min-w-0 items-center gap-1.5 pr-1"
+          aria-label={stealthMode ? `${STEALTH_BRAND.name} home` : `${PRODUCT_NAMES.brand} home`}
         >
-          <BrandLogo size="sm" />
+          <AppTopBarBrand stealthMode={stealthMode} />
         </Link>
         <ProductModePill />
       </div>
@@ -106,10 +124,14 @@ export function AppTopBar() {
       <div style={noDragStyle} className="hidden md:flex items-center gap-2 min-w-0 flex-1">
         <Link
           to="/app/dashboard"
-          className="flex items-center gap-1.5 pr-1 shrink-0 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          aria-label="Career Pilot dashboard"
+          className="flex min-w-0 items-center gap-1.5 pr-1 shrink-0 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label={
+            stealthMode
+              ? `${STEALTH_BRAND.name} dashboard`
+              : `${PRODUCT_NAMES.brand} dashboard`
+          }
         >
-          <BrandLogo size="sm" showText={false} />
+          <AppTopBarBrand stealthMode={stealthMode} />
         </Link>
         <ProductModePill />
       </div>

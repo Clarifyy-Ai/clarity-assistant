@@ -106,6 +106,41 @@ export type ChatAttentionReason =
   | "manual_needed"
   | null;
 
+const CHAT_RECOVERY_REASONS = new Set<Exclude<ChatAttentionReason, null>>([
+  "listening_timeout",
+  "audio_unavailable",
+  "low_confidence",
+  "stt_reconnect_failed",
+  "manual_needed",
+]);
+
+/** True when typed Chat input should recover AI Help instead of generic coach chat. */
+export function isChatRecoveryReason(
+  reason: ChatAttentionReason,
+): reason is Exclude<ChatAttentionReason, null> {
+  return reason != null && CHAT_RECOVERY_REASONS.has(reason);
+}
+
+/**
+ * Resolve whether Chat submit should trigger AI Help recovery.
+ * Keeps recovery active after opening Chat (pulse dismissed but reason retained).
+ */
+export function resolveChatRecoveryReason(input: {
+  chatAttentionReason: ChatAttentionReason;
+  sessionPipelineState?: string | null;
+}): ChatAttentionReason {
+  if (isChatRecoveryReason(input.chatAttentionReason)) {
+    return input.chatAttentionReason;
+  }
+  if (input.sessionPipelineState === "audio_unavailable") {
+    return "audio_unavailable";
+  }
+  if (input.sessionPipelineState === "permission_denied") {
+    return "manual_needed";
+  }
+  return null;
+}
+
 export function chatAttentionBannerCopy(reason: ChatAttentionReason): string {
   switch (reason) {
     case "listening_timeout":

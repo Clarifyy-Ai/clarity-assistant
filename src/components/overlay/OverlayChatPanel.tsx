@@ -20,7 +20,6 @@ export function OverlayChatPanel({ onSubmit }: OverlayChatPanelProps) {
   const chatHistory = useOverlayStore((s) => s.chat_history);
   const hintHistory = useOverlayStore((s) => s.hint_history);
   const isGenerating = useOverlayStore((s) => s.is_chat_generating);
-  const chatAttention = useOverlayStore((s) => s.chat_attention);
   const chatAttentionReason = useOverlayStore((s) => s.chat_attention_reason);
   const chatPrefill = useOverlayStore((s) => s.chat_prefill);
 
@@ -33,12 +32,11 @@ export function OverlayChatPanel({ onSubmit }: OverlayChatPanelProps) {
       buildSessionConversationTimeline({
         chatHistory,
         hintHistory,
-        systemNotice:
-          chatAttention && chatAttentionReason
-            ? chatAttentionBannerCopy(chatAttentionReason)
-            : null,
+        systemNotice: chatAttentionReason
+          ? chatAttentionBannerCopy(chatAttentionReason)
+          : null,
       }),
-    [chatHistory, hintHistory, chatAttention, chatAttentionReason],
+    [chatHistory, hintHistory, chatAttentionReason],
   );
 
   useEffect(() => {

@@ -10,6 +10,10 @@ import { usePrivateMode } from "@/hooks/usePrivateMode";
 import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
 import { SettingsSaveBar } from "@/components/settings/SettingsSaveBar";
 import {
+  saveProfileSettings,
+  settingsSaveError,
+} from "@/lib/settings/saveProfileSettings";
+import {
   PRIVACY_ENFORCEMENT,
   parsePrivacyPrefs,
   toStoredPrivacyPrefs,
@@ -62,13 +66,8 @@ const PRIVACY_SETTINGS: Array<{
   },
 ];
 
-function errorMessage(err: unknown): string {
-  if (err instanceof Error && err.message) return err.message;
-  return "Failed to save privacy settings.";
-}
-
 export default function SettingsPrivacy() {
-  const { profile, updateProfile } = useAuthStore();
+  const { profile } = useAuthStore();
   const { enabled: privateMode, toggle: togglePrivateMode } = usePrivateMode();
 
   const [prefs, setPrefs] = useState<PrivacyPrefs>(() =>
@@ -87,17 +86,16 @@ export default function SettingsPrivacy() {
   }
 
   async function handleSave() {
-    if (!profile?.id) return;
     setSaving(true);
     try {
       const stored = toStoredPrivacyPrefs(prefs);
-      await updateProfile({ privacy_prefs: stored });
+      await saveProfileSettings({ privacy_prefs: stored });
       applyObservabilityPreferences(stored);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
       toast.success("Privacy settings saved");
     } catch (err) {
-      toast.error(errorMessage(err));
+      toast.error(settingsSaveError(err));
     } finally {
       setSaving(false);
     }

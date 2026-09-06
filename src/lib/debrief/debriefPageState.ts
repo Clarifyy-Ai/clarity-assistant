@@ -2,6 +2,39 @@
  * Explicit Debrief page state machine — never infer from an empty array alone.
  */
 
+import {
+  classifyRequestError,
+  isAbortLikeError,
+} from "@/lib/focusRecovery/retryClassification";
+
+function messageOf(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  if (error && typeof error === "object" && "message" in error) {
+    const msg = (error as { message?: unknown }).message;
+    if (typeof msg === "string") return msg;
+  }
+  return "";
+}
+
+export function debriefFetchErrorMessage(error: unknown): string {
+  const classified = classifyRequestError(error);
+  if (classified.kind === "authentication") {
+    return "Your session expired. Please sign in again.";
+  }
+  if (
+    classified.kind === "network" ||
+    classified.kind === "infrastructure" ||
+    isAbortLikeError(error) ||
+    /abort|timeout|timed out|failed to fetch|network|offline/i.test(messageOf(error))
+  ) {
+    return "Your connection is slow or unstable. Tap Retry — loading can take up to a minute on weak networks.";
+  }
+  const raw = messageOf(error).trim();
+  if (raw) return raw;
+  return DEBRIEF_EMPTY_COPY.temporaryFailureDescription;
+}
+
 export type DebriefPageState =
   | "initializing"
   | "loading"

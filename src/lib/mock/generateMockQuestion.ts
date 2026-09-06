@@ -37,6 +37,8 @@ export type MockGenerateQuestionsRequest = {
   phase?: string;
   competency?: string;
   blueprint_slot?: BlueprintSlot | null;
+  answer_bank_snippets?: string[];
+  session_history_snippets?: string[];
   interview_context?: Pick<
     InterviewContextSnapshot,
     | "experience_level"
@@ -47,6 +49,7 @@ export type MockGenerateQuestionsRequest = {
     | "seniority"
     | "industry"
     | "topics_to_avoid"
+    | "answer_bank_snippets"
   > | null;
 };
 
@@ -116,9 +119,33 @@ function mapUserFacingGenerationError(err: unknown): string {
   return QUESTION_GENERATION_USER_ERROR;
 }
 
-/** Stable per-session question op id — no random UUID (idempotent refresh / retry). */
-export function createMockQuestionOperationId(sessionId: string, index: number): string {
-  return `gq:${sessionId}:q${index}`;
+/** Stable per-session question op id — varies with prior answers so next Q adapts after each reply. */
+export function createMockQuestionOperationId(
+  sessionId: string,
+  index: number,
+  opts?: { priorAnswerCount?: number; isFollowUp?: boolean },
+): string {
+  const answers = Math.max(0, opts?.priorAnswerCount ?? 0);
+  const followUp = opts?.isFollowUp ? ":fu" : "";
+  return `gq:${sessionId}:q${index}:a${answers}${followUp}`;
+}
+
+/** Normalized prior Q&A payload for adaptive next-question generation. */
+export function buildMockPreviousAnswersPayload(
+  answers: ReadonlyArray<{
+    question_text: string;
+    answer_text?: string | null;
+    skipped?: boolean;
+  }>,
+): PreviousAnswerSummary[] {
+  return answers
+    .filter((a) => String(a.question_text ?? "").trim())
+    .slice(-6)
+    .map((a) => ({
+      question_text: String(a.question_text).trim(),
+      answer_text: a.skipped ? "" : String(a.answer_text ?? "").trim(),
+      skipped: Boolean(a.skipped),
+    }));
 }
 
 /**
@@ -224,6 +251,14 @@ export async function generateMockInterviewQuestion(
         seniority: body.interview_context?.seniority ?? body.interview_context?.experience_level ?? "",
         industry: body.interview_context?.industry ?? "",
         topics_to_avoid: body.interview_context?.topics_to_avoid ?? [],
+        answer_bank_snippets: (body.interview_context?.answer_bank_snippets ?? [])
+          .map((s) => String(s ?? "").trim().slice(0, 500))
+          .filter(Boolean)
+          .slice(0, 8),
+        session_history_snippets: (body.session_history_snippets ?? [])
+          .map((s) => String(s ?? "").trim().slice(0, 300))
+          .filter(Boolean)
+          .slice(0, 6),
       },
       {
         signal,

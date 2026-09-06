@@ -10,8 +10,8 @@ import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Input } from "@/components/ui/Input";
+import { FullPageProcessingState } from "@/components/async/FullPageProcessingState";
 import { Button } from "@/components/ui/Button";
-import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { cn } from "@/lib/utils";
 import {
@@ -39,6 +39,7 @@ import { subscribeFocusRecovery } from "@/lib/focusRecovery";
 import { formatSessionDuration } from "@/lib/session/sessionDisplay";
 import {
   fetchSessionHistory,
+  sessionHistoryUserMessage,
   SessionHistoryApiError,
 } from "@/lib/session/sessionHistoryApi";
 import type { SessionHistoryItem } from "@/lib/session/sessionHistoryTypes";
@@ -80,7 +81,8 @@ function typeIcon(item: SessionHistoryItem) {
 
 export default function CallSessions() {
   usePageMeta({ title: PRODUCT_NAMES.sessionHistory });
-  const { user } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
+  const authLoading = useAuthStore((s) => s.isLoading);
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const parsed = useMemo(() => parseHistorySearchParams(searchParams), [searchParams]);
@@ -89,7 +91,6 @@ export default function CallSessions() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [errorCode, setErrorCode] = useState<string | null>(null);
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
@@ -115,7 +116,6 @@ export default function CallSessions() {
       if (mode === "replace") {
         setLoading(true);
         setError(null);
-        setErrorCode(null);
         setLoadMoreError(null);
       } else {
         setLoadingMore(true);
@@ -141,20 +141,18 @@ export default function CallSessions() {
         setLoadMoreError(null);
       } catch (err) {
         if (gen !== fetchGen.current) return;
-        const message =
-          err instanceof SessionHistoryApiError
-            ? err.message
-            : "We couldn’t load your session history.";
-        const code = err instanceof SessionHistoryApiError ? err.code : "UNKNOWN";
+        const message = sessionHistoryUserMessage(err);
         if (mode === "append") {
           setLoadMoreError(message);
           toast.error(message);
         } else {
+          console.warn(
+            "[CallSessions] load failed:",
+            err instanceof SessionHistoryApiError ? err.code : err,
+          );
           setError(message);
-          setErrorCode(code);
           setItems([]);
           setHasMore(false);
-          toast.error(message);
         }
       } finally {
         if (gen === fetchGen.current) {
@@ -167,9 +165,15 @@ export default function CallSessions() {
   );
 
   useEffect(() => {
+    if (authLoading) return;
+    if (!user?.id) {
+      setLoading(false);
+      return;
+    }
     void load("replace");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
+    authLoading,
     user?.id,
     parsed.typeChip,
     parsed.statusChip,
@@ -328,15 +332,19 @@ export default function CallSessions() {
         </div>
       </div>
 
-      {loading ? (
-        <div className="space-y-3">
-          {[...Array(4)].map((_, i) => (
-            <SkeletonCard key={i} />
-          ))}
-        </div>
+      {authLoading || loading ? (
+        <FullPageProcessingState
+          title={authLoading ? "Loading your account" : "Loading session history"}
+          message={
+            authLoading
+              ? "Checking sign-in status…"
+              : "Fetching your practice and assessment sessions…"
+          }
+          stage="sessions"
+        />
       ) : error ? (
         <InlineErrorRetry
-          message={`${error}${errorCode ? ` (${errorCode})` : ""}`}
+          message={error}
           onRetry={() => void load("replace")}
         />
       ) : items.length === 0 && filtersActive ? (

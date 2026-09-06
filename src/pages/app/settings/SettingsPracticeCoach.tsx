@@ -5,6 +5,7 @@ import { useAuthStore } from "@/store/authStore";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
+import { saveProfileSettings, settingsSaveError } from "@/lib/settings/saveProfileSettings";
 import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -57,7 +58,6 @@ const COACH_TONE_OPTIONS: { value: CoachTone; label: string; desc: string }[] = 
 
 export default function SettingsPracticeCoach() {
   const profile = useAuthStore((s) => s.profile);
-  const updateProfile = useAuthStore((s) => s.updateProfile);
   const navigate = useNavigate();
 
   const [hintStyle, setHintStyle] = useState<HintStyle>((profile?.hint_style as HintStyle) ?? "short_hints");
@@ -74,12 +74,11 @@ export default function SettingsPracticeCoach() {
   }, [profile?.hint_style, profile?.coach_tone]);
 
   async function handleSave() {
-    if (!profile?.id) return;
     setSaving(true);
     setSaved(false);
     setSaveFailed(false);
     try {
-      await updateProfile({
+      await saveProfileSettings({
         hint_style: hintStyle as any,
         coach_tone: coachTone as any,
       });
@@ -88,7 +87,7 @@ export default function SettingsPracticeCoach() {
       toast.success("Practice Coach preferences saved successfully.");
     } catch (err) {
       setSaveFailed(true);
-      toast.error(err instanceof Error ? err.message : "Failed to save coach preferences.");
+      toast.error(settingsSaveError(err));
     } finally {
       setSaving(false);
     }

@@ -12,17 +12,18 @@ import { loadDebriefListPage } from "@/lib/debrief/loadDebriefList";
 import {
   DEBRIEF_EMPTY_COPY,
   buildDebriefListAccess,
+  debriefFetchErrorMessage,
   resolveDebriefPageState,
   type DebriefPageState,
   type DebriefSessionEligibility,
 } from "@/lib/debrief/debriefPageState";
+import { FullPageProcessingState } from "@/components/async/FullPageProcessingState";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageContent } from "@/components/layout/PageContent";
 import { EmptyState } from "@/components/common/EmptyState";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
-import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import {
@@ -47,6 +48,7 @@ type SessionMeta = Pick<
 export default function Debrief() {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
+  const authLoading = useAuthStore((s) => s.isLoading);
   const planId = useAuthStore((s) => s.planId) || "free";
 
   const [debriefs, setDebriefs] = useState<
@@ -74,6 +76,7 @@ export default function Debrief() {
   const [correlationId, setCorrelationId] = useState<string | null>(null);
 
   const fetchDebriefs = useCallback(async () => {
+    if (authLoading) return;
     if (!user?.id) {
       setLoading(false);
       setFetchError(null);
@@ -131,9 +134,7 @@ export default function Debrief() {
       }
       setSessions(sessionMap);
     } catch (err: unknown) {
-      setFetchError(
-        err instanceof Error ? err.message : "We couldn’t load your Debriefs",
-      );
+      setFetchError(debriefFetchErrorMessage(err));
       setDebriefs([]);
       setPendingSessions([]);
       setProcessingJobs([]);
@@ -142,7 +143,7 @@ export default function Debrief() {
       setLoading(false);
       setRetrying(false);
     }
-  }, [user?.id, planId]);
+  }, [authLoading, user?.id, planId]);
 
   const listItems = useMemo(() => {
     const sessionsById: Record<string, DebriefListSession> = {
@@ -165,7 +166,7 @@ export default function Debrief() {
   );
 
   const pageState: DebriefPageState = resolveDebriefPageState({
-    userReady: Boolean(user?.id),
+    userReady: Boolean(user?.id) && !authLoading,
     loading,
     retrying,
     planRestricted,
@@ -214,11 +215,15 @@ export default function Debrief() {
             { label: "Debriefs" },
           ]}
         />
-        <div className="space-y-3" aria-busy="true" aria-label="Loading debriefs">
-          {[...Array(3)].map((_, i) => (
-            <SkeletonCard key={i} />
-          ))}
-        </div>
+        <FullPageProcessingState
+          title={pageState === "retrying" ? "Retrying debrief list" : "Loading debriefs"}
+          message={
+            pageState === "retrying"
+              ? "Fetching your session debriefs again…"
+              : "Gathering saved debriefs and sessions ready to analyze…"
+          }
+          stage="debriefs"
+        />
       </PageContent>
     );
   }
@@ -256,9 +261,10 @@ export default function Debrief() {
             icon={AlertTriangle}
             title={DEBRIEF_EMPTY_COPY.temporaryFailureTitle}
             description={
-              correlationId
+              fetchError ??
+              (correlationId
                 ? `${DEBRIEF_EMPTY_COPY.temporaryFailureDescription} Reference: ${correlationId}`
-                : DEBRIEF_EMPTY_COPY.temporaryFailureDescription
+                : DEBRIEF_EMPTY_COPY.temporaryFailureDescription)
             }
             actionLabel="Retry"
             onAction={onRetry}

@@ -92,6 +92,7 @@ export async function restoreOwnedSession(input?: {
         session_id: input?.session_id ?? undefined,
         session_type: input?.session_type,
         type: input?.session_type,
+        is_practice: input?.session_type === "live" ? true : undefined,
       });
     },
     { signal: input?.signal },

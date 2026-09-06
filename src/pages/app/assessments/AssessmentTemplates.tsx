@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/common/EmptyState";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
+import { ProcessingStatus } from "@/components/async/ProcessingStatus";
 import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import { supabase } from "@/lib/supabase/client";
 import { PAGE_SHELL, STACK_GRID } from "@/lib/ui/responsivePage";
@@ -73,10 +74,37 @@ export default function AssessmentTemplatesPage() {
   const [starting, setStarting] = useState<string | null>(null);
   const [startError, setStartError] = useState<{ templateId: string; message: string; retryable: boolean } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [preflightLoading, setPreflightLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const inFlight = useRef<Set<string>>(new Set());
 
-  async function loadTemplates() {
+  async function runPreflight(rows: Template[], opts?: { toastOnFailure?: boolean }) {
+    if (rows.length === 0) {
+      setPreflightById({});
+      setAvailabilityUnknown(false);
+      return;
+    }
+    setPreflightLoading(true);
+    try {
+      const requestedByTemplateId: Record<string, number> = {};
+      for (const row of rows) {
+        requestedByTemplateId[row.id] = row.question_count;
+      }
+      const preflight = await preflightAssessmentTemplates(
+        rows.map((r) => r.id),
+        { requestedByTemplateId },
+      );
+      setPreflightById(preflight.byTemplateId);
+      setAvailabilityUnknown(!preflight.ok);
+      if (!preflight.ok && preflight.errorMessage && opts?.toastOnFailure) {
+        toast.error(preflight.errorMessage);
+      }
+    } finally {
+      setPreflightLoading(false);
+    }
+  }
+
+  async function loadTemplates(opts?: { toastOnPreflightFailure?: boolean }) {
     setLoading(true);
     setLoadError(null);
     const { data, error } = await supabase
@@ -90,24 +118,13 @@ export default function AssessmentTemplatesPage() {
       setTemplates([]);
       setPreflightById({});
       setAvailabilityUnknown(true);
-    } else {
-      const rows = ((data as Template[]) ?? []).filter((row) => row.is_active !== false);
-      setTemplates(rows);
-      const requestedByTemplateId: Record<string, number> = {};
-      for (const row of rows) {
-        requestedByTemplateId[row.id] = row.question_count;
-      }
-      const preflight = await preflightAssessmentTemplates(
-        rows.map((r) => r.id),
-        { requestedByTemplateId },
-      );
-      setPreflightById(preflight.byTemplateId);
-      setAvailabilityUnknown(!preflight.ok);
-      if (!preflight.ok && preflight.errorMessage) {
-        toast.error(preflight.errorMessage);
-      }
+      setLoading(false);
+      return;
     }
+    const rows = ((data as Template[]) ?? []).filter((row) => row.is_active !== false);
+    setTemplates(rows);
     setLoading(false);
+    await runPreflight(rows, { toastOnFailure: opts?.toastOnPreflightFailure ?? false });
   }
 
   useEffect(() => {
@@ -168,12 +185,24 @@ export default function AssessmentTemplatesPage() {
         >
           Personalize assessment
         </Button>
-        {availabilityUnknown && (
-          <Button variant="outline" onClick={() => void loadTemplates()} data-testid="assessment-retry-preflight">
+        {availabilityUnknown && !preflightLoading && (
+          <Button
+            variant="outline"
+            onClick={() => void runPreflight(templates, { toastOnFailure: true })}
+            data-testid="assessment-retry-preflight"
+          >
             Retry inventory check
           </Button>
         )}
       </div>
+      {preflightLoading && templates.length > 0 && (
+        <div className="mb-4">
+          <ProcessingStatus
+            message="Verifying question inventory on slow connections this can take up to a minute…"
+            stage="inventory_check"
+          />
+        </div>
+      )}
       <div className={STACK_GRID}>
         {loading && (
           <>
@@ -193,8 +222,9 @@ export default function AssessmentTemplatesPage() {
         )}
         {!loading && !loadError && templates.map((template) => {
           const pref = preflightById[template.id];
+          const checkingInventory = preflightLoading && !pref;
           const startable = pref?.startable === true;
-          const blocked = blockedMessage(pref, template);
+          const blocked = checkingInventory ? null : blockedMessage(pref, template);
           const resumable = Boolean(pref?.resumableTestId);
           const role = templateRoleSlug(template);
           const setupHref = `/app/assessments/setup?role=${encodeURIComponent(role)}`;
@@ -217,7 +247,16 @@ export default function AssessmentTemplatesPage() {
                     : ""}
                 </p>
               )}
-              {pref?.status === "unknown" && (
+              {checkingInventory && (
+                <div className="mt-3">
+                  <ProcessingStatus
+                    compact
+                    message="Checking availability…"
+                    stage="inventory_check"
+                  />
+                </div>
+              )}
+              {pref?.status === "unknown" && !preflightLoading && (
                 <p className="mt-1 text-xs text-amber-700 dark:text-amber-400" data-testid={`assessment-preflight-unknown-${template.id}`}>
                   Inventory not verified — retry before starting.
                 </p>
@@ -236,7 +275,7 @@ export default function AssessmentTemplatesPage() {
                 {!resumable && (
                   <Button
                     data-testid={`personalize-assessment-${template.id}`}
-                    disabled={starting !== null || !startable}
+                    disabled={starting !== null || !startable || preflightLoading}
                     onClick={() => void navigate(setupHref)}
                   >
                     Personalize & start
@@ -246,7 +285,7 @@ export default function AssessmentTemplatesPage() {
                   data-testid={`start-assessment-${template.id}`}
                   variant={resumable ? "primary" : "outline"}
                   loading={starting === template.id}
-                  disabled={starting !== null || !startable}
+                  disabled={starting !== null || !startable || preflightLoading}
                   onClick={() => void start(template)}
                 >
                   {starting === template.id
@@ -256,12 +295,12 @@ export default function AssessmentTemplatesPage() {
                     : "Catalog start"}
                 </Button>
                 {((startError?.templateId === template.id && startError.retryable) ||
-                  pref?.status === "unknown") && (
+                  (pref?.status === "unknown" && !preflightLoading)) && (
                   <Button
                     variant="outline"
-                    disabled={starting !== null}
+                    disabled={starting !== null || preflightLoading}
                     onClick={() => {
-                      if (pref?.status === "unknown") void loadTemplates();
+                      if (pref?.status === "unknown") void runPreflight(templates, { toastOnFailure: true });
                       else void start(template);
                     }}
                   >
