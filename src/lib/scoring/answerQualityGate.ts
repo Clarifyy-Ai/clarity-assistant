@@ -12,6 +12,9 @@ export type AnswerQualityClass =
   | "LOW_QUALITY"
   | "VALID";
 
+/** Bump when IRRELEVANT / relevance heuristics change so Edge can free-repair stale cards. */
+export const ANSWER_QUALITY_GATE_VERSION = 2;
+
 const STOPWORDS = new Set([
   "the", "and", "for", "that", "this", "with", "from", "your", "what", "when",
   "how", "why", "are", "was", "were", "have", "has", "had", "you", "can", "could",
@@ -25,9 +28,59 @@ const IDK_EXACT =
 const KEYBOARD_WALK =
   /^(asdf+|qwer+|zxcv+|hjkl+|aaa+|bbb+|ccc+|xyz+|abc+|1234+|qwerty|lorem ipsum)/i;
 
+/** Behavioral-interview theme families — paraphrases should not trip IRRELEVANT. */
+const THEME_SYNONYMS: Record<string, readonly string[]> = {
+  conflict: [
+    "disagreement", "dispute", "friction", "tension", "argument", "clash",
+    "misalignment", "pushback", "opposed", "disagreed", "confrontation",
+  ],
+  team: [
+    "colleague", "colleagues", "coworker", "coworkers", "teammate", "teammates",
+    "peers", "squad", "group", "crossfunctional",
+  ],
+  leadership: ["led", "managed", "mentored", "owned", "directed", "guided", "manager"],
+  challenge: ["difficult", "obstacle", "problem", "hurdle", "setback", "tough"],
+  difficult: ["hard", "challenging", "tough", "complex"],
+  weakness: ["improve", "growth", "develop", "struggle", "gap"],
+  strength: ["strong", "excel", "skilled", "strengths"],
+  failure: ["failed", "mistake", "missed", "wrong", "setback"],
+  success: ["succeeded", "achieved", "delivered", "won", "shipped"],
+  deadline: ["timeline", "schedule", "urgent", "timebox"],
+  pressure: ["stress", "urgent", "stakes"],
+  feedback: ["criticism", "review", "input", "suggestion", "critique"],
+  disagree: ["disagreement", "opposed", "pushback", "differed"],
+  handle: ["handled", "managed", "dealt", "addressed", "resolved"],
+  resolve: ["resolved", "fixed", "solved", "mediated", "deescalated"],
+  communicate: ["spoke", "talked", "discussed", "explained", "aligned", "conversation"],
+  project: ["initiative", "effort", "workstream", "delivery", "feature"],
+  customer: ["client", "user", "users", "stakeholder", "stakeholders"],
+  example: ["instance", "situation", "story", "time"],
+  time: ["situation", "previously", "once", "occasion"],
+  situation: ["scenario", "context", "when"],
+  tell: ["describe", "share", "walk"],
+  describe: ["explain", "share", "outline"],
+};
+
+const SYNONYM_INDEX: Map<string, Set<string>> = (() => {
+  const map = new Map<string, Set<string>>();
+  for (const [key, syns] of Object.entries(THEME_SYNONYMS)) {
+    const group = new Set<string>([key, ...syns]);
+    for (const term of group) {
+      let bucket = map.get(term);
+      if (!bucket) {
+        bucket = new Set<string>();
+        map.set(term, bucket);
+      }
+      for (const g of group) bucket.add(g);
+    }
+  }
+  return map;
+})();
+
 function normalize(text: string): string {
   return text
     .toLowerCase()
+    .replace(/['’]/g, "")
     .replace(/[^a-z0-9\s]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -75,12 +128,53 @@ function isGibberish(answer: string): boolean {
   return false;
 }
 
-function relevanceHits(question: string, answer: string): { hits: number; qWords: number } {
+/** True when answer has interview-style substance even if keywords don't match. */
+export function hasSubstantialInterviewContent(answer: string): boolean {
+  const words = wordCount(answer);
+  if (words < 40) return false;
+  const text = normalize(answer);
+  const firstPerson = (text.match(/\bi\b/g) ?? []).length >= 2;
+  if (!firstPerson) return false;
+  const starHits = [
+    /\b(when i|in my|at my|previously|while working|during|the situation|back at)\b/.test(text),
+    /\b(i was (asked|responsible|tasked|assigned)|my (task|goal|responsibility)|i had to|needed to)\b/.test(text),
+    /\b(i (led|built|took|decided|spoke|worked|managed|resolved|helped|organized|implemented|created|addressed))\b/.test(text),
+    /\b(result|outcome|improved|resolved|increased|decreased|learned|ended up|we (shipped|delivered))\b/.test(text),
+  ].filter(Boolean).length;
+  return starHits >= 2;
+}
+
+/**
+ * Lexical + synonym overlap between question tokens and answer text.
+ * Used by classify + (mirrored) Edge relevance scoring.
+ */
+export function relevanceOverlap(
+  question: string,
+  answer: string,
+): { hits: number; qWords: number; ratio: number } {
   const qWords = tokens(question);
-  if (qWords.length === 0) return { hits: 0, qWords: 0 };
+  if (qWords.length === 0) return { hits: 0, qWords: 0, ratio: 0 };
   const hay = normalize(answer);
-  const hits = qWords.filter((w) => hay.includes(w)).length;
-  return { hits, qWords: qWords.length };
+  let hits = 0;
+  for (const w of qWords) {
+    if (hay.includes(w)) {
+      hits += 1;
+      continue;
+    }
+    const related = SYNONYM_INDEX.get(w);
+    if (related) {
+      let matched = false;
+      for (const term of related) {
+        if (term === w) continue;
+        if (hay.includes(term)) {
+          matched = true;
+          break;
+        }
+      }
+      if (matched) hits += 1;
+    }
+  }
+  return { hits, qWords: qWords.length, ratio: hits / qWords.length };
 }
 
 /**
@@ -110,11 +204,14 @@ export function classifyAnswerQuality(
 
   if (isGibberish(raw)) return "GIBBERISH";
 
-  const { hits, qWords } = relevanceHits(question, raw);
-  if (qWords >= 2 && hits === 0 && wordCount(raw) >= 8) {
+  const { hits, qWords, ratio } = relevanceOverlap(question, raw);
+  const substantial = hasSubstantialInterviewContent(raw);
+
+  // Zero/low keyword overlap alone must not mark a real STAR-style story IRRELEVANT.
+  if (qWords >= 2 && hits === 0 && wordCount(raw) >= 8 && !substantial) {
     return "IRRELEVANT";
   }
-  if (qWords >= 3 && hits / qWords < 0.08 && wordCount(raw) >= 12) {
+  if (qWords >= 3 && ratio < 0.08 && wordCount(raw) >= 12 && !substantial) {
     return "IRRELEVANT";
   }
 
@@ -124,7 +221,7 @@ export function classifyAnswerQuality(
     if (priorTokens.length < 6 || answerTokens.length < 6) continue;
     const sim = jaccard(answerTokens, priorTokens);
     // Copied unrelated response: high similarity but low relevance to current Q
-    if (sim >= 0.85 && (qWords === 0 || hits / Math.max(1, qWords) < 0.2)) {
+    if (sim >= 0.85 && (qWords === 0 || ratio < 0.2)) {
       return "REPEATED";
     }
     if (sim >= 0.92) return "REPEATED";

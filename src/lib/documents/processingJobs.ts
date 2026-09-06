@@ -9,6 +9,9 @@ import {
 /** Soft client wait covers one worker lease (~180s) plus buffer. */
 export const DOCUMENT_JOB_SOFT_WAIT_MS = 240_000;
 
+/** When a job stays queued this long, assume the Python worker is unavailable. */
+export const DOCUMENT_QUEUE_STUCK_MS = 45_000;
+
 export type DocumentJobState =
   | "queued"
   | "leased"
@@ -104,6 +107,43 @@ export function isClientWaitElapsed(
   return false;
 }
 
+export function isStuckQueuedJob(
+  job: Pick<DocumentJob, "status" | "created_at"> | null | undefined,
+): boolean {
+  if (!job || String(job.status ?? "").trim().toLowerCase() !== "queued") return false;
+  const created = Date.parse(String(job.created_at ?? ""));
+  if (!Number.isFinite(created)) return false;
+  return Date.now() - created >= DOCUMENT_QUEUE_STUCK_MS;
+}
+
+export function isQueueWorkerUnavailable(
+  job: Pick<DocumentJob, "status" | "error_code"> | null | undefined,
+): boolean {
+  if (!job) return false;
+  const code = String(job.error_code ?? "").trim().toUpperCase();
+  return code === DOCUMENT_ERROR_CODES.QUEUE_WORKER_UNAVAILABLE || isStuckQueuedJob(job);
+}
+
+/**
+ * Cancel a stuck durable job (refunds reserved credits) and run sync Edge parse.
+ * Safe to call once per stuck job — parse-document library path does not re-charge.
+ */
+export async function recoverStuckQueuedDocumentJob(opts: {
+  jobId: string;
+  documentId: string;
+  mimeType: string;
+  contentHash: string;
+  ownerId: string;
+}): Promise<void> {
+  await cancelDocumentProcessingJob(opts.jobId);
+  const idempotencyKey = `library-parse:${opts.ownerId}:${opts.contentHash}:sync-recovery`.slice(0, 150);
+  await parseDocumentFallback({
+    libraryDocumentId: opts.documentId,
+    mimeType: opts.mimeType,
+    idempotencyKey,
+  });
+}
+
 export function userFacingJobError(job: Pick<DocumentJob, "error_code" | "error_message"> | null | undefined): string {
   const code = String(job?.error_code ?? "");
   if (code === "INSUFFICIENT_CREDITS") {
@@ -111,6 +151,9 @@ export function userFacingJobError(job: Pick<DocumentJob, "error_code" | "error_
   }
   if (isClientWaitElapsed(job as Parameters<typeof isClientWaitElapsed>[0])) {
     return userFacingDocumentFailureMessage(DOCUMENT_ERROR_CODES.CLIENT_WAIT_ELAPSED);
+  }
+  if (isQueueWorkerUnavailable(job as Parameters<typeof isQueueWorkerUnavailable>[0])) {
+    return userFacingDocumentFailureMessage(DOCUMENT_ERROR_CODES.QUEUE_WORKER_UNAVAILABLE);
   }
   if (isKnownDocumentErrorCode(code)) {
     return userFacingDocumentFailureMessage(code, job?.error_message);
@@ -234,6 +277,14 @@ export async function pollDocumentJobUntilDone(
     while (Date.now() - started < timeoutMs) {
       last = await getDocumentProcessingJob(jobId);
       if (!last || !isInFlightJobStatus(last.status)) return last;
+      if (isStuckQueuedJob(last)) {
+        return {
+          ...last,
+          error_code: DOCUMENT_ERROR_CODES.QUEUE_WORKER_UNAVAILABLE,
+          error_message: userFacingDocumentFailureMessage(DOCUMENT_ERROR_CODES.QUEUE_WORKER_UNAVAILABLE),
+          retryable: true,
+        };
+      }
       await new Promise((r) => setTimeout(r, intervalMs));
     }
     if (last && isInFlightJobStatus(last.status)) {

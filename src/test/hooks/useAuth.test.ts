@@ -132,7 +132,10 @@ describe("useAuth — sign in [T-0010]", () => {
     });
 
     expect(mockSignIn).toHaveBeenCalledWith({ email: "a@b.com", password: "pw" });
-    expect(mockGetByIdMaybe).toHaveBeenCalledWith("u1");
+    expect(mockGetByIdMaybe).toHaveBeenCalledWith(
+      "u1",
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
     expect(res!.error).toBeNull();
     expect(useAuthStore.getState().user?.id).toBe("u1");
   });

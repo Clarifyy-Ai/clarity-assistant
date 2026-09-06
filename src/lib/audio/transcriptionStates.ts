@@ -35,6 +35,7 @@ export const MIC_STATUS_COPY = {
   active: "Mic active",
   connecting: "Mic connecting…",
   paused: "Mic paused",
+  silent: "Mic silent",
   disconnected: "Mic disconnected",
   permission_denied: "Mic permission denied",
 } as const;

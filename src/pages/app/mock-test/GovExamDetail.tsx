@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   ExternalLink,
@@ -13,7 +13,11 @@ import { cn } from "@/lib/utils";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { ApiClientError } from "@/lib/api/apiClient";
 import { GovExamPageShell } from "@/components/gov-exam/GovExamPageShell";
-import { govExamGeneratePath } from "@/lib/gov-exam/govExamRoutes";
+import {
+  govExamGenerateNavigateTarget,
+  govExamGeneratePath,
+  type GovExamGeneratePathInput,
+} from "@/lib/gov-exam/govExamRoutes";
 import { classifyGovExamLoadError, type GovExamRouteResolution } from "@/lib/gov-exam/routeResolution";
 import { GovExamReadinessPanel } from "@/components/gov-exam/GovExamReadinessPanel";
 import {
@@ -437,14 +441,44 @@ export default function GovExamDetail(): React.ReactElement {
   const officialSourceUrl =
     pattern?.sourceUrl ?? details?.body?.officialUrl ?? details?.officialSources[0]?.sourceUrl ?? null;
 
-  const generateBase = useMemo(() => {
-    if (!exam) return "/app/mock-test/generate";
-    return govExamGeneratePath({
-      examId: exam.examId,
-      stageId: stage?.id,
-      code: exam.code,
-    }) ?? "/app/mock-test/generate";
-  }, [exam, stage?.id]);
+  const goToGenerate = useCallback(
+    (
+      patch: Pick<GovExamGeneratePathInput, "basis" | "topics" | "language" | "questionCount">,
+    ) => {
+      if (!exam) {
+        toast.error("Exam details are still loading.");
+        return;
+      }
+      const target = govExamGenerateNavigateTarget({
+        examId: exam.examId,
+        stageId: stage?.id,
+        code: exam.code,
+        ...patch,
+      });
+      if (!target) {
+        toast.error("Could not open the paper generator for this exam.");
+        return;
+      }
+      navigate(target);
+    },
+    [exam, navigate, stage?.id],
+  );
+
+  const generateHref = useCallback(
+    (basis: GovExamGeneratePathInput["basis"], topics?: string | null) => {
+      if (!exam) return "/app/mock-test/generate";
+      return (
+        govExamGeneratePath({
+          examId: exam.examId,
+          stageId: stage?.id,
+          code: exam.code,
+          basis,
+          topics: topics ?? undefined,
+        }) ?? "/app/mock-test/generate"
+      );
+    },
+    [exam, stage?.id],
+  );
 
   const topicOptions = useMemo(() => {
     const fromSyllabus = flattenSyllabusTopics(syllabusDetail?.syllabus.topicsJson);
@@ -603,9 +637,10 @@ export default function GovExamDetail(): React.ReactElement {
         /404|not found|Failed to fetch|unreachable|does not exist/i.test(msg);
       if (missing) {
         toast.message("Opening custom paper generator with topic mode.");
-        navigate(
-          `${generateBase}&basis=topic&topics=${encodeURIComponent(selectedTopics.join(","))}`,
-        );
+        goToGenerate({
+          basis: "topic",
+          topics: selectedTopics.join(","),
+        });
       } else {
         toast.error(formatGovExamOperationError(e));
       }
@@ -831,16 +866,14 @@ export default function GovExamDetail(): React.ReactElement {
                 <Button
                   disabled={!stage || !fullSimAvailable}
                   title={fullMockDisabledReason ?? "Start full pattern mock"}
-                  onClick={() =>
-                    navigate(`${generateBase}&basis=full_sim`)
-                  }
+                  onClick={() => goToGenerate({ basis: "full_sim" })}
                 >
                   Start Full Mock
                 </Button>
                 <Button
                   variant="outline"
                   disabled={!stage}
-                  onClick={() => navigate(`${generateBase}&basis=quick`)}
+                  onClick={() => goToGenerate({ basis: "quick" })}
                 >
                   <Sparkles className="h-4 w-4 mr-2" />
                   {bank && !fullSimAvailable
@@ -1085,7 +1118,7 @@ export default function GovExamDetail(): React.ReactElement {
                           size="sm"
                           variant="outline"
                           className="mt-1 h-7 text-[11px]"
-                          onClick={() => navigate(`${generateBase}&basis=official_previous`)}
+                          onClick={() => goToGenerate({ basis: "official_previous" })}
                         >
                           Start official paper
                         </Button>
@@ -1106,7 +1139,7 @@ export default function GovExamDetail(): React.ReactElement {
                   size="sm"
                   variant="outline"
                   disabled={!stage}
-                  onClick={() => navigate(`${generateBase}&basis=quick`)}
+                  onClick={() => goToGenerate({ basis: "quick" })}
                 >
                   Generate Custom Paper
                 </Button>
@@ -1250,13 +1283,10 @@ export default function GovExamDetail(): React.ReactElement {
                   variant="outline"
                   disabled={!stage}
                   onClick={() =>
-                    navigate(
-                      `${generateBase}&basis=topic${
-                        selectedTopics.length
-                          ? `&topics=${encodeURIComponent(selectedTopics.join(","))}`
-                          : ""
-                      }`,
-                    )
+                    goToGenerate({
+                      basis: "topic",
+                      topics: selectedTopics.length ? selectedTopics.join(",") : undefined,
+                    })
                   }
                 >
                   Open generator
@@ -1290,7 +1320,7 @@ export default function GovExamDetail(): React.ReactElement {
                 examCode={exam!.code}
                 readiness={readiness}
                 masteryRows={masteryRows}
-                generateHref={`${generateBase}&basis=topic`}
+                generateHref={generateHref("topic")}
               />
               <section className="rounded-xl border border-border p-5 space-y-3">
                 <h3 className="text-sm font-semibold">Preparation plan</h3>
@@ -1347,7 +1377,7 @@ export default function GovExamDetail(): React.ReactElement {
                 readiness={readiness}
                 masteryRows={masteryRows}
                 compact
-                generateHref={`${generateBase}&basis=topic`}
+                generateHref={generateHref("topic")}
               />
               {trends && (
                 <section className="space-y-3 rounded-xl border border-border p-5">

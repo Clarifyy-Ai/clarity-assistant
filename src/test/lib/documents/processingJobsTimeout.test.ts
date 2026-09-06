@@ -9,7 +9,9 @@ vi.mock("@/lib/network/fetchEdge", () => ({
 
 import {
   DOCUMENT_JOB_SOFT_WAIT_MS,
+  DOCUMENT_QUEUE_STUCK_MS,
   isClientWaitElapsed,
+  isStuckQueuedJob,
   pollDocumentJobUntilDone,
   shouldFallbackToSyncParse,
 } from "@/lib/documents/processingJobs";
@@ -18,6 +20,18 @@ import { DOCUMENT_ERROR_CODES, DOCUMENT_FAILURE_MESSAGES } from "@/lib/documents
 describe("library job poll soft wait", () => {
   afterEach(() => {
     fetchEdgeJson.mockReset();
+  });
+
+  it("returns QUEUE_WORKER_UNAVAILABLE when job stays queued past stuck threshold", async () => {
+    const old = new Date(Date.now() - 60_000).toISOString();
+    fetchEdgeJson.mockResolvedValue({
+      success: true,
+      job: { id: "job-1", status: "queued", created_at: old, error_code: null },
+    });
+    const job = await pollDocumentJobUntilDone("job-1", { intervalMs: 5, timeoutMs: 18 });
+    expect(job?.status).toBe("queued");
+    expect(job?.error_code).toBe(DOCUMENT_ERROR_CODES.QUEUE_WORKER_UNAVAILABLE);
+    expect(job?.retryable).toBe(true);
   });
 
   it("returns CLIENT_WAIT_ELAPSED without rewriting in-flight status to failed", async () => {
@@ -44,6 +58,15 @@ describe("library job poll soft wait", () => {
 
   it("defaults soft wait above worker lease (180s)", () => {
     expect(DOCUMENT_JOB_SOFT_WAIT_MS).toBeGreaterThanOrEqual(180_000);
+    expect(DOCUMENT_QUEUE_STUCK_MS).toBeLessThan(DOCUMENT_JOB_SOFT_WAIT_MS);
+  });
+
+  it("detects stuck queued jobs from created_at age", () => {
+    const old = new Date(Date.now() - 60_000).toISOString();
+    expect(isStuckQueuedJob({ status: "queued", created_at: old })).toBe(true);
+    expect(isStuckQueuedJob({ status: "extracting", created_at: old })).toBe(false);
+    const recent = new Date(Date.now() - 5_000).toISOString();
+    expect(isStuckQueuedJob({ status: "queued", created_at: recent })).toBe(false);
   });
 
   it("does not treat soft wait as a reason to create a second parse charge", () => {

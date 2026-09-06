@@ -120,6 +120,7 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
   const systemLastEnergyAtRef = useRef<number | null>(null);
   const micLastEnergyAtRef = useRef<number | null>(null);
   const silentSourceToastShownRef = useRef(false);
+  const micSilentToastShownRef = useRef(false);
   const interviewerConnectFailedRef = useRef(false);
   const cleanupMicRef = useRef<(() => void) | null>(null);
   const cleanupSysRef = useRef<(() => void) | null>(null);
@@ -194,7 +195,28 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
       fatalError: false,
     };
     micMetrics = mergeFrameHealth(micMetrics, micProbe?.frames ?? null);
-    store.patchChannelHealth("mic", buildChannelHealth(micMetrics, now));
+    const micHealth = buildChannelHealth(micMetrics, now);
+    store.patchChannelHealth("mic", micHealth);
+
+    if (
+      micHealth.status === "silent_source" &&
+      !micSilentToastShownRef.current &&
+      store.streams.is_capturing
+    ) {
+      micSilentToastShownRef.current = true;
+      store.setMicState("no_signal");
+      store.setStreamError({
+        code: "UNKNOWN",
+        message: "No microphone audio detected.",
+        recoverable: true,
+        suggestion:
+          "Check the selected microphone in browser settings, speak near the mic, or tap Reconnect in the overlay.",
+      });
+      toast.warning(
+        "Microphone is connected but no speech is detected — check your input device or reconnect audio.",
+        { duration: 10_000 },
+      );
+    }
 
     const intProbe = service?.getChannelHealthProbe("interviewer");
     const sysStream = store.streams.system_stream;
@@ -368,6 +390,8 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
     hasInterviewerChannelRef.current = false;
     const restore = Boolean(startOpts?.restore);
     skipAutoTabShareRef.current = restore;
+    silentSourceToastShownRef.current = false;
+    micSilentToastShownRef.current = false;
 
     const store = useAudioStore.getState();
     store.setIsCapturing(false);
@@ -409,7 +433,7 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
       store.setPipelineStatus("connecting");
     }
 
-    if (restore && permission !== "granted") {
+    if (restore && (permission === "denied" || permission === "prompt")) {
       store.setMicState("not_checked");
       store.setPipelineStatus("idle");
       store.setDeepgramStatus("disconnected");
@@ -697,6 +721,7 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
     interviewerMonitorStartedAtRef.current = null;
     interviewerConnectFailedRef.current = false;
     silentSourceToastShownRef.current = false;
+    micSilentToastShownRef.current = false;
 
     fillerAccRef.current = null;
     fillerRTRef.current = null;

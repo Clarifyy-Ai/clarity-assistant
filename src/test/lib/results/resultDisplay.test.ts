@@ -45,7 +45,10 @@ describe("resultDisplay honesty", () => {
     ).toMatch(/processing/i);
     expect(
       unscoredReasonLabel({ eligibilityReason: "NOT_ELIGIBLE_NO_ANSWERS" }),
-    ).toBe("NOT_ELIGIBLE_NO_ANSWERS");
+    ).toMatch(/no answers were recorded/i);
+    expect(
+      unscoredReasonLabel({ eligibilityReason: "NOT_ELIGIBLE_NO_ANSWERS" }),
+    ).not.toBe("NOT_ELIGIBLE_NO_ANSWERS");
   });
 });
 

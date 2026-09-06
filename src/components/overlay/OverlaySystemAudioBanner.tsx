@@ -25,7 +25,9 @@ export function OverlaySystemAudioBanner({ enabled, onRetry }: Props) {
   const interviewerStatus = useAudioStore(
     (s) => s.channel_health?.interviewer?.status ?? "disconnected",
   );
+  const micStatus = useAudioStore((s) => s.channel_health?.mic?.status ?? "disconnected");
   const tabActive = isChannelUiActive(interviewerStatus);
+  const micActive = isChannelUiActive(micStatus);
   const silent = interviewerStatus === "silent_source";
   const shareState = deriveShareAudioState({
     requested: false,
@@ -47,6 +49,14 @@ export function OverlaySystemAudioBanner({ enabled, onRetry }: Props) {
     ? "Tab audio is connected but no interviewer speech is reaching transcription. Check Share tab audio, meeting mute, or that you shared the correct tab."
     : "Mic-only — the coach cannot auto-detect interviewer questions. Share the interview tab and tick “Share tab audio” in Chrome, or type the question in Chat.";
 
+  const headline = silent
+    ? micActive
+      ? "Interviewer audio silent — your mic is working"
+      : "Interviewer audio silent"
+    : micActive
+      ? "Interviewer audio unavailable — your mic is working"
+      : "Interviewer audio unavailable";
+
   return (
     <div
       role="alert"
@@ -56,7 +66,7 @@ export function OverlaySystemAudioBanner({ enabled, onRetry }: Props) {
       <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
       <div className="flex-1 min-w-0">
         <p className="text-[11px] font-semibold leading-tight">
-          {silent ? "Interviewer audio silent" : "Interviewer audio unavailable"}
+          {headline}
         </p>
         <p className="text-[10px] text-amber-200/70 leading-snug mt-0.5">{silentCopy}</p>
       </div>

@@ -32,6 +32,8 @@ import { resolveGeminiApiKey } from "../_shared/geminiKey.ts";
 
 const FUNCTION_NAME = "generate-scorecard";
 const RUBRIC_VERSION = "scorecard_v2";
+/** Keep in sync with src/lib/scoring/answerQualityGate.ts ANSWER_QUALITY_GATE_VERSION. */
+const QUALITY_GATE_VERSION = 2;
 const CREDIT_COST = creditCost("generate_scorecard");
 
 const UUID_RE =
@@ -215,6 +217,106 @@ function jaccard(a: string[], b: string[]): number {
   return union === 0 ? 0 : inter / union;
 }
 
+/** Keep aligned with src/lib/scoring/answerQualityGate.ts THEME_SYNONYMS. */
+const THEME_SYNONYMS: Record<string, readonly string[]> = {
+  conflict: [
+    "disagreement", "dispute", "friction", "tension", "argument", "clash",
+    "misalignment", "pushback", "opposed", "disagreed", "confrontation",
+  ],
+  team: [
+    "colleague", "colleagues", "coworker", "coworkers", "teammate", "teammates",
+    "peers", "squad", "group", "crossfunctional",
+  ],
+  leadership: ["led", "managed", "mentored", "owned", "directed", "guided", "manager"],
+  challenge: ["difficult", "obstacle", "problem", "hurdle", "setback", "tough"],
+  difficult: ["hard", "challenging", "tough", "complex"],
+  weakness: ["improve", "growth", "develop", "struggle", "gap"],
+  strength: ["strong", "excel", "skilled", "strengths"],
+  failure: ["failed", "mistake", "missed", "wrong", "setback"],
+  success: ["succeeded", "achieved", "delivered", "won", "shipped"],
+  deadline: ["timeline", "schedule", "urgent", "timebox"],
+  pressure: ["stress", "urgent", "stakes"],
+  feedback: ["criticism", "review", "input", "suggestion", "critique"],
+  disagree: ["disagreement", "opposed", "pushback", "differed"],
+  handle: ["handled", "managed", "dealt", "addressed", "resolved"],
+  resolve: ["resolved", "fixed", "solved", "mediated", "deescalated"],
+  communicate: ["spoke", "talked", "discussed", "explained", "aligned", "conversation"],
+  project: ["initiative", "effort", "workstream", "delivery", "feature"],
+  customer: ["client", "user", "users", "stakeholder", "stakeholders"],
+  example: ["instance", "situation", "story", "time"],
+  time: ["situation", "previously", "once", "occasion"],
+  situation: ["scenario", "context", "when"],
+  tell: ["describe", "share", "walk"],
+  describe: ["explain", "share", "outline"],
+};
+
+const SYNONYM_INDEX: Map<string, Set<string>> = (() => {
+  const map = new Map<string, Set<string>>();
+  for (const [key, syns] of Object.entries(THEME_SYNONYMS)) {
+    const group = new Set<string>([key, ...syns]);
+    for (const term of group) {
+      let bucket = map.get(term);
+      if (!bucket) {
+        bucket = new Set<string>();
+        map.set(term, bucket);
+      }
+      for (const g of group) bucket.add(g);
+    }
+  }
+  return map;
+})();
+
+function relevanceOverlap(question: string, answer: string): {
+  hits: number;
+  qWords: number;
+  ratio: number;
+} {
+  const qWords = qualityTokens(question);
+  if (qWords.length === 0) return { hits: 0, qWords: 0, ratio: 0 };
+  const hay = sanitizeText(answer, 20_000)
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  let hits = 0;
+  for (const w of qWords) {
+    if (hay.includes(w)) {
+      hits += 1;
+      continue;
+    }
+    const related = SYNONYM_INDEX.get(w);
+    if (related) {
+      for (const term of related) {
+        if (term === w) continue;
+        if (hay.includes(term)) {
+          hits += 1;
+          break;
+        }
+      }
+    }
+  }
+  return { hits, qWords: qWords.length, ratio: hits / qWords.length };
+}
+
+function hasSubstantialInterviewContent(answer: string): boolean {
+  const words = wordCount(answer);
+  if (words < 40) return false;
+  const text = sanitizeText(answer, 20_000)
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const firstPerson = (text.match(/\bi\b/g) ?? []).length >= 2;
+  if (!firstPerson) return false;
+  const starHits = [
+    /\b(when i|in my|at my|previously|while working|during|the situation|back at)\b/.test(text),
+    /\b(i was (asked|responsible|tasked|assigned)|my (task|goal|responsibility)|i had to|needed to)\b/.test(text),
+    /\b(i (led|built|took|decided|spoke|worked|managed|resolved|helped|organized|implemented|created|addressed))\b/.test(text),
+    /\b(result|outcome|improved|resolved|increased|decreased|learned|ended up|we (shipped|delivered))\b/.test(text),
+  ].filter(Boolean).length;
+  return starHits >= 2;
+}
+
 function isGibberishAnswer(answer: string): boolean {
   const n = sanitizeText(answer, 20_000)
     .toLowerCase()
@@ -257,11 +359,10 @@ function classifyAnswerQuality(
   }
   if (isGibberishAnswer(raw)) return "GIBBERISH";
 
-  const qWords = qualityTokens(question);
-  const hay = n;
-  const hits = qWords.filter((w) => hay.includes(w)).length;
-  if (qWords.length >= 2 && hits === 0 && wordCount(raw) >= 8) return "IRRELEVANT";
-  if (qWords.length >= 3 && hits / qWords.length < 0.08 && wordCount(raw) >= 12) {
+  const { hits, qWords, ratio } = relevanceOverlap(question, raw);
+  const substantial = hasSubstantialInterviewContent(raw);
+  if (qWords >= 2 && hits === 0 && wordCount(raw) >= 8 && !substantial) return "IRRELEVANT";
+  if (qWords >= 3 && ratio < 0.08 && wordCount(raw) >= 12 && !substantial) {
     return "IRRELEVANT";
   }
 
@@ -270,7 +371,7 @@ function classifyAnswerQuality(
     const priorTokens = qualityTokens(prior);
     if (priorTokens.length < 6 || answerTokens.length < 6) continue;
     const sim = jaccard(answerTokens, priorTokens);
-    if (sim >= 0.85 && (qWords.length === 0 || hits / Math.max(1, qWords.length) < 0.2)) {
+    if (sim >= 0.85 && (qWords === 0 || ratio < 0.2)) {
       return "REPEATED";
     }
     if (sim >= 0.92) return "REPEATED";
@@ -278,6 +379,41 @@ function classifyAnswerQuality(
 
   if (wordCount(raw) < 15 && hits === 0) return "LOW_QUALITY";
   return "VALID";
+}
+
+function isLikelyIrrelevantStub(row: Record<string, unknown>): boolean {
+  const overall = row.overall_score;
+  if (typeof overall !== "number" || !Number.isFinite(overall) || overall > 5) {
+    return false;
+  }
+  const dims = [row.communication, row.technical, row.problem_solving, row.confidence];
+  const allLow = dims.every((d) => typeof d !== "number" || !Number.isFinite(d) || d <= 5);
+  if (!allLow) return false;
+
+  const details = row.details;
+  if (details && typeof details === "object" && !Array.isArray(details)) {
+    const classes = (details as Record<string, unknown>).answer_quality_classes;
+    if (Array.isArray(classes) && classes.some((c) => c === "IRRELEVANT" || c === "REPEATED")) {
+      return true;
+    }
+    const coach = String(
+      (details as Record<string, unknown>).coach_note ?? row.feedback ?? "",
+    );
+    if (/irrelevant/i.test(coach)) return true;
+  }
+  // Cap-5 / zero-dimension cards from the old keyword gate.
+  return true;
+}
+
+function needsQualityGateRepair(row: Record<string, unknown> | null): boolean {
+  if (!row) return false;
+  const details = row.details;
+  if (details && typeof details === "object" && !Array.isArray(details)) {
+    const version = (details as Record<string, unknown>).quality_gate_version;
+    if (version === QUALITY_GATE_VERSION) return false;
+  }
+  // Never clobber healthy mid/high AI or deterministic scores — only stub cards.
+  return isLikelyIrrelevantStub(row);
 }
 
 function scoreCapForClass(cls: AnswerQualityClass): number {
@@ -424,17 +560,15 @@ const STOPWORDS = new Set([
   "would", "should", "about", "into", "them", "they", "their", "been", "being",
 ]);
 
-/** Zero keyword overlap must not invent a mid-40 relevance baseline. */
+/** Synonym-aware relevance — paraphrased STAR answers must not score 0. */
 function relevanceScore(question: string, answer: string): number {
-  const qWords = question
-    .toLowerCase()
-    .split(/[^a-z0-9]+/)
-    .filter((w) => w.length > 3 && !STOPWORDS.has(w));
-  if (qWords.length === 0) return 20;
-  const hay = answer.toLowerCase();
-  const hits = qWords.filter((w) => hay.includes(w)).length;
-  if (hits === 0) return 0;
-  return Math.round((hits / qWords.length) * 100);
+  const { hits, qWords, ratio } = relevanceOverlap(question, answer);
+  if (qWords === 0) return 20;
+  if (hits === 0) {
+    // Substantial interview narrative with zero lexical overlap still earns a floor.
+    return hasSubstantialInterviewContent(answer) ? 28 : 0;
+  }
+  return Math.round(ratio * 100);
 }
 
 function confidenceScore(text: string, relevance: number): number {
@@ -589,8 +723,16 @@ function deterministicScore(input: {
     uncertainty: Math.min(0.45, Math.max(0.12, 0.38 - scoredAnswers.length * 0.04)),
     model_version: `${RUBRIC_VERSION}_deterministic`,
     evidence_snippets,
-    strengths: scoredAnswers.filter((row) => row.score >= 70).map((row) => row.key_strength).slice(0, 5),
-    improvements: scoredAnswers.filter((row) => row.score < 75).map((row) => row.key_weakness).slice(0, 5),
+    strengths: scoredAnswers
+      .filter((row) => row.score >= 70)
+      .map((row) => sanitizeText(row.key_strength, 240))
+      .filter(Boolean)
+      .slice(0, 5),
+    improvements: scoredAnswers
+      .filter((row) => row.score < 75)
+      .map((row) => sanitizeText(row.key_weakness, 240))
+      .filter(Boolean)
+      .slice(0, 5),
     coach_note: allBad
       ? "Irrelevant or non-responsive answers — not scored as a successful interview performance."
       : overall >= 75
@@ -824,6 +966,7 @@ function scorecardRow(
       scoring_source: payload.scoring_source,
       evaluation_status: "completed",
       answer_quality_classes: payload.question_scores.map((q) => q.quality_class ?? "VALID"),
+      quality_gate_version: QUALITY_GATE_VERSION,
     },
   };
 }
@@ -1177,7 +1320,7 @@ Deno.serve(async (req: Request) => {
       Number.isFinite(existingOverall);
 
     if (existingRow && !recalculate) {
-      if (hasCompletedScore) {
+      if (hasCompletedScore && !needsQualityGateRepair(existingRow)) {
         return json(corsHeaders, 200, responseBody(requestId, existingRow, {
           idempotent: true,
           recalculated: false,
@@ -1244,6 +1387,53 @@ Deno.serve(async (req: Request) => {
         question_count: questionCount,
         answer_count: answerCount,
       });
+    }
+
+    // Free repair: stale quality-gate scorecards re-score deterministically (no credit charge).
+    if (
+      existingRow &&
+      !recalculate &&
+      hasCompletedScore &&
+      needsQualityGateRepair(existingRow) &&
+      scorableAnswerCount > 0
+    ) {
+      const { data: transcriptsData } = await db
+        .from("session_transcripts")
+        .select("content,filler_count,filler_words,wpm")
+        .eq("session_id", sessionId)
+        .eq("user_id", userId)
+        .order("created_at", { ascending: true })
+        .limit(40);
+      const transcripts = (transcriptsData ?? []) as TranscriptRow[];
+      const payload = applyAnswerQualityGuard(
+        deterministicScore({ answers, transcripts, session }),
+        answers,
+      );
+      const saved = await persistScorecard(
+        db,
+        userId,
+        sessionId,
+        payload,
+        typeof existingRow.id === "string" ? existingRow.id : undefined,
+        {
+          question_count: questionCount,
+          answer_count: answerCount,
+          attempt_count: Number(existingRow.attempt_count ?? 0),
+          evaluation_input_snapshot: {
+            rubric_version: RUBRIC_VERSION,
+            quality_gate_version: QUALITY_GATE_VERSION,
+            repair: true,
+            session_id: sessionId,
+            question_count: questionCount,
+            answer_count: answerCount,
+            captured_at: new Date().toISOString(),
+          },
+        },
+      );
+      return json(corsHeaders, 200, responseBody(requestId, saved, {
+        idempotent: false,
+        recalculated: true,
+      }));
     }
 
     const priorAttempts = Number(existingRow?.attempt_count ?? 0);
@@ -1342,7 +1532,8 @@ Deno.serve(async (req: Request) => {
         if (
           cachedEval === "completed" &&
           typeof cachedOverall === "number" &&
-          Number.isFinite(cachedOverall)
+          Number.isFinite(cachedOverall) &&
+          !needsQualityGateRepair(cached as Record<string, unknown>)
         ) {
           return responseBody(requestId, cached as Record<string, unknown>, {
             idempotent: true,

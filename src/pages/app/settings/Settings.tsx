@@ -146,7 +146,7 @@ export default function Settings() {
         />
       )}
 
-      <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
+      <div className="flex flex-col lg:flex-row lg:items-start gap-4 lg:gap-6">
       {/* Desktop Sidebar — lg+ only so tablet keeps stacked nav without dead zones */}
       <aside className="w-52 shrink-0 hidden lg:block self-start sticky top-4">
         <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest px-3 mb-3">

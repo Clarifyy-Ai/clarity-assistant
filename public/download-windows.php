@@ -45,6 +45,50 @@ try {
     exit;
   }
 
+  $method = strtoupper((string) ($_SERVER["REQUEST_METHOD"] ?? "GET"));
+  if ($method === "HEAD") {
+    foreach ($upstreams as $url) {
+      if (!is_string($url) || $url === "") {
+        continue;
+      }
+      if (!upstream_looks_like_installer($url, $minBytes)) {
+        continue;
+      }
+      $ch = curl_init($url);
+      if ($ch === false) {
+        continue;
+      }
+      curl_setopt_array($ch, [
+        CURLOPT_NOBODY => true,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_MAXREDIRS => 8,
+        CURLOPT_FAILONERROR => false,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_USERAGENT => "CareerPilot-Installer-Proxy/1.2",
+        CURLOPT_CONNECTTIMEOUT => 15,
+        CURLOPT_TIMEOUT => 30,
+      ]);
+      curl_exec($ch);
+      $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+      $length = (int) curl_getinfo($ch, CURLINFO_CONTENT_LENGTH_DOWNLOAD);
+      curl_close($ch);
+      if ($status >= 200 && $status < 400 && $length >= $minBytes) {
+        http_response_code(200);
+        header("Content-Type: application/octet-stream");
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header("Content-Length: " . $length);
+        header("Cache-Control: private, max-age=300");
+        exit;
+      }
+    }
+    http_response_code(503);
+    header("Content-Type: text/plain; charset=utf-8");
+    header("Cache-Control: no-store");
+    header("X-Desktop-Installer: unavailable");
+    echo "Desktop installer not published. The Windows desktop app is not available yet.";
+    exit;
+  }
+
   /**
    * HEAD (then Range GET) — only stream when upstream looks like a real installer binary.
    */

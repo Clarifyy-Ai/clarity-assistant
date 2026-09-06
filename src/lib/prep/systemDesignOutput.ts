@@ -20,18 +20,39 @@ export type SystemDesignValidation =
   | { ok: true }
   | { ok: false; reason: string };
 
+/**
+ * Lightweight keyword gate — mirrors edge `isValidSystemDesignOutput`.
+ * Accepts prose or markdown when core design topics appear in the full text.
+ */
+export function passesSystemDesignKeywordGate(text: string): boolean {
+  const t = String(text ?? "").trim();
+  if (t.length < MIN_RESULT_CHARS) return false;
+  const lower = t.toLowerCase();
+  let hits = 0;
+  if (/requirement/.test(lower)) hits++;
+  if (/architect|high[- ]?level|hld/.test(lower)) hits++;
+  if (/\bdata\b/.test(lower)) hits++;
+  if (/scal(e|ing)/.test(lower)) hits++;
+  if (/trade[- ]?off/.test(lower)) hits++;
+  return hits >= MIN_MATCHED_SECTIONS;
+}
+
 function titleMatchesKeyword(title: string, keyword: string): boolean {
   return title.toLowerCase().includes(keyword);
 }
 
 /**
  * Validate system-design AI output before treating generation as success.
- * Accepts markdown or numbered headings covering core design topics.
+ * Primary gate matches the edge function; section parsing is a secondary fallback.
  */
 export function validateSystemDesignOutput(text: string): SystemDesignValidation {
   const trimmed = String(text ?? "").trim();
   if (trimmed.length < MIN_RESULT_CHARS) {
     return { ok: false, reason: "Design output was too short or empty." };
+  }
+
+  if (passesSystemDesignKeywordGate(trimmed)) {
+    return { ok: true };
   }
 
   const sections = splitMarkdownSections(trimmed);
@@ -44,7 +65,6 @@ export function validateSystemDesignOutput(text: string): SystemDesignValidation
     }
   }
 
-  // Group related keywords so "architecture" and "hld" count as one family.
   const families = [
     ["requirement"],
     ["architecture", "high-level", "hld"],

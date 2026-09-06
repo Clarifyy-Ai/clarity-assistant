@@ -154,7 +154,7 @@ export function ExamSearchCombobox({
   useEffect(() => {
     if (typeof syncQuery === "string" && syncQuery !== query) {
       setQuery(syncQuery);
-      setOpen(true);
+      if (!onResultsChangeRef.current) setOpen(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [syncQuery]);
@@ -289,8 +289,8 @@ export function ExamSearchCombobox({
           error: null,
           query: trimmed,
         });
-        // Parent renders actionable result rows — keep listbox from covering View/Generate/Full sim Links.
-        if (onResultsChangeRef.current && (nextState as string) === "success") {
+        // Parent renders actionable result rows — never stack an absolute listbox on top.
+        if (onResultsChangeRef.current) {
           setOpen(false);
           setActiveIndex(-1);
         }
@@ -375,7 +375,11 @@ export function ExamSearchCombobox({
     inputRef.current?.blur();
   }
 
+  const parentOwnsResults = Boolean(onResultsChange);
+  const showInlineList = open && !parentOwnsResults;
+
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (parentOwnsResults) return;
     if (e.key === "ArrowDown") {
       e.preventDefault();
       if (!open) {
@@ -410,7 +414,7 @@ export function ExamSearchCombobox({
   }
 
   const activeId =
-    open && activeIndex >= 0 && results[activeIndex]
+    showInlineList && activeIndex >= 0 && results[activeIndex]
       ? examOptionId(listId, results[activeIndex].examId)
       : undefined;
 
@@ -422,11 +426,11 @@ export function ExamSearchCombobox({
           ref={inputRef}
           type="text"
           role="combobox"
-          aria-expanded={open}
-          aria-controls={listId}
+          aria-expanded={showInlineList}
+          aria-controls={showInlineList ? listId : undefined}
           aria-autocomplete="list"
           aria-activedescendant={activeId}
-          aria-haspopup="listbox"
+          aria-haspopup={parentOwnsResults ? undefined : "listbox"}
           aria-label="Search government exams"
           disabled={disabled}
           value={query}
@@ -435,14 +439,14 @@ export function ExamSearchCombobox({
           className="w-full rounded-xl border border-border bg-background pl-10 pr-4 py-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           onChange={(e) => {
             setQuery(e.target.value.slice(0, MAX_QUERY_LENGTH));
-            setOpen(true);
+            if (!parentOwnsResults) setOpen(true);
             if (value && onClear) {
               setPicked(null);
               onClear();
             }
           }}
           onFocus={() => {
-            setOpen(true);
+            if (!parentOwnsResults) setOpen(true);
           }}
           onKeyDown={onKeyDown}
           onBlur={() => {
@@ -462,7 +466,7 @@ export function ExamSearchCombobox({
         </p>
       )}
 
-      {open && (
+      {showInlineList && (
         <div
           id={listId}
           role="listbox"
@@ -564,7 +568,7 @@ export function ExamSearchCombobox({
       )}
 
       <span className="sr-only" aria-live="polite">
-        {open && activeIndex >= 0 && results[activeIndex]
+        {showInlineList && activeIndex >= 0 && results[activeIndex]
           ? `${examDisplayName(results[activeIndex])}, ${results[activeIndex].code}`
           : state === "empty"
             ? "No exams found"

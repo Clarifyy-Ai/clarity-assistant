@@ -84,6 +84,11 @@ export function resetPublicPromosForTests(): void {
   loadPromise = null;
 }
 
+/** Last successfully loaded offers — safe for synchronous first paint (SPA revisits). */
+export function getCachedPublicPromoOffers(): PublicPromoOffer[] | null {
+  return cachedOffers;
+}
+
 async function loadPublicPromoOffersFromRpc(): Promise<PublicPromoOffer[] | null> {
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

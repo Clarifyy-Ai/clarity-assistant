@@ -10,6 +10,7 @@ import {
   getServerTtsClientStatus,
   isServerTtsClientEnabled,
   requestServerTts,
+  resetServerTtsProbeForTests,
 } from "@/lib/mock/serverTts";
 import {
   previewCatalogueVoice,
@@ -131,6 +132,7 @@ describe("server TTS honesty", () => {
   afterEach(() => {
     vi.stubEnv("VITE_ENABLE_SERVER_TTS", originalEnv ?? "");
     fetchEdgeJson.mockReset();
+    resetServerTtsProbeForTests();
   });
 
   it("reports disabled when VITE_ENABLE_SERVER_TTS is off", async () => {
@@ -179,6 +181,27 @@ describe("server TTS honesty", () => {
     expect(res.unavailable).toBe(false);
     expect(res.source).toBe("server");
     expect(res.audio_base64).toBe("aaa");
+  });
+
+  it("skips further mock-tts probes after a network failure", async () => {
+    vi.stubEnv("VITE_ENABLE_SERVER_TTS", "true");
+    fetchEdgeJson.mockRejectedValue(new TypeError("Failed to fetch"));
+    const first = await requestServerTts({
+      text: "Hello",
+      voice_id: "classic_professional",
+      playback_id: "p4",
+    });
+    expect(first.unavailable).toBe(true);
+    expect(fetchEdgeJson).toHaveBeenCalledTimes(1);
+
+    const second = await requestServerTts({
+      text: "Hello again",
+      voice_id: "classic_professional",
+      playback_id: "p5",
+    });
+    expect(second.unavailable).toBe(true);
+    expect(second.message).toContain("endpoint unavailable");
+    expect(fetchEdgeJson).toHaveBeenCalledTimes(1);
   });
 });
 

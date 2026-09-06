@@ -293,6 +293,16 @@ export function pipelineStateFromErrorMessage(
     return "audio_unavailable";
   }
   if (
+    msg.includes("gemini") ||
+    msg.includes("openai") ||
+    msg.includes("claude") ||
+    msg.includes("anthropic") ||
+    msg.includes("gpt-") ||
+    msg.includes("gpt ")
+  ) {
+    return "ai_provider_unavailable";
+  }
+  if (
     msg.includes("network") ||
     msg.includes("offline") ||
     msg.includes("couldn't reach") ||

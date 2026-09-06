@@ -987,6 +987,43 @@ Deno.serve(async (req: Request) => {
         ) {
           return hybrid.response;
         }
+
+        // Last-resort scaffold — hybrid refunds credits; still return a usable outline.
+        const rescue = buildSystemDesignTemplate(sanitizedInput);
+        if (isValidSystemDesignOutput(rescue.result)) {
+          log(FN, "warn", "system_design hybrid failed; serving deterministic scaffold", {
+            userId,
+            correlationId,
+            code: String(hybrid.code ?? ""),
+          });
+          await storeIdempotentResponse(db, idempotencyKey, {
+            success: true,
+            payload: {
+              result: rescue.result,
+              alternatives: null,
+              tool_id,
+              parse_status: "completed",
+              source: "deterministic",
+              diagram_spec: rescue.diagram_spec,
+            },
+          }, {
+            userId,
+            action: `prep_tool_${tool_id}`,
+            requestHash,
+          });
+          return successResponse(
+            {
+              result: rescue.result,
+              alternatives: null,
+              source: "deterministic",
+              diagram_spec: rescue.diagram_spec,
+            },
+            { creditsCharged: 0 },
+            200,
+            req,
+          );
+        }
+
         return hybridPublicFailure(
           req,
           String(hybrid.code ?? ""),

@@ -14,10 +14,10 @@ import {
   isAssessmentStartErrorCode,
 } from "@/lib/assessments/assessmentStart";
 
+/** Codes that mean the Edge/RPC inventory check itself failed transiently. */
 export const RETRYABLE_AVAILABILITY_CODES = new Set([
   "PROVIDER_UNAVAILABLE",
   "DATABASE_FAILURE",
-  "ASSESSMENT_START_FAILED",
 ]);
 
 export const AVAILABILITY_RETRY_MESSAGE =
@@ -35,7 +35,7 @@ function messageFromAvailabilityFailure(
   if (code === "PROVIDER_UNAVAILABLE" || code === "DATABASE_FAILURE") {
     return AVAILABILITY_RETRY_MESSAGE;
   }
-  return fallback ?? AVAILABILITY_RETRY_MESSAGE;
+  return fallback ?? "Could not verify question inventory. Retry before starting.";
 }
 
 export type AssessmentPreflightStatus = "ok" | "blocked" | "unknown";
@@ -194,22 +194,24 @@ export async function preflightAssessmentTemplates(
     const code =
       typeof apiErr?.code === "string" && apiErr.code.trim()
         ? apiErr.code
-        : "ASSESSMENT_START_FAILED";
+        : null;
     const retryable =
       apiErr?.status === 503 || isRetryableAvailabilityCode(code);
-    const message =
-      retryable
-        ? messageFromAvailabilityFailure(code, AVAILABILITY_RETRY_MESSAGE)
-        : err instanceof Error && err.message.trim()
-          ? err.message
-          : "Could not verify question inventory. Retry before starting.";
+    const rawMessage =
+      err instanceof Error && err.message.trim() ? err.message.trim() : null;
+    // Only the typed Edge 503 inventory failures use the generic retry toast.
+    // Private-mode blocks, auth gaps, and network errors keep their real copy.
+    const message = retryable
+      ? messageFromAvailabilityFailure(code, AVAILABILITY_RETRY_MESSAGE)
+      : rawMessage ??
+        "Could not verify question inventory. Retry before starting.";
     for (const id of ids) {
       byTemplateId[id] = {
         templateId: id,
         status: "unknown",
         startable: false,
-        retryable,
-        code,
+        retryable: retryable || !apiErr,
+        code: code ?? "ASSESSMENT_START_FAILED",
         available: null,
         requested: opts?.requestedByTemplateId?.[id] ?? null,
         attemptsUsed: null,

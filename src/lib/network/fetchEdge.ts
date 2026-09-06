@@ -58,6 +58,11 @@ const PRIVATE_MODE_ALLOWLIST = new Set([
   "start-exam-attempt",
   "save-test-answer",
   "save-attempt-answer",
+  // Exam Templates inventory + assemble (bank counts / attempt budget — not AI).
+  "check-assessment-availability",
+  "assemble-assessment",
+  "pause-test",
+  "resume-test",
   "billing-catalog",
   "list-public-promos",
   "contact-sales",
@@ -177,7 +182,6 @@ const NO_NETWORK_RETRY_FNS = new Set([
   "generate-topic-practice",
   "create-test",
   "assemble-assessment",
-  "check-assessment-availability",
   "pause-test",
   "resume-test",
   "issue-course-certificate",
@@ -252,6 +256,8 @@ const SAFE_NETWORK_RETRY_FNS = new Set([
   "get-exam-pattern",
   "get-exam-syllabus",
   "list-previous-papers",
+  // Idempotent inventory preflight — safe to retry after a transport blip.
+  "check-assessment-availability",
 ]);
 
 function networkRetryAttempts(fnName: string): number {

@@ -58,6 +58,35 @@ export function isDatabasePracticeSession(session: SessionRowForAiCheck): boolea
   return sessionHasPracticeFlag(session) || !session.interview_id;
 }
 
+/** Live Practice Coach rows without a scheduled interview may auto-receive the practice tag. */
+export async function backfillPracticeTagIfEligible(
+  db: ReturnType<typeof createServiceClient>,
+  session: SessionRowForAiCheck,
+): Promise<SessionRowForAiCheck> {
+  const sessionType = normalizeSessionType(session.type ?? session.session_type);
+  if (sessionType !== "live") return session;
+  if (sessionHasPracticeFlag(session)) return session;
+  if (session.interview_id) return session;
+
+  const nextTags = mergePracticeTags(session.tags, {
+    sessionType: "live",
+    isPractice: true,
+  });
+  if (!nextTags || nextTags.length === (session.tags ?? []).length) return session;
+
+  const { error } = await db
+    .from("sessions")
+    .update({ tags: nextTags })
+    .eq("id", session.id);
+
+  if (error) {
+    console.warn("[sessionEnforcement] practice tag backfill failed:", error.message);
+    return session;
+  }
+
+  return { ...session, tags: nextTags };
+}
+
 /** Merge practice/rehearsal tags onto a live row when the client started Practice Coach. */
 export function mergePracticeTags(
   existing: string[] | null | undefined,
@@ -211,7 +240,12 @@ export async function enforceAiSessionAccess(options: {
     );
   }
 
-  const verdict = isSessionTypeAllowedForAi(data as SessionRowForAiCheck);
+  const sessionForCheck = await backfillPracticeTagIfEligible(
+    db,
+    data as SessionRowForAiCheck,
+  );
+
+  const verdict = isSessionTypeAllowedForAi(sessionForCheck);
 
   if (!verdict.allowed) {
     return aiSessionForbiddenResponse(verdict.message!);

@@ -1,5 +1,5 @@
-// @ts-nocheck
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
+import { parsePrepToolResponse } from "@/lib/network/edgeResult";
 import { withPrepToolContext } from "@/lib/prep/prepToolContext";
 import { createIdempotencyKey } from "@/lib/api/functions";
 import {
@@ -25,44 +25,23 @@ import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { AiFormattedOutput } from "@/components/common/AiFormattedOutput";
 import { ProcessingStatus } from "@/components/async/ProcessingStatus";
 import { AI_OP_STAGES } from "@/lib/async/aiOpStages";
-import { answerBankDB, prepProjectsDB } from "@/lib/supabase/database";
-import type { Tables } from "@/integrations/supabase";
+import { answerBankDB } from "@/lib/supabase/database";
 import {
   listSavedProjects,
   clearSavedProjects,
   type SavedProject,
 } from "@/lib/prep/projectBuilderStorage";
-
-function rowToProject(row: Tables<"prep_projects">): SavedProject {
-  const stack = row.tech_stack;
-  return {
-    id: row.id,
-    projectName: row.project_name ?? "",
-    role: row.role ?? "",
-    techStack: Array.isArray(stack) ? (stack as string[]) : [],
-    description: row.description ?? "",
-    impact: row.impact ?? "",
-    githubUrl: row.github_url ?? "",
-    showcase: row.showcase ?? "",
-    updatedAt: row.updated_at ?? new Date().toISOString(),
-  };
-}
+import {
+  deletePrepProject,
+  listPrepProjects,
+  upsertPrepProject,
+} from "@/lib/prep/prepProjectsRepository";
 
 async function persistProject(
   userId: string,
   project: Omit<SavedProject, "id" | "updatedAt"> & { id?: string },
 ): Promise<SavedProject> {
-  const row = await prepProjectsDB.upsert(userId, {
-    id: project.id,
-    project_name: project.projectName,
-    role: project.role,
-    tech_stack: project.techStack,
-    description: project.description,
-    impact: project.impact,
-    github_url: project.githubUrl,
-    showcase: project.showcase,
-  });
-  return rowToProject(row);
+  return upsertPrepProject(userId, project);
 }
 
 const EMPTY_FORM = {
@@ -94,46 +73,61 @@ export default function ProjectBuilder() {
   const [error, setError]               = useState<string | null>(null);
   const [showForm, setShowForm]         = useState(false);
   const [deleteProjectId, setDeleteProjectId] = useState<string | null>(null);
+  const [storageNotice, setStorageNotice] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user?.id) return;
     let cancelled = false;
+
+    setProjects(listSavedProjects(user.id));
+
     void (async () => {
       try {
-        let dbRows = await prepProjectsDB.listByUserId(user.id);
+        let dbRows = await listPrepProjects(user.id);
         if (dbRows.length === 0) {
           const local = listSavedProjects(user.id);
           if (local.length > 0) {
             for (const p of local) {
-              await prepProjectsDB.upsert(user.id, {
+              await upsertPrepProject(user.id, {
                 id: p.id,
-                project_name: p.projectName,
+                projectName: p.projectName,
                 role: p.role,
-                tech_stack: p.techStack,
+                techStack: p.techStack,
                 description: p.description,
                 impact: p.impact,
-                github_url: p.githubUrl,
+                githubUrl: p.githubUrl,
                 showcase: p.showcase,
               });
             }
             clearSavedProjects(user.id);
-            dbRows = await prepProjectsDB.listByUserId(user.id);
+            dbRows = await listPrepProjects(user.id);
           }
         }
         if (!cancelled) {
-          setProjects(dbRows.map(rowToProject));
+          setProjects(dbRows);
+          setStorageNotice(null);
         }
       } catch {
-        if (!cancelled) setProjects(listSavedProjects(user.id));
+        if (!cancelled) {
+          setProjects(listSavedProjects(user.id));
+          setStorageNotice("Cloud sync is unavailable — showing saved projects from this device.");
+        }
       }
     })();
+
     return () => { cancelled = true; };
   }, [user?.id]);
 
   async function reloadProjects() {
     if (!user?.id) return;
-    const dbRows = await prepProjectsDB.listByUserId(user.id);
-    setProjects(dbRows.map(rowToProject));
+    try {
+      const dbRows = await listPrepProjects(user.id);
+      setProjects(dbRows);
+      setStorageNotice(null);
+    } catch {
+      setProjects(listSavedProjects(user.id));
+      setStorageNotice("Cloud sync is unavailable — showing saved projects from this device.");
+    }
   }
 
   function resetForm() {
@@ -213,7 +207,7 @@ export default function ProjectBuilder() {
     if (!user?.id || !deleteProjectId) return;
     void (async () => {
       try {
-        await prepProjectsDB.delete(user.id, deleteProjectId);
+        await deletePrepProject(user.id, deleteProjectId);
         await reloadProjects();
         if (editingId === deleteProjectId) {
           resetForm();
@@ -237,7 +231,7 @@ export default function ProjectBuilder() {
     try {
       const techList = techStack.length > 0 ? techStack.join(", ") : "not specified";
       const input = `Project: ${projectName}\nRole: ${role}\nTech Stack: ${techList}\n\nWhat I did:\n${description}${impact ? `\n\nImpact & Metrics:\n${impact}` : ""}${githubUrl ? `\n\nGitHub/Portfolio URL: ${githubUrl}` : ""}`;
-      const data = await fetchEdgeJson<{ result?: string }>("prep-tool", await withPrepToolContext({
+      const data = await fetchEdgeJson<Record<string, unknown>>("prep-tool", await withPrepToolContext({
         tool_id: "project_build",
         input,
       }), {
@@ -245,7 +239,7 @@ export default function ProjectBuilder() {
           "Idempotency-Key": createIdempotencyKey("prep-tool"),
         },
       });
-      const result = data.result ?? "Showcase generation unavailable.";
+      const result = parsePrepToolResponse(data).result || "Showcase generation unavailable.";
       setShowcase(result);
       if (user?.id) {
         const entry = await persistProject(user.id, {
@@ -312,6 +306,15 @@ export default function ProjectBuilder() {
           </Button>
         }
       />
+
+      {storageNotice && (
+        <Card className="border-amber-500/20 bg-amber-500/5">
+          <div className="flex items-center gap-2 text-amber-700 dark:text-amber-200 text-sm">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            {storageNotice}
+          </div>
+        </Card>
+      )}
 
       {projects.length > 0 && (
         <Card>

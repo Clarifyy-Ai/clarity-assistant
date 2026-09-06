@@ -54,7 +54,7 @@ describe("validateDebriefEvidence", () => {
     expect(issues.some((i) => i.code === "EVIDENCE_QUOTE_MISMATCH")).toBe(true);
   });
 
-  it("rejects unknown answer ids and question indices", () => {
+  it("treats unknown question indices as non-fatal", () => {
     const issues = validateDebriefEvidence({
       corpus,
       answerIds: new Set(["ans-1"]),
@@ -65,8 +65,35 @@ describe("validateDebriefEvidence", () => {
       hasVerifiedFillers: false,
       hasVerifiedWpm: false,
     });
-    expect(issues.some((i) => i.code === "EVIDENCE_ANSWER_UNKNOWN")).toBe(true);
-    expect(issues.some((i) => i.code === "EVIDENCE_QUESTION_UNKNOWN")).toBe(true);
+    expect(issues.some((i) => i.code === "EVIDENCE_ANSWER_UNKNOWN")).toBe(false);
+    expect(issues.some((i) => i.code === "EVIDENCE_QUESTION_UNKNOWN")).toBe(false);
+  });
+
+  it("accepts 1-based question indices (Q1 → index 1)", () => {
+    const issues = validateDebriefEvidence({
+      corpus,
+      answerIds: new Set(["ans-1"]),
+      questionIndices: new Set([0]),
+      transcriptEvidenceQuotes: [],
+      referencedQuestionIndices: [1],
+      hasVerifiedFillers: false,
+      hasVerifiedWpm: false,
+    });
+    expect(issues.some((i) => i.code === "EVIDENCE_QUESTION_UNKNOWN")).toBe(false);
+  });
+
+  it("accepts paraphrased quotes with punctuation differences", () => {
+    const issues = validateDebriefEvidence({
+      corpus,
+      answerIds: new Set(["ans-1"]),
+      questionIndices: new Set([0]),
+      transcriptEvidenceQuotes: [
+        "I mediated a dispute between two engineers, scheduling a retro and documenting the outcome",
+      ],
+      hasVerifiedFillers: false,
+      hasVerifiedWpm: false,
+    });
+    expect(issues).toEqual([]);
   });
 
   it("rejects unverified filler claims", () => {

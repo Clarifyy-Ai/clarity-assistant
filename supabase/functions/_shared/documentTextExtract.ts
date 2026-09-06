@@ -108,10 +108,33 @@ export function extractPdfTextBasic(bytes: Uint8Array): string | null {
     if (decoded) chunks.push(decoded);
   }
 
-  const text = chunks.join(" ").replace(/\s+/g, " ").trim();
+  const text = smartJoinPdfTextChunks(chunks);
   if (text.length < 20) return null;
   if (looksLikePdfDump(text)) return null;
   return text;
+}
+
+/** Preserve label/value breaks common in PDF Tj streams (e.g. "Location:" + "Seattle"). */
+function smartJoinPdfTextChunks(chunks: string[]): string {
+  let out = "";
+  for (const raw of chunks) {
+    const piece = raw.replace(/\s+/g, " ").trim();
+    if (!piece) continue;
+    if (!out) {
+      out = piece;
+      continue;
+    }
+    if (/:\s*$/.test(out) || /(?:location|salary|compensation|company|title|role)$/i.test(out)) {
+      out += `\n${piece}`;
+    } else {
+      out += ` ${piece}`;
+    }
+  }
+  return out
+    .split("\n")
+    .map((line) => line.replace(/[ \t]+/g, " ").trim())
+    .filter(Boolean)
+    .join("\n");
 }
 
 export function buildDocumentExtractPayload(fullText: string): DocumentExtractPayload | null {
@@ -167,37 +190,5 @@ export function extractDocxXmlText(xml: string): string | null {
   return text.length >= 20 ? text.slice(0, 50_000) : null;
 }
 
-export function extractJdFieldsFromText(text: string): {
-  role: string | null;
-  company: string | null;
-  location: string | null;
-  salary_range: string | null;
-  required_skills: string[];
-  summary: string;
-} {
-  const clipped = text.trim();
-  const roleMatch = clipped.match(/(?:job\s*title|position|role|title)\s*[:\-–]\s*([^\n]{3,120})/i);
-  const companyMatch = clipped.match(/(?:company|employer|organization)\s*[:\-–]\s*([^\n]{2,120})/i);
-  const locationMatch =
-    clipped.match(/(?:work\s*location|locations?|based in|office)\s*[:\-–]\s*([^\n]{2,80})/i) ||
-    clipped.match(/based in\s+([^\n,]{2,80})/i);
-  const salaryMatch = clipped.match(
-    /(?:salary|compensation|ctc|package|pay\s*range)\s*[:\-–]\s*([^\n]{2,80})/i,
-  );
-  const skillsBlock = clipped.match(
-    /(?:required skills|key skills|must have|requirements)[:\s]*([\s\S]{20,1200}?)(?:\n\n|responsibilities|qualifications|benefits|$)/i,
-  );
-  const skills = (skillsBlock?.[1] ?? "")
-    .split(/\n|•|,|;/)
-    .map((line) => line.replace(/^[\-\*\d.\s]+/, "").replace(/\s+/g, " ").trim())
-    .filter((line) => line.length >= 2 && line.length <= 80 && line !== "[object Object]")
-    .slice(0, 40);
-  return {
-    role: roleMatch?.[1]?.trim() || null,
-    company: companyMatch?.[1]?.trim() || null,
-    location: locationMatch?.[1]?.trim() || null,
-    salary_range: salaryMatch?.[1]?.trim() || null,
-    required_skills: skills,
-    summary: clipped.slice(0, 400),
-  };
-}
+export { extractJdFieldsFromText } from "./jdFieldExtract.ts";
+export type { ExtractedJdFields } from "./jdFieldExtract.ts";

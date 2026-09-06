@@ -134,14 +134,18 @@ function scoreFromSubmitResult(result: unknown): number {
   const timeAnalysis =
     analysis?.time_analysis && typeof analysis.time_analysis === "object"
       ? (analysis.time_analysis as Record<string, unknown>)
-      : null;
+      : payload.time_analysis && typeof payload.time_analysis === "object"
+        ? (payload.time_analysis as Record<string, unknown>)
+        : null;
   const scoreSummary =
     timeAnalysis?.score_summary && typeof timeAnalysis.score_summary === "object"
       ? (timeAnalysis.score_summary as Record<string, unknown>)
       : null;
   const scorePercentage = Number(scoreSummary?.score_percentage);
   if (Number.isFinite(scorePercentage)) return scorePercentage;
-  const attemptPercentage = Number(payload.attempt_percentage);
+  const attemptPercentage = Number(
+    payload.attempt_percentage ?? analysis?.attempt_percentage,
+  );
   return Number.isFinite(attemptPercentage) ? attemptPercentage : 0;
 }
 

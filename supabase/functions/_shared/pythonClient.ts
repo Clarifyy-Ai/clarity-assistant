@@ -455,18 +455,26 @@ export async function pythonHealth(): Promise<PythonFetchResult> {
 /**
  * Public readiness probe — no HMAC.
  */
-export async function pythonReady(): Promise<PythonFetchResult> {
-  return pythonPublicGet("/ready", true);
+export async function pythonReady(options?: { timeoutMs?: number }): Promise<PythonFetchResult> {
+  return pythonPublicGet("/ready", true, options?.timeoutMs);
+}
+
+/** Quick probe for job enqueue — avoids durable queue when worker is down. */
+export async function isPythonWorkerReachable(timeoutMs = 5_000): Promise<boolean> {
+  if (!isPythonConfigured() || isPythonForceUnavailable()) return false;
+  const result = await pythonPublicGet("/ready", false, timeoutMs);
+  return result.ok;
 }
 
 async function pythonPublicGet(
   path: string,
   safeRetry: boolean,
+  timeoutOverrideMs?: number,
 ): Promise<PythonFetchResult> {
   const requestId = newRequestId();
   const normalizedPath = normalizePath(path);
   const timeoutMs = Math.min(
-    envInt("PYTHON_REQUEST_TIMEOUT_MS", DEFAULT_TIMEOUT_MS),
+    timeoutOverrideMs ?? envInt("PYTHON_REQUEST_TIMEOUT_MS", DEFAULT_TIMEOUT_MS),
     30_000,
   );
 

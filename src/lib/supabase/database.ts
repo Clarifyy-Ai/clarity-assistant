@@ -141,9 +141,33 @@ export const PROFILE_BOOT_COLUMNS = [
   "mfa_reenrollment_required",
   "overlay_opacity",
   "overlay_position",
+  "overlay_settings",
   "privacy_prefs",
   // Needed so settings writers can merge hotkeys/theme/polish without wiping siblings.
   "ui_preferences",
+  // Audio settings page + session STT/VAD read these on every login/refresh.
+  "stt_language",
+  "custom_filler_words",
+  "auto_gain",
+  "noise_suppression",
+  "audio_input_device",
+  "audio_output_device",
+  // Default AI model for settings, sessions, and overlay after refresh.
+  "preferred_model",
+  // Practice Coach settings page + live session coach behavior.
+  "hint_style",
+  "coach_tone",
+  // Profile settings (Basic info + Career) — must survive login/refresh.
+  "bio",
+  "website_url",
+  "timezone",
+  "experience_years",
+  "target_role",
+  // Notifications settings page.
+  "notification_prefs",
+  "email_notifications",
+  "session_reminders",
+  "marketing_emails",
 ].join(", ");
 
 export const profilesDB = {

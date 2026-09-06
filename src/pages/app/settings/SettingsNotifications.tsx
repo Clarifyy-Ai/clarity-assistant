@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { useState, useEffect } from "react";
-import { useAuthStore } from "@/store/userStore";
+import { useAuthStore } from "@/store/authStore";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Switch } from "@/components/ui/switch";
@@ -10,16 +10,18 @@ import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
 import { SettingsSaveBar } from "@/components/settings/SettingsSaveBar";
 import { notificationsDB } from "@/lib/supabase/database";
 import { mergeNotificationPrefs } from "@/lib/interviews/calendarIntegrationPrefs";
-
-type NotificationPrefs = {
-  session_complete?: boolean;
-  credit_low?: boolean;
-  product_updates?: boolean;
-  debrief_ready?: boolean;
-};
+import {
+  saveProfileSettings,
+  settingsSaveError,
+} from "@/lib/settings/saveProfileSettings";
+import {
+  readNotificationCategoryPrefs,
+  readNotificationGlobalPrefs,
+  type NotificationCategoryPrefs,
+} from "@/lib/settings/notificationPrefs";
 
 const CATEGORY_ITEMS: Array<{
-  key: keyof NotificationPrefs;
+  key: keyof NotificationCategoryPrefs;
   label: string;
 }> = [
   { key: "session_complete", label: "Session completed summaries" },
@@ -28,49 +30,43 @@ const CATEGORY_ITEMS: Array<{
   { key: "product_updates", label: "Product updates" },
 ];
 
-function readPrefs(profile: unknown): NotificationPrefs {
-  const raw = (profile as { notification_prefs?: NotificationPrefs | null })?.notification_prefs;
-  return {
-    session_complete: raw?.session_complete ?? true,
-    credit_low: raw?.credit_low ?? true,
-    product_updates: raw?.product_updates ?? false,
-    debrief_ready: raw?.debrief_ready ?? true,
-  };
-}
-
 export default function SettingsNotifications() {
-  const { profile, user, updateProfile } = useAuthStore();
+  const profile = useAuthStore((s) => s.profile);
+  const user = useAuthStore((s) => s.user);
 
-  const [prefs, setPrefs] = useState<NotificationPrefs>(() => readPrefs(profile));
+  const [prefs, setPrefs] = useState(() => readNotificationCategoryPrefs(profile));
   const [emailNotifications, setEmailNotifications] = useState(
-    (profile as any)?.email_notifications ?? true,
+    () => readNotificationGlobalPrefs(profile).email_notifications,
   );
   const [sessionReminders, setSessionReminders] = useState(
-    (profile as any)?.session_reminders ?? true,
+    () => readNotificationGlobalPrefs(profile).session_reminders,
   );
   const [marketingEmails, setMarketingEmails] = useState(
-    (profile as any)?.marketing_emails ?? false,
+    () => readNotificationGlobalPrefs(profile).marketing_emails,
   );
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
 
+  // Rehydrate from auth profile after login/refresh (BOOT now includes these columns).
+  const prefsKey = JSON.stringify(profile?.notification_prefs ?? null);
   useEffect(() => {
     if (!profile) return;
-    setPrefs(readPrefs(profile));
-    setEmailNotifications(profile.email_notifications ?? true);
-    setSessionReminders(profile.session_reminders ?? true);
-    setMarketingEmails(profile.marketing_emails ?? false);
+    setPrefs(readNotificationCategoryPrefs(profile));
+    const global = readNotificationGlobalPrefs(profile);
+    setEmailNotifications(global.email_notifications);
+    setSessionReminders(global.session_reminders);
+    setMarketingEmails(global.marketing_emails);
   }, [
     profile?.id,
-    profile?.notification_prefs,
+    prefsKey,
     profile?.email_notifications,
     profile?.session_reminders,
     profile?.marketing_emails,
   ]);
 
-  function toggleCategory(key: keyof NotificationPrefs) {
-    setPrefs((p) => ({ ...p, [key]: !p[key] }));
+  function toggleCategory(key: keyof NotificationCategoryPrefs, next: boolean) {
+    setPrefs((p) => ({ ...p, [key]: next }));
   }
 
   function unsubscribeAll() {
@@ -96,21 +92,24 @@ export default function SettingsNotifications() {
     setSaved(false);
     setSaveFailed(false);
     try {
-      await updateProfile({
+      const notification_prefs = mergeNotificationPrefs(
+        profile?.notification_prefs,
+        prefs,
+      );
+      await saveProfileSettings({
         email_notifications: emailNotifications,
         session_reminders: sessionReminders,
         marketing_emails: marketingEmails,
-        notification_prefs: mergeNotificationPrefs(
-          (profile as { notification_prefs?: unknown } | null)?.notification_prefs,
-          prefs,
-        ),
+        notification_prefs,
       });
+      // Keep local form aligned with what we persisted (including nested merges).
+      setPrefs(readNotificationCategoryPrefs({ notification_prefs }));
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
       toast.success("Notification preferences saved");
     } catch (err) {
       setSaveFailed(true);
-      toast.error(err?.message ?? "Failed to save notification preferences.");
+      toast.error(settingsSaveError(err));
     } finally {
       setSaving(false);
     }
@@ -127,7 +126,7 @@ export default function SettingsNotifications() {
         description: "Open Notifications to see it. It persists after refresh.",
       });
     } catch (err) {
-      toast.error(err?.message ?? "Could not create a test notification.");
+      toast.error(settingsSaveError(err));
     }
   }
 
@@ -175,7 +174,7 @@ export default function SettingsNotifications() {
               </div>
               <Switch
                 checked={Boolean(prefs[item.key])}
-                onCheckedChange={() => toggleCategory(item.key)}
+                onCheckedChange={(v) => toggleCategory(item.key, v)}
                 aria-label={item.label}
               />
             </div>

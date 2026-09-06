@@ -5,6 +5,7 @@ import { useAuthStore } from "@/store/userStore";
 import { subscribeFocusRecovery } from "@/lib/focusRecovery";
 import { classifyRequestError, toSafeUiError } from "@/lib/focusRecovery";
 import { ApiClientError } from "@/lib/api/apiClient";
+import { toast } from "sonner";
 import type {
   AnalyticsDashboardData,
   AnalyticsFilter,
@@ -110,6 +111,10 @@ export function useAnalytics() {
     if (analyticsInflightRef.current && analyticsInflightKeyRef.current === loadKey) {
       return analyticsInflightRef.current;
     }
+    // Supersede an in-flight request for a different filter set.
+    if (analyticsInflightRef.current && analyticsInflightKeyRef.current !== loadKey) {
+      loadGenerationRef.current += 1;
+    }
 
     const generation = ++loadGenerationRef.current;
     analyticsInflightKeyRef.current = loadKey;
@@ -207,6 +212,14 @@ export function useAnalytics() {
     setFilterState((f) => ({ ...f, interview_type }));
   }, []);
 
+  const clearFilters = useCallback(() => {
+    setFilterState({
+      period: DEFAULT_ANALYTICS_PERIOD,
+      session_filter: "all",
+      interview_type: "all",
+    });
+  }, []);
+
   // ── Session comparison ────────────────────────────────────────
 
   const compareSessions = useCallback(async (
@@ -222,6 +235,12 @@ export function useAnalytics() {
       const timeZone = resolveDisplayTimeZone(
         useAuthStore.getState().profile?.timezone,
       );
+      // Soft-refresh scorecards when the quality gate was bumped (free Edge repair).
+      // Failures are non-fatal — compare still uses whatever is stored.
+      await Promise.allSettled([
+        fetchEdgeJson("generate-scorecard", { session_id: sessionAId }, { timeoutMs: 90_000 }),
+        fetchEdgeJson("generate-scorecard", { session_id: sessionBId }, { timeoutMs: 90_000 }),
+      ]);
       const payload = await fetchEdgeJson<SessionComparisonPayload>(
         "compare-sessions",
         {
@@ -259,13 +278,17 @@ export function useAnalytics() {
   // ── Download Excel workbook ───────────────────────────────────
 
   const downloadCSV = useCallback(async (): Promise<void> => {
-    if (!data?.recent_sessions.length) return;
+    const sessions = data?.recent_sessions ?? [];
+    if (sessions.length === 0) {
+      toast.error("No sessions match the current filters to export.");
+      return;
+    }
 
     const timeZone = resolveDisplayTimeZone(
       useAuthStore.getState().profile?.timezone,
     );
     const XLSX = await import("xlsx");
-    const rows = buildAnalyticsSpreadsheetRows(data.recent_sessions, { timeZone });
+    const rows = buildAnalyticsSpreadsheetRows(sessions, { timeZone });
     const sheet = XLSX.utils.aoa_to_sheet([ANALYTICS_CSV_HEADERS, ...rows]);
     sheet["!cols"] = [
       { wch: 12 }, { wch: 24 }, { wch: 22 }, { wch: 24 }, { wch: 14 },
@@ -355,6 +378,8 @@ export function useAnalytics() {
     filter.session_filter !== "all" ||
     filter.interview_type !== "all";
 
+  const exportSessionCount = data?.recent_sessions?.length ?? 0;
+
   return {
     data,
     isLoading,
@@ -371,6 +396,7 @@ export function useAnalytics() {
     setPeriod,
     setSessionFilter,
     setInterviewTypeFilter,
+    clearFilters,
 
     compareSessions,
     clearComparison: () => {
@@ -383,6 +409,7 @@ export function useAnalytics() {
     toggleLeaderboardOptIn,
     downloadCSV,
     reload: loadAnalytics,
+    exportSessionCount,
 
     avgScore30d,
     scoreDelta,

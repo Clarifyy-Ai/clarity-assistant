@@ -56,6 +56,9 @@ export function resolveIsIndiaUser(profile?: {
   region?: string | null;
   notification_prefs?: { region?: string } | null;
 } | null): boolean {
+  // Production bundles: gov exams always available (diaspora / remote aspirants).
+  if (import.meta.env.PROD) return true;
+
   const isProd =
     import.meta.env.PROD &&
     String(import.meta.env.VITE_APP_ENV ?? "").toLowerCase() === "production";

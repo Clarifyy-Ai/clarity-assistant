@@ -16,7 +16,7 @@ import {
   rateLimitResponse,
   RATE_LIMIT_PRESETS,
 } from "../_shared/rateLimit.ts";
-import { isPythonConfigured, pythonFetch } from "../_shared/pythonClient.ts";
+import { isPythonWorkerReachable, pythonFetch } from "../_shared/pythonClient.ts";
 import { decideRoute } from "../_shared/operationRouter.ts";
 
 // MATRIX document_process.creditCostKey → parse_document
@@ -67,7 +67,8 @@ Deno.serve(async (req) => {
     // MATRIX document_process: preferredOrder python → ai; durableJob true.
     // Gate messaging/ordering from decideRoute; still enqueue a durable job when Python is up.
     const route = decideRoute({ operation: "document_process" });
-    const pythonConfigured = route.canUsePython && isPythonConfigured();
+    const pythonReachable = route.canUsePython && await isPythonWorkerReachable();
+    const pythonConfigured = pythonReachable;
 
     const { data: existing } = await db
       .from("document_processing_jobs")

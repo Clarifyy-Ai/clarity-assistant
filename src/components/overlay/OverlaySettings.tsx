@@ -538,9 +538,7 @@ export function OverlaySettings({
           ) : (
             <div className="space-y-1 text-[11px] font-mono text-white/25">
               {OVERLAY_HOTKEYS.map((hk) => {
-                const keys = hk.keys.includes("1-4")
-                  ? "Ctrl+1–4"
-                  : formatHotkeyLabel(hk.keys);
+                const keys = formatHotkeyLabel(hk.keys);
                 return (
                   <p key={hk.label}>
                     {keys} — {hk.label}

@@ -88,3 +88,16 @@ export function govExamGeneratePath(input: GovExamGeneratePathInput): string | n
   const search = q.toString();
   return search ? `/app/mock-test/generate?${search}` : "/app/mock-test/generate";
 }
+
+/** React Router navigate target — avoids malformed `/generate&basis=` paths. */
+export function govExamGenerateNavigateTarget(
+  input: GovExamGeneratePathInput,
+): { pathname: "/app/mock-test/generate"; search: string } | null {
+  const href = govExamGeneratePath(input);
+  if (!href) return null;
+  const qIndex = href.indexOf("?");
+  return {
+    pathname: "/app/mock-test/generate",
+    search: qIndex >= 0 ? href.slice(qIndex) : "",
+  };
+}

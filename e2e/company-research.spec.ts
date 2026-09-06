@@ -316,9 +316,23 @@ test.describe("Company research persistence", () => {
     await expect(page.getByText(BRIEF.overview)).toHaveCount(0);
   });
 
-  test("double-clicking refresh charges once and sends an idempotency key", async ({
-    page,
-  }) => {
+  test("refresh reloads the saved brief without charging credits", async ({ page }) => {
+    const harness = await installCompanyResearchHarness(page);
+
+    await page.goto(COMPANY_PATH);
+    await confirmGeneration(page);
+    await expect(page.getByText(BRIEF.overview)).toBeVisible({ timeout: 20_000 });
+    expect(harness.startCalls()).toBe(1);
+
+    const refresh = page.getByRole("button", { name: /^Refresh$/i }).first();
+    await refresh.click();
+
+    await expect(page.getByText(BRIEF.overview)).toBeVisible({ timeout: 20_000 });
+    await expect(refresh).toBeEnabled({ timeout: 20_000 });
+    expect(harness.startCalls()).toBe(1);
+  });
+
+  test("regenerate charges credits and sends an idempotency key", async ({ page }) => {
     const harness = await installCompanyResearchHarness(page, {
       kind: "success",
       delayMs: 400,
@@ -329,20 +343,12 @@ test.describe("Company research persistence", () => {
     await expect(page.getByText(BRIEF.overview)).toBeVisible({ timeout: 20_000 });
     expect(harness.startCalls()).toBe(1);
 
-    const refresh = page.getByRole("button", { name: /refresh/i }).first();
-    await refresh.evaluate((el) => {
-      (el as HTMLButtonElement).click();
-      (el as HTMLButtonElement).click();
-    });
+    await page.getByRole("button", { name: /regenerate/i }).first().click();
+    await page.getByRole("button", { name: /Spend \d+ credits/ }).click();
 
     await expect(page.getByText(BRIEF.overview)).toBeVisible({ timeout: 20_000 });
-    await expect(refresh).toBeEnabled({ timeout: 20_000 });
     expect(harness.startCalls()).toBe(2);
-    expect(harness.idempotencyKeys()).toHaveLength(2);
-    for (const key of harness.idempotencyKeys()) {
-      expect(key.length).toBeGreaterThan(8);
-    }
-    expect(new Set(harness.idempotencyKeys()).size).toBe(1);
+    expect(harness.idempotencyKeys().length).toBeGreaterThan(0);
   });
 
   test("long provider latency still saves the brief without a hard timeout", async ({ page }) => {

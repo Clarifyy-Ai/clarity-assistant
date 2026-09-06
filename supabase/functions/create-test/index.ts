@@ -117,11 +117,17 @@ Deno.serve(async (req) => {
         : true;
 
     const marksPositive = clampNumber(config.marks_positive ?? 4, 0, 100, 4);
-    const marksNegative = clampNumber(config.marks_negative ?? 1, 0, 100, 1);
-
-    // Learning Hub course quizzes are included with enrollment — no credit burn.
+    // Learning Hub quizzes are formative course checks — default to no negative marking.
     const isLearningQuiz =
       sanitizeString(body.source ?? config.source ?? "", 40) === "learning_quiz";
+    const marksNegative = clampNumber(
+      config.marks_negative ?? (isLearningQuiz ? 0 : 1),
+      0,
+      100,
+      isLearningQuiz ? 0 : 1,
+    );
+
+    // Learning Hub course quizzes are included with enrollment — no credit burn.
 
     let creditResult: { success?: boolean } | null = null;
     if (!isLearningQuiz) {

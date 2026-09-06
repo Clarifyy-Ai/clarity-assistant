@@ -32,4 +32,10 @@ describe("sessionEnforcement practice tags", () => {
     expect(source).toContain("Practice Coach or Mock Interview");
     expect(source).not.toContain("Use Mock, Warmup, or Live Rehearsal");
   });
+
+  it("backfills practice tag for live sessions without interview_id before AI check", () => {
+    const source = readShared("sessionEnforcement.ts");
+    expect(source).toContain("backfillPracticeTagIfEligible");
+    expect(source).toContain("if (session.interview_id) return session");
+  });
 });

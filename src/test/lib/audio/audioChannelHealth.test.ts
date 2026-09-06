@@ -5,6 +5,7 @@ import {
   buildChannelHealth,
   deriveChannelHealth,
   isChannelUiActive,
+  liveTranscriptionBarHealth,
   worstTranscriptionHealth,
   type AudioChannelMetrics,
 } from "@/lib/audio/audioChannelHealth";
@@ -211,5 +212,13 @@ describe("audioChannelHealth — no false Active", () => {
   it("worstTranscriptionHealth prefers interviewer failure when dual expected", () => {
     expect(worstTranscriptionHealth("active", "silent_source", true)).toBe("silent_source");
     expect(worstTranscriptionHealth("active", "disconnected", false)).toBe("active");
+  });
+
+  it("liveTranscriptionBarHealth keeps mic active when tab is silent", () => {
+    expect(liveTranscriptionBarHealth("active", "silent_source", true)).toBe("active");
+    expect(liveTranscriptionBarHealth("connecting", "silent_source", true)).toBe("connecting");
+    expect(liveTranscriptionBarHealth("silent_source", "silent_source", true)).toBe(
+      "silent_source",
+    );
   });
 });

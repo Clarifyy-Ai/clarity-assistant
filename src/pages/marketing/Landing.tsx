@@ -399,7 +399,7 @@ export default function Landing() {
       </section>
 
       {/* ── Stats ───────────────────────────────────────────────────────────── */}
-      <section className="pb-14 px-4 sm:px-6">
+      <section className="pb-6 sm:pb-8 px-4 sm:px-6">
         <div className="max-w-4xl mx-auto grid grid-cols-2 lg:grid-cols-4 gap-4">
           {STATS.map((stat, i) => (
             <m.div
@@ -416,30 +416,32 @@ export default function Landing() {
       </section>
 
       {/* ── How It Works ────────────────────────────────────────────────────── */}
-      <section className="pb-14 sm:pb-16 px-4 sm:px-6 bg-secondary/20">
-        <div className={`${MARKETING_SHELL} py-14`}>
-          <m.div className="text-center mb-12" {...fadeUp()}>
+      <section className="px-4 sm:px-6 bg-secondary/20">
+        <div className={`${MARKETING_SHELL} py-8 sm:py-10`}>
+          <m.div className="text-center mb-6 sm:mb-8" {...fadeUp()}>
             <h2 className="text-2xl md:text-3xl font-bold">How it works</h2>
-            <p className="mt-3 text-sm text-muted-foreground max-w-md mx-auto leading-relaxed text-pretty">
+            <p className="mt-2 text-sm text-muted-foreground max-w-md mx-auto leading-relaxed text-pretty">
               From first upload to your next offer — three simple steps.
             </p>
           </m.div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-8">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-5">
             {STEPS.map((step, i) => (
               <m.div key={step.num} {...fadeUp(i * 0.1)} className="relative">
                 {i < STEPS.length - 1 && (
-                  <div className="hidden sm:flex absolute top-10 left-[calc(100%+8px)] w-8 items-center">
+                  <div className="hidden sm:flex absolute top-7 left-[calc(100%+4px)] w-5 items-center">
                     <ChevronRight className="w-4 h-4 text-muted-foreground/40 mx-auto" />
                   </div>
                 )}
-                <div className={cn(
-                  "w-14 h-14 rounded-2xl flex items-center justify-center mb-4",
-                  step.bg,
-                )}>
-                  <step.icon className={cn("w-6 h-6", step.color)} />
+                <div className="flex items-center gap-3 mb-3">
+                  <div className={cn(
+                    "w-11 h-11 rounded-xl flex items-center justify-center shrink-0",
+                    step.bg,
+                  )}>
+                    <step.icon className={cn("w-5 h-5", step.color)} />
+                  </div>
+                  <span className="text-2xl font-black leading-none text-primary/20">{step.num}</span>
                 </div>
-                <div className="text-3xl font-black text-primary/15 mb-2">{step.num}</div>
-                <h3 className="text-sm font-bold mb-2">{step.title}</h3>
+                <h3 className="text-sm font-bold mb-1.5">{step.title}</h3>
                 <p className="text-xs text-muted-foreground leading-relaxed">{step.desc}</p>
               </m.div>
             ))}
@@ -480,7 +482,7 @@ export default function Landing() {
       </section>
 
       {/* ── Feature Pillars ─────────────────────────────────────────────────── */}
-      <section id="features" className="scroll-mt-20 pt-6 pb-10 sm:pb-12 px-4 sm:px-6">
+      <section id="features" className="scroll-mt-20 pt-6 pb-6 sm:pb-8 px-4 sm:px-6">
         <div className={MARKETING_SHELL}>
           <m.div className="text-center mb-4" {...fadeUp()}>
             <h2 className="text-2xl sm:text-3xl font-bold">
@@ -491,50 +493,68 @@ export default function Landing() {
             </p>
           </m.div>
 
-          <m.div {...fadeUp(0.1)} className="mb-6">
+          <m.div {...fadeUp(0.1)} className="mb-6 overflow-hidden">
             <FeatureShowcase />
           </m.div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            {FEATURES.map((f, i) => (
+            {FEATURES.map((f, i) => {
+              const isLastOdd = FEATURES.length % 2 === 1 && i === FEATURES.length - 1;
+              return (
               <m.div
                 key={f.title}
                 {...fadeUp(i * 0.08)}
                 className={cn(
                   "group rounded-2xl border bg-card p-6 hover:border-primary/30 hover:bg-card/80 transition-all",
                   f.border,
+                  isLastOdd && "sm:col-span-2",
                 )}
               >
-                <div className="flex items-start gap-4">
-                  <div className={cn(
-                    "w-11 h-11 rounded-xl flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform",
-                    f.bg,
-                  )}>
-                    <f.icon className={cn("w-5 h-5", f.color)} />
+                <div
+                  className={cn(
+                    isLastOdd
+                      ? "grid grid-cols-1 sm:grid-cols-2 gap-5 sm:gap-8 sm:items-start"
+                      : undefined,
+                  )}
+                >
+                  <div className="flex items-start gap-4">
+                    <div className={cn(
+                      "w-11 h-11 rounded-xl flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform",
+                      f.bg,
+                    )}>
+                      <f.icon className={cn("w-5 h-5", f.color)} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-base font-bold">{f.title}</h3>
+                      <p className="text-sm text-muted-foreground mt-1 leading-relaxed">{f.desc}</p>
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-base font-bold">{f.title}</h3>
-                    <p className="text-sm text-muted-foreground mt-1 leading-relaxed">{f.desc}</p>
-                  </div>
+                  <ul
+                    className={cn(
+                      "space-y-2",
+                      isLastOdd ? "mt-0 sm:pt-1" : "mt-5",
+                      isLastOdd && "sm:grid sm:grid-cols-2 sm:gap-x-4 sm:gap-y-2 sm:space-y-0",
+                    )}
+                  >
+                    {f.details.map((d) => (
+                      <li key={d} className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <CheckCircle2 className={cn("w-3.5 h-3.5 flex-shrink-0", f.color)} />
+                        {d}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-                <ul className="mt-5 space-y-2">
-                  {f.details.map((d) => (
-                    <li key={d} className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <CheckCircle2 className={cn("w-3.5 h-3.5 flex-shrink-0", f.color)} />
-                      {d}
-                    </li>
-                  ))}
-                </ul>
               </m.div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </section>
 
       {/* ── Comparison Table ────────────────────────────────────────────────── */}
-      <section className="pb-14 px-4 sm:px-6 bg-secondary/20">
-        <div className="max-w-4xl mx-auto py-14">
-          <m.div className="text-center mb-10" {...fadeUp()}>
+      <section className="px-4 sm:px-6 bg-secondary/20">
+        <div className="max-w-4xl mx-auto pt-8 sm:pt-10 pb-6">
+          <m.div className="text-center mb-6 sm:mb-8" {...fadeUp()}>
             <h2 className="text-2xl md:text-3xl font-bold">How we compare</h2>
             <p className="mt-3 text-sm text-muted-foreground max-w-md mx-auto leading-relaxed text-pretty">
               Career Pilot is built for live practice coaching and rehearsal — not covert assistance during real interviews.
@@ -583,9 +603,9 @@ export default function Landing() {
       </section>
 
       {/* ── Testimonials ────────────────────────────────────────────────────── */}
-      <section className="pb-14 sm:pb-16 px-4 sm:px-6">
+      <section className="pt-6 pb-10 sm:pb-12 px-4 sm:px-6">
         <div className={MARKETING_SHELL}>
-          <m.div className="text-center mb-10" {...fadeUp()}>
+          <m.div className="text-center mb-6 sm:mb-8" {...fadeUp()}>
             <h2 className="text-2xl sm:text-3xl font-bold">Candidates who got the offer</h2>
             <p className="mt-3 text-sm text-muted-foreground">
               Real results from people just like you.
@@ -652,8 +672,8 @@ export default function Landing() {
 
       {/* ── Pricing Teaser ──────────────────────────────────────────────────── */}
       <PublicOffersSection className="pb-10" />
-      <section className="pb-14 px-4 sm:px-6 bg-secondary/20">
-        <div className="max-w-4xl mx-auto py-14">
+      <section className="pb-8 sm:pb-10 px-4 sm:px-6 bg-secondary/20">
+        <div className="max-w-4xl mx-auto pt-10 sm:pt-12">
           <m.div className="text-center mb-10" {...fadeUp()}>
             <h2 className="text-2xl md:text-3xl font-bold">Simple, transparent pricing</h2>
             <p className="mt-3 text-sm text-muted-foreground max-w-md mx-auto leading-relaxed text-pretty">
@@ -747,9 +767,9 @@ export default function Landing() {
       </section>
 
       {/* ── FAQ ─────────────────────────────────────────────────────────────── */}
-      <section className="pb-14 sm:pb-16 px-4 sm:px-6">
+      <section className="pt-8 sm:pt-10 pb-14 sm:pb-16 px-4 sm:px-6">
         <div className="max-w-2xl mx-auto">
-          <m.div className="text-center mb-10" {...fadeUp()}>
+          <m.div className="text-center mb-8 sm:mb-10" {...fadeUp()}>
             <h2 className="text-2xl sm:text-3xl font-bold">Frequently asked questions</h2>
             <p className="mt-3 text-sm text-muted-foreground">
               Have more questions?{" "}

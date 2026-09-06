@@ -76,6 +76,7 @@ export default function CompanyProfile() {
   const [error,    setError]    = useState<string | null>(null);
   const [needsGenerateConfirm, setNeedsGenerateConfirm] = useState(false);
   const [confirmGenerate, setConfirmGenerate] = useState(false);
+  const [confirmRegenerate, setConfirmRegenerate] = useState(false);
   const [job, setJob] = useState<CompanyBriefJob | null>(null);
   const [creditGateDenied, setCreditGateDenied] = useState(false);
   const { balance: creditBalance, known: creditKnown } = useCreditBalance();
@@ -258,6 +259,40 @@ export default function CompanyProfile() {
       setLoading(false);
     }
   }, [companyName, user?.id, params, creditBalance, creditKnown]);
+
+  /** Reload the persisted brief from DB — no edge call, no credit charge. */
+  const reloadBriefFromCache = useCallback(async () => {
+    if (!companyName.trim() || inFlightRef.current) return;
+
+    inFlightRef.current = true;
+    setLoading(true);
+    setError(null);
+
+    try {
+      const { data: cached, error: cacheErr } = await supabase
+        .from("company_research")
+        .select("raw_data")
+        .eq("user_id", user?.id ?? "")
+        .eq("company_name_normalized", normalizeCompanyName(companyName))
+        .maybeSingle();
+
+      if (cacheErr) {
+        console.warn("[CompanyProfile] Cache reload failed:", cacheErr.message);
+        setError("Could not reload brief. Please try again.");
+        return;
+      }
+
+      if (cached?.raw_data && typeof cached.raw_data === "object") {
+        setBrief(cached.raw_data);
+        return;
+      }
+
+      setError("No saved brief found. Generate a new brief to continue.");
+    } finally {
+      inFlightRef.current = false;
+      setLoading(false);
+    }
+  }, [companyName, user?.id]);
 
   const cancelInFlight = useCallback(async () => {
     abortRef.current = true;
@@ -539,19 +574,42 @@ export default function CompanyProfile() {
           { label: companyName },
         ]}
         actions={
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={loading}
-            aria-busy={loading}
-            onClick={() => void generateBrief(true)}
-            leftIcon={
-              <RefreshCw className={cn("w-3.5 h-3.5", loading && "animate-spin")} />
-            }
-          >
-            Refresh
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={loading}
+              aria-busy={loading}
+              onClick={() => void reloadBriefFromCache()}
+              leftIcon={
+                <RefreshCw className={cn("w-3.5 h-3.5", loading && "animate-spin")} />
+              }
+            >
+              Refresh
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={loading}
+              onClick={() => setConfirmRegenerate(true)}
+              leftIcon={<Sparkles className="w-3.5 h-3.5" />}
+            >
+              Regenerate
+            </Button>
+          </div>
         }
+      />
+
+      <ConfirmDialog
+        open={confirmRegenerate}
+        onOpenChange={setConfirmRegenerate}
+        title="Regenerate company brief?"
+        description={`This uses ${AI_CREDIT_COSTS.company_research} credits to create a fresh AI interview prep brief for ${companyName}.`}
+        confirmLabel={`Spend ${AI_CREDIT_COSTS.company_research} credits`}
+        onConfirm={async () => {
+          setConfirmRegenerate(false);
+          await generateBrief(true);
+        }}
       />
 
       {error ? (

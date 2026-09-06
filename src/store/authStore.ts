@@ -592,6 +592,20 @@ function syncOverlayFromProfile(row: Record<string, unknown>): void {
         });
       }
     }
+
+    const preferred = row.preferred_model;
+    if (typeof preferred === "string" && preferred.trim().length > 0) {
+      overlay.setActiveModel(normalizePreferredModel(preferred));
+    }
+
+    const hintStyle = row.hint_style;
+    if (
+      hintStyle === "full_answer" ||
+      hintStyle === "short_hints" ||
+      hintStyle === "keywords_only"
+    ) {
+      overlay.setHintStyle(hintStyle);
+    }
   } catch {
     // Overlay store or saved position may be unavailable/invalid.
   }
@@ -1567,15 +1581,23 @@ export const useAuthStore = create<AuthStore>()(
                 return hadLoadedProfile;
               }
 
+              const nextProfile = (() => {
+                const existing = get().profile;
+                const next = profile as unknown as ProfileRow;
+                return existing ? ({ ...existing, ...next } as ProfileRow) : next;
+              })();
+
               profileCache = {
                 userId,
-                profile: profile as unknown as ProfileRow,
+                profile: nextProfile,
                 cachedAt: Date.now(),
               };
 
               set((state) => {
                 if (get().user?.id !== userId) return;
-                state.profile = profile as unknown as ProfileRow;
+                // Merge so a slim select never blanks fields already held in memory
+                // (e.g. after updateProfile returned a full SAFE row).
+                state.profile = nextProfile;
                 state.isProfileLoaded = true;
                 // Profile success must leave loading — retry/soft-keep can otherwise
                 // leave status=loading forever and trap ProtectedRoute on BrandSplash.
@@ -1799,6 +1821,7 @@ export const useAuthStore = create<AuthStore>()(
                 state.credits
               );
             });
+            syncOverlayFromProfile(rowRecord);
             syncPrivacyPrefsFromProfile(rowRecord.privacy_prefs);
           },
 

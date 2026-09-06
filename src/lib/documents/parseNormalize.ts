@@ -3,6 +3,11 @@
  * Never coerce objects with String() — that yields "[object Object]".
  */
 
+import {
+  extractJdFieldsFromText as extractJdFieldsFromTextShared,
+  type ExtractedJdFields,
+} from "../../../supabase/functions/_shared/jdFieldExtract.ts";
+
 const MAX_SKILL = 200;
 const MAX_SKILLS = 100;
 
@@ -245,25 +250,7 @@ export function assessExtractedDocumentQuality(
   };
 }
 
-export type ExtractedJdFields = {
-  role: string | null;
-  company: string | null;
-  location: string | null;
-  salary_range: string | null;
-  required_skills: string[];
-  summary: string;
-};
-
-function firstMatch(text: string, patterns: RegExp[]): string | null {
-  for (const re of patterns) {
-    const m = text.match(re);
-    const g = m?.[1]?.replace(/\s+/g, " ").trim();
-    if (g && g.length >= 2 && g.length <= 180 && !looksLikeUploadedFilenameStub(g)) {
-      return g;
-    }
-  }
-  return null;
-}
+export type { ExtractedJdFields };
 
 const EMPTY_JD_FIELDS: ExtractedJdFields = {
   role: null,
@@ -280,42 +267,7 @@ export function extractJdFieldsFromText(text: string): ExtractedJdFields {
   if (quality.kind === "binary" || quality.kind === "filename_stub" || !clipped) {
     return { ...EMPTY_JD_FIELDS };
   }
-
-  const role = firstMatch(clipped, [
-    /(?:job\s*title|position|role|title)\s*[:\-–]\s*([^\n]{3,120})/i,
-    /we are hiring (?:a[n]? )?([^\n.]{3,80})/i,
-  ]);
-  const company = firstMatch(clipped, [
-    /(?:company|employer|organization)\s*[:\-–]\s*([^\n]{2,120})/i,
-    /about\s+([A-Z][A-Za-z0-9&.\- ]{1,60})\b/,
-  ]);
-  const location = firstMatch(clipped, [
-    /(?:work\s*location|locations?|based in|office)\s*[:\-–]\s*([^\n]{2,80})/i,
-    /based in\s+([^\n,]{2,80})/i,
-  ]);
-  const salary_range = firstMatch(clipped, [
-    /(?:salary|compensation|ctc|package|pay\s*range)\s*[:\-–]\s*([^\n]{2,80})/i,
-  ]);
-
-  const skillsBlock = clipped.match(
-    /(?:required skills|key skills|must have|requirements)[:\s]*([\s\S]{20,1200}?)(?:\n\n|responsibilities|qualifications|benefits|$)/i,
-  );
-  const required_skills = normalizeSkillList(
-    (skillsBlock?.[1] ?? "")
-      .split(/\n|•|,|;/)
-      .map((line) => line.replace(/^[\-\*\d.\s]+/, "").trim())
-      .filter(Boolean),
-    40,
-  );
-
-  return {
-    role,
-    company,
-    location,
-    salary_range,
-    required_skills,
-    summary: clipped.slice(0, 400),
-  };
+  return extractJdFieldsFromTextShared(clipped);
 }
 
 /** True when JD body is real extracted text (not stub/binary garbage). */

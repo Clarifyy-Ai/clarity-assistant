@@ -94,6 +94,7 @@ import {
   buildDebriefEvidenceCorpus,
   buildEvaluationInputSnapshot,
   classifyDebriefEligibility,
+  excerptInCorpus,
   validateDebriefEvidence,
 } from "../_shared/debriefEvidence.ts";
 
@@ -520,6 +521,57 @@ function normalizeFindingList(value: unknown): string[] {
     .slice(0, 20);
 }
 
+function collectDebriefEvidenceIssues(
+  parsed: { payload: DebriefPayload; rawParsed: unknown },
+  input: {
+    corpus: string;
+    answerIds: Set<string>;
+    questionIndices: Set<number>;
+    hasVerifiedFillers: boolean;
+    hasVerifiedWpm: boolean;
+  },
+) {
+  const strippedDimensions = stripUnsupportedAudioDimensions(
+    parsed.payload.scored_dimensions,
+    input.hasVerifiedFillers,
+    input.hasVerifiedWpm,
+  );
+  const refs = collectEvidenceRefs(parsed.rawParsed);
+  const issues = validateDebriefEvidence({
+    corpus: input.corpus,
+    answerIds: input.answerIds,
+    questionIndices: input.questionIndices,
+    transcriptEvidenceQuotes: refs.quotes,
+    referencedAnswerIds: refs.answerIds,
+    referencedQuestionIndices: refs.questionIndices,
+    hasVerifiedFillers: input.hasVerifiedFillers,
+    hasVerifiedWpm: input.hasVerifiedWpm,
+    aiClaimsFillers: strippedDimensions.some(
+      (d) =>
+        d.id === "filler_words" &&
+        (d.score != null || sanitizeText(d.transcript_evidence, 20).length >= 12),
+    ),
+    aiClaimsWpm: strippedDimensions.some(
+      (d) =>
+        d.id === "speaking_pace" &&
+        (d.score != null || sanitizeText(d.transcript_evidence, 20).length >= 12),
+    ),
+  });
+  return { issues, strippedDimensions, refs };
+}
+
+function isRepairableDebriefEvidenceFailure(
+  issues: Array<{ code: string }>,
+): boolean {
+  if (issues.length === 0) return false;
+  const repairable = new Set([
+    "EVIDENCE_QUOTE_MISMATCH",
+    "EVIDENCE_QUESTION_UNKNOWN",
+    "UNSUPPORTED_AUDIO_METRIC",
+  ]);
+  return issues.every((issue) => repairable.has(issue.code));
+}
+
 function collectEvidenceRefs(raw: unknown): {
   quotes: string[];
   answerIds: Array<string | null | undefined>;
@@ -616,6 +668,25 @@ function stripUnsupportedAudioDimensions(
       };
     }
     return d;
+  });
+}
+
+/** Drop fabricated quotes from dimensions so a usable summary can still persist. */
+function stripMismatchedDimensionEvidence(
+  dims: ScoredDimension[],
+  corpus: string,
+): ScoredDimension[] {
+  return dims.map((d) => {
+    const quote = sanitizeText(d.transcript_evidence, 2_000);
+    if (!quote || quote.length < 12) return d;
+    if (excerptInCorpus(quote, corpus)) return d;
+    return {
+      ...d,
+      transcript_evidence: "",
+      scoring_reason: d.scoring_reason
+        ? d.scoring_reason
+        : "Evidence quote could not be verified against the session transcript.",
+    };
   });
 }
 
@@ -721,7 +792,7 @@ function buildAnswerSummary(answers: AnswerRow[]): string {
           : "N/A";
 
       return `
-Q${index + 1}: ${question || "Question not recorded"}
+Q${index + 1} (questionIndex: ${index}, answerId: ${answer.id ?? ""}): ${question || "Question not recorded"}
 Answer: ${response || "No answer recorded"}
 Score: ${score}
       `.trim();
@@ -1106,8 +1177,11 @@ async function runDebriefHybrid(input: {
       .map((a) => a.question_index)
       .filter((n): n is number => typeof n === "number" && Number.isFinite(n)),
   );
-  // Also allow 0-based prompt indices Q1→0
-  answers.forEach((_, i) => questionIndices.add(i));
+  // Allow 0-based array indices and 1-based Q labels (Q1 → index 1).
+  answers.forEach((_, i) => {
+    questionIndices.add(i);
+    questionIndices.add(i + 1);
+  });
 
   const hasVerifiedFillers = verifiedFillerCount(session) != null;
   const hasVerifiedWpm = verifiedWpm(session) != null;
@@ -1195,41 +1269,98 @@ Your previous response was not valid complete JSON. Return a shorter response us
         );
       }
 
-      const refs = collectEvidenceRefs(parsed.rawParsed);
-      const issues = validateDebriefEvidence({
+      let evidence = collectDebriefEvidenceIssues(parsed, {
         corpus,
         answerIds,
         questionIndices,
-        transcriptEvidenceQuotes: refs.quotes,
-        referencedAnswerIds: refs.answerIds,
-        referencedQuestionIndices: refs.questionIndices,
         hasVerifiedFillers,
         hasVerifiedWpm,
-        aiClaimsFillers: parsed.payload.scored_dimensions.some(
-          (d) =>
-            d.id === "filler_words" &&
-            (d.score != null || sanitizeText(d.transcript_evidence, 20).length >= 12),
-        ),
-        aiClaimsWpm: parsed.payload.scored_dimensions.some(
-          (d) =>
-            d.id === "speaking_pace" &&
-            (d.score != null || sanitizeText(d.transcript_evidence, 20).length >= 12),
-        ),
       });
-      if (issues.length > 0) {
+
+      if (
+        evidence.issues.length > 0 &&
+        isRepairableDebriefEvidenceFailure(evidence.issues)
+      ) {
+        const repairHints = evidence.issues.map((i) => i.message).join(" ");
+        debriefAi = await generateDebriefText({
+          prompt: `${prompt}
+
+Your previous JSON failed evidence validation: ${repairHints}
+Fix only the evidence fields:
+- evidence.quotedExcerpt must be copied verbatim from an Answer line (min 12 chars).
+- questionIndex 0 = Q1, 1 = Q2 (or use the questionIndex shown in each Q line).
+- Use the answerId from each Q line when present; otherwise leave answerId empty.
+- Do not score filler_words or speaking_pace when Total filler words or Avg WPM is N/A.
+Return the full corrected JSON only.`,
+          userId,
+          model: resolvedModel,
+          byok,
+        });
+        const repaired = debriefAi ? parseDebriefFromAi(debriefAi.text) : null;
+        if (repaired) {
+          parsed = repaired;
+          evidence = collectDebriefEvidenceIssues(parsed, {
+            corpus,
+            answerIds,
+            questionIndices,
+            hasVerifiedFillers,
+            hasVerifiedWpm,
+          });
+        }
+      }
+
+      if (evidence.issues.length > 0) {
+        // Soft-fail quote mismatches: clear unverifiable evidence and continue when
+        // the summary itself is usable. Hard-fail only when nothing salvageable remains.
+        const softOnly = evidence.issues.every(
+          (issue) =>
+            issue.code === "EVIDENCE_QUOTE_MISMATCH" ||
+            issue.code === "EVIDENCE_QUESTION_UNKNOWN" ||
+            issue.code === "UNSUPPORTED_AUDIO_METRIC",
+        );
+        if (softOnly && parsed.payload.summary.trim()) {
+          const cleanedDims = stripMismatchedDimensionEvidence(
+            evidence.strippedDimensions,
+            corpus,
+          );
+          evidence = collectDebriefEvidenceIssues(
+            {
+              payload: { ...parsed.payload, scored_dimensions: cleanedDims },
+              rawParsed: {
+                ...(typeof parsed.rawParsed === "object" && parsed.rawParsed
+                  ? (parsed.rawParsed as Record<string, unknown>)
+                  : {}),
+                // Re-validate without fabricated quotes from dimensions.
+                scored_dimensions: cleanedDims,
+                strengths: [],
+                improvements: [],
+              },
+            },
+            {
+              corpus,
+              answerIds,
+              questionIndices,
+              hasVerifiedFillers,
+              hasVerifiedWpm,
+            },
+          );
+          parsed = {
+            payload: { ...parsed.payload, scored_dimensions: cleanedDims },
+            rawParsed: parsed.rawParsed,
+          };
+        }
+      }
+
+      if (evidence.issues.length > 0) {
         throw new DomainError(
           "AI_INVALID_OUTPUT",
-          issues[0]?.message ?? "Debrief AI output failed evidence validation.",
+          evidence.issues[0]?.message ?? "Debrief AI output failed evidence validation.",
         );
       }
 
       const debriefPayload: DebriefPayload = {
         ...parsed.payload,
-        scored_dimensions: stripUnsupportedAudioDimensions(
-          parsed.payload.scored_dimensions,
-          hasVerifiedFillers,
-          hasVerifiedWpm,
-        ),
+        scored_dimensions: evidence.strippedDimensions,
       };
 
       const debrief = await persistDebrief(

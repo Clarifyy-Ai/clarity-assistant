@@ -28,9 +28,12 @@ import {
   isClientWaitElapsed,
   isFailedJobStatus,
   isInFlightJobStatus,
+  isQueueWorkerUnavailable,
+  isStuckQueuedJob,
   libraryStatusFromJob,
   parseDocumentFallback,
   pollDocumentJobUntilDone,
+  recoverStuckQueuedDocumentJob,
   retryDocumentProcessingJob,
   shouldFallbackToSyncParse,
   userFacingJobError,
@@ -151,6 +154,7 @@ export default function DocumentLibraryPage() {
   const [uploading, setUploading] = useState(false);
   const [selectedName, setSelectedName] = useState<string | null>(null);
   const resumedDocsRef = useRef<Set<string>>(new Set());
+  const recoveryAttemptedRef = useRef<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     if (!user?.id) return;
@@ -186,7 +190,7 @@ export default function DocumentLibraryPage() {
       if (remembered) {
         const { data: byId } = await supabase
           .from("document_processing_jobs")
-          .select("id, status, error_code, error_message")
+          .select("id, status, error_code, error_message, created_at")
           .eq("id", remembered)
           .eq("owner_id", user!.id)
           .maybeSingle();
@@ -194,7 +198,7 @@ export default function DocumentLibraryPage() {
       }
       const { data } = await supabase
         .from("document_processing_jobs")
-        .select("id, status, error_code, error_message")
+        .select("id, status, error_code, error_message, created_at")
         .eq("document_id", documentId)
         .eq("owner_id", user!.id)
         .order("created_at", { ascending: false })
@@ -219,6 +223,28 @@ export default function DocumentLibraryPage() {
         .eq("owner_id", user!.id);
     }
 
+    async function tryRecoverStuckJob(documentId: string, job: { id: string; status: string; created_at?: string }) {
+      if (!isStuckQueuedJob(job)) return false;
+      if (recoveryAttemptedRef.current.has(documentId)) return false;
+      const doc = docs.find((d) => d.id === documentId);
+      if (!doc || !user?.id) return false;
+      recoveryAttemptedRef.current.add(documentId);
+      try {
+        await recoverStuckQueuedDocumentJob({
+          jobId: job.id,
+          documentId,
+          mimeType: mimeForDoc(doc.document_name, doc.mime_type),
+          contentHash: doc.content_hash ?? documentId,
+          ownerId: user.id,
+        });
+        toast.message("Background queue was slow — parsing directly now.");
+        return true;
+      } catch {
+        recoveryAttemptedRef.current.delete(documentId);
+        return false;
+      }
+    }
+
     async function syncInFlightOnce(opts?: { markResumed?: boolean }): Promise<void> {
       for (const documentId of inflightIds) {
         if (cancelled) continue;
@@ -230,6 +256,10 @@ export default function DocumentLibraryPage() {
           const job = await findExistingJob(documentId);
           if (!job?.id) continue;
           rememberJobId(documentId, job.id);
+          if (await tryRecoverStuckJob(documentId, job)) {
+            if (!cancelled) void load();
+            continue;
+          }
           if (!isInFlightJobStatus(job.status)) {
             await syncDocFromJob(documentId, job);
             continue;
@@ -250,13 +280,13 @@ export default function DocumentLibraryPage() {
 
     const timer = window.setInterval(() => {
       if (!cancelled) void syncInFlightOnce();
-    }, 8_000);
+    }, 4_000);
 
     return () => {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [inflightDocIds, load, user?.id]);
+  }, [docs, inflightDocIds, load, user?.id]);
 
   async function processLibraryDocument(opts: {
     documentId: string;
@@ -295,6 +325,17 @@ export default function DocumentLibraryPage() {
       void (async () => {
         try {
           const job = await pollDocumentJobUntilDone(created.jobId!);
+          if (job && isQueueWorkerUnavailable(job)) {
+            await recoverStuckQueuedDocumentJob({
+              jobId: created.jobId!,
+              documentId: opts.documentId,
+              mimeType: opts.mimeType,
+              contentHash: opts.contentHash,
+              ownerId: user?.id ?? "",
+            });
+            toast.message("Background queue was slow — parsing directly now.");
+            return;
+          }
           if (job && isClientWaitElapsed(job)) {
             await supabase.from("personal_library_documents").update({
               processing_status: libraryStatusFromJob(job.status),

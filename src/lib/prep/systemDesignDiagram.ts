@@ -1,4 +1,5 @@
 import type { PresetShape } from "@/lib/prep/systemDesignPresets";
+import { parsePrepToolResponse } from "@/lib/network/edgeResult";
 import { sha256 } from "@/lib/utils/hashUtils";
 
 export type DiagramSpecNode = {
@@ -89,15 +90,10 @@ export function parseSystemDesignResponse(raw: unknown): SystemDesignParseResult
     const nested = obj.data && typeof obj.data === "object"
       ? (obj.data as Record<string, unknown>)
       : null;
-    const markdown = String(
-      obj.result ?? obj.markdown ?? obj.text ?? nested?.result ?? nested?.markdown ?? "",
-    ).trim();
+    const parsed = parsePrepToolResponse(raw);
+    const markdown = parsed.result;
     const diagramRaw = obj.diagram_spec ?? obj.diagramSpec ?? nested?.diagram_spec ?? nested?.diagramSpec;
-    const source = typeof obj.source === "string"
-      ? obj.source
-      : typeof nested?.source === "string"
-        ? nested.source
-        : undefined;
+    const source = parsed.source;
 
     return {
       markdown,

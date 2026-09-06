@@ -11,6 +11,20 @@
 
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 
+/** After a network/CORS failure, skip further mock-tts probes for this page load. */
+let serverTtsEndpointUnavailable = false;
+
+const SERVER_TTS_TIMEOUT_MS = 5_000;
+
+/** Test-only: reset cached endpoint-unavailable state between cases. */
+export function resetServerTtsProbeForTests(): void {
+  serverTtsEndpointUnavailable = false;
+}
+
+function markServerTtsEndpointUnavailable(): void {
+  serverTtsEndpointUnavailable = true;
+}
+
 export type ServerTtsRequest = {
   text: string;
   voice_id: string;
@@ -82,6 +96,14 @@ export async function requestServerTts(
     };
   }
 
+  if (serverTtsEndpointUnavailable) {
+    return {
+      unavailable: true,
+      source: "unavailable",
+      message: "Server TTS endpoint unavailable — using browser voice.",
+    };
+  }
+
   try {
     const data = await fetchEdgeJson<{
       unavailable?: boolean;
@@ -99,7 +121,7 @@ export async function requestServerTts(
         language: req.language ?? "en",
         playback_id: req.playback_id,
       },
-      { timeoutMs: 20_000 },
+      { timeoutMs: SERVER_TTS_TIMEOUT_MS },
     );
 
     if (data?.unavailable === true) {
@@ -136,6 +158,7 @@ export async function requestServerTts(
       message: data?.message,
     };
   } catch (err) {
+    markServerTtsEndpointUnavailable();
     const msg =
       err instanceof Error ? err.message : "Server TTS request failed.";
     return {
@@ -145,4 +168,4 @@ export async function requestServerTts(
     };
   }
 }
-
+

@@ -97,7 +97,11 @@ export default defineConfig(({ mode }) => {
             name: "local-desktop-installer",
             configureServer(server) {
               installAgentDebugSinks(server);
-              server.middlewares.use("/download/Career-Pilot-Setup.exe", (_req, res, next) => {
+
+              const GITHUB_INSTALLER =
+                "https://github.com/Clarifyy-Ai/career-pilot-releases/releases/latest/download/Career-Pilot-Setup.exe";
+
+              function findLocalInstaller(): string | null {
                 const candidates = [
                   path.join(__dirname, "release-new", "Career Pilot Setup 1.0.0.exe"),
                   path.join(__dirname, "release", "Career Pilot Setup 1.0.0.exe"),
@@ -109,37 +113,125 @@ export default defineConfig(({ mode }) => {
                   const match = fs.readdirSync(folder).find((f) => f.endsWith(".exe") && /setup/i.test(f));
                   if (match) candidates.unshift(path.join(folder, match));
                 }
-                const file = candidates.find((p) => fs.existsSync(p));
-                if (!file) {
-                  res.statusCode = 404;
-                  res.end("Build the installer first: npm run dist:win");
+                return candidates.find((p) => fs.existsSync(p)) ?? null;
+              }
+
+              function serveLocalInstaller(
+                req: import("http").IncomingMessage,
+                res: import("http").ServerResponse,
+                file: string,
+              ) {
+                const stat = fs.statSync(file);
+                const total = stat.size;
+                res.setHeader("Content-Type", "application/octet-stream");
+                res.setHeader("Accept-Ranges", "bytes");
+                res.setHeader(
+                  "Content-Disposition",
+                  'attachment; filename="Career-Pilot-Setup.exe"',
+                );
+
+                if (req.method === "HEAD") {
+                  res.statusCode = 200;
+                  res.setHeader("Content-Length", String(total));
+                  res.end();
                   return;
                 }
-                res.setHeader("Content-Type", "application/octet-stream");
-                res.setHeader("Content-Disposition", 'attachment; filename="Career-Pilot-Setup.exe"');
+
+                const rangeHeader = req.headers.range;
+                if (typeof rangeHeader === "string") {
+                  const match = /^bytes=(\d+)-(\d*)$/i.exec(rangeHeader);
+                  if (match) {
+                    const start = Number(match[1]);
+                    const end = match[2] ? Number(match[2]) : total - 1;
+                    if (Number.isFinite(start) && start < total && end >= start) {
+                      const chunkSize = end - start + 1;
+                      res.statusCode = 206;
+                      res.setHeader("Content-Range", `bytes ${start}-${end}/${total}`);
+                      res.setHeader("Content-Length", String(chunkSize));
+                      fs.createReadStream(file, { start, end }).pipe(res);
+                      return;
+                    }
+                  }
+                }
+
+                res.statusCode = 200;
+                res.setHeader("Content-Length", String(total));
                 fs.createReadStream(file).pipe(res);
-              });
-              server.middlewares.use("/dev-downloads/clarify-ai-setup.exe", (_req, res, next) => {
-                const candidates = [
-                  path.join(__dirname, "release-new", "Career Pilot Setup 1.0.0.exe"),
-                  path.join(__dirname, "release", "Career Pilot Setup 1.0.0.exe"),
+              }
+
+              async function serveGithubInstaller(
+                req: import("http").IncomingMessage,
+                res: import("http").ServerResponse,
+              ) {
+                const headers: Record<string, string> = {
+                  "User-Agent": "CareerPilot-Dev-Installer-Proxy/1.0",
+                };
+                if (typeof req.headers.range === "string") {
+                  headers.Range = req.headers.range;
+                }
+                const upstream = await fetch(GITHUB_INSTALLER, {
+                  method: req.method === "HEAD" ? "HEAD" : "GET",
+                  headers,
+                  redirect: "follow",
+                });
+                res.statusCode = upstream.status;
+                const passHeaders = [
+                  "content-type",
+                  "content-length",
+                  "content-range",
+                  "accept-ranges",
+                  "content-disposition",
                 ];
-                for (const dir of ["release-new", "release"]) {
-                  const folder = path.join(__dirname, dir);
-                  if (!fs.existsSync(folder)) continue;
-                  const match = fs.readdirSync(folder).find((f) => f.endsWith(".exe") && /setup/i.test(f));
-                  if (match) candidates.unshift(path.join(folder, match));
+                for (const name of passHeaders) {
+                  const value = upstream.headers.get(name);
+                  if (value) res.setHeader(name, value);
                 }
-                const file = candidates.find((p) => fs.existsSync(p));
-                if (!file) {
-                  res.statusCode = 404;
-                  res.end("Build the installer first: npm run dist:win");
+                if (!upstream.headers.get("content-type")) {
+                  res.setHeader("Content-Type", "application/octet-stream");
+                }
+                if (req.method === "HEAD") {
+                  res.end();
                   return;
                 }
-                res.setHeader("Content-Type", "application/octet-stream");
-                res.setHeader("Content-Disposition", 'attachment; filename="Career-Pilot-Setup.exe"');
-                fs.createReadStream(file).pipe(res);
-              });
+                if (!upstream.body) {
+                  res.end();
+                  return;
+                }
+                const reader = upstream.body.getReader();
+                while (true) {
+                  const { done, value } = await reader.read();
+                  if (done) break;
+                  res.write(Buffer.from(value));
+                }
+                res.end();
+              }
+
+              const installerHandler = (
+                req: import("http").IncomingMessage,
+                res: import("http").ServerResponse,
+                next: () => void,
+              ) => {
+                if (req.method !== "GET" && req.method !== "HEAD") {
+                  next();
+                  return;
+                }
+                const local = findLocalInstaller();
+                if (local) {
+                  serveLocalInstaller(req, res, local);
+                  return;
+                }
+                void serveGithubInstaller(req, res).catch(() => {
+                  res.statusCode = 503;
+                  res.setHeader("Content-Type", "text/plain; charset=utf-8");
+                  res.end(
+                    "Desktop installer unavailable in dev. Run npm run dist:win or check your network.",
+                  );
+                });
+              };
+
+              server.middlewares.use("/download/Career-Pilot-Setup.exe", installerHandler);
+              server.middlewares.use("/download-windows.php", installerHandler);
+              server.middlewares.use("/dev-downloads/clarify-ai-setup.exe", installerHandler);
             },
           }]
         : []),

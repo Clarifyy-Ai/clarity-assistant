@@ -317,10 +317,24 @@ export function resolveSpeechMetrics(
     : null;
   const wpmFromCard = scorecard ? detailNumber(details, "wpm_avg") : null;
 
-  return {
-    filler_rate: fillerFromCard,
-    wpm_avg: wpmFromCard ?? (isFiniteNumber(session.avg_wpm) ? session.avg_wpm : null),
-  };
+  // 0 WPM is not a meaningful measured rate — treat as unavailable.
+  const wpm_avg =
+    wpmFromCard != null && wpmFromCard > 0
+      ? wpmFromCard
+      : isFiniteNumber(session.avg_wpm) && session.avg_wpm > 0
+        ? session.avg_wpm
+        : null;
+
+  let filler_rate = fillerFromCard;
+  if (filler_rate == null && isFiniteNumber(session.filler_words) && session.filler_words >= 0) {
+    const duration = durationSeconds(session.started_at, session.ended_at);
+    const minutes = duration != null && duration > 0 ? duration / 60 : null;
+    if (minutes != null && minutes > 0) {
+      filler_rate = Math.round((session.filler_words / minutes) * 100) / 100;
+    }
+  }
+
+  return { filler_rate, wpm_avg };
 }
 
 export function formatSessionDateTime(

@@ -85,6 +85,20 @@ describe("BUG-14 assessment preflight (fail-closed)", () => {
     expect(result.ok).toBe(false);
     expect(result.byTemplateId.a?.startable).toBe(false);
     expect(result.byTemplateId.b?.status).toBe("unknown");
+    expect(result.errorMessage).toBe("network down");
+    expect(result.byTemplateId.a?.message).toBe("network down");
+  });
+
+  it("preflightAssessmentTemplates preserves private-mode copy instead of masking as 503", async () => {
+    vi.mocked(checkAssessmentAvailability).mockRejectedValue(
+      new Error(
+        "Private mode is enabled — cloud AI and analysis are paused. Turn off private mode in Settings → Privacy to continue.",
+      ),
+    );
+    const result = await preflightAssessmentTemplates(["tpl-private"]);
+    expect(result.ok).toBe(false);
+    expect(result.errorMessage).toMatch(/Private mode is enabled/i);
+    expect(result.byTemplateId["tpl-private"]?.message).not.toBe(AVAILABILITY_RETRY_MESSAGE);
   });
 
   it("preflightAssessmentTemplates surfaces retry copy for 503 availability failures", async () => {

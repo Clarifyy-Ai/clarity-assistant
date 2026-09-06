@@ -1,3 +1,9 @@
+import {
+  DEFAULT_HOTKEYS,
+  type HotkeyId,
+} from "@/lib/constants/hotkeys";
+import { comboToKeyArray } from "@/lib/overlay/hotkeyOverrides";
+
 export type OverlayHotkeyGroup =
   | "visibility"
   | "hints"
@@ -12,105 +18,54 @@ export interface OverlayHotkeyCatalogEntry {
   group: OverlayHotkeyGroup;
 }
 
+type CatalogSource = {
+  id: HotkeyId;
+  label: string;
+  group: OverlayHotkeyGroup;
+};
+
+/** Overlay help rows — keys/descriptions always mirror DEFAULT_HOTKEYS. */
+const OVERLAY_HELP_SOURCES: CatalogSource[] = [
+  { id: "TOGGLE_OVERLAY", label: "Toggle overlay", group: "visibility" },
+  { id: "TOGGLE_OVERLAY_ALIAS", label: "Toggle overlay (alt)", group: "visibility" },
+  { id: "MINIMIZE_OVERLAY", label: "Minimize overlay", group: "visibility" },
+  { id: "TOGGLE_STEALTH", label: "Discrete UI", group: "visibility" },
+  { id: "INCREASE_OPACITY", label: "Increase opacity", group: "visibility" },
+  { id: "DECREASE_OPACITY", label: "Decrease opacity", group: "visibility" },
+  { id: "REQUEST_AI_ANSWER", label: "Generate answer", group: "hints" },
+  { id: "CYCLE_HINT_STYLE", label: "Cycle hint style", group: "hints" },
+  { id: "SCROLL_ANSWER_UP", label: "Scroll up", group: "hints" },
+  { id: "SCROLL_ANSWER_DOWN", label: "Scroll down", group: "hints" },
+  { id: "CLEAR_ANSWER", label: "Clear answer", group: "hints" },
+  { id: "CAPTURE_CODING", label: "Screenshot + analyse", group: "actions" },
+  { id: "PANIC_CALM", label: "Calm steps", group: "actions" },
+  { id: "TOGGLE_MIC", label: "Mute / unmute", group: "session" },
+  { id: "SHOW_HOTKEY_REFERENCE", label: "Hotkey help", group: "session" },
+  { id: "DOCK_TOP_LEFT", label: "Dock top-left", group: "layout" },
+  { id: "DOCK_TOP_RIGHT", label: "Dock top-right", group: "layout" },
+  { id: "DOCK_BOTTOM_LEFT", label: "Dock bottom-left", group: "layout" },
+  { id: "DOCK_BOTTOM_RIGHT", label: "Dock bottom-right", group: "layout" },
+  { id: "DISMISS_HINT", label: "Dismiss", group: "layout" },
+  { id: "EMERGENCY_HIDE", label: "Emergency hide", group: "layout" },
+];
+
+function entryFromDefault(source: CatalogSource): OverlayHotkeyCatalogEntry {
+  const def = DEFAULT_HOTKEYS[source.id];
+  return {
+    keys: comboToKeyArray(def.keys),
+    label: source.label,
+    description: def.description,
+    group: source.group,
+  };
+}
+
 /**
  * Canonical overlay shortcut map for help, settings, and the toolbar cheat sheet.
- * Combos must match OverlayKeyboardHandler + DEFAULT_HOTKEYS (S = scroll, F = discrete UI).
+ * Derived from DEFAULT_HOTKEYS so authenticated settings and public /shortcuts stay aligned.
  */
-export const OVERLAY_HOTKEY_CATALOG: OverlayHotkeyCatalogEntry[] = [
-  {
-    keys: ["ctrl", "shift", "u"],
-    label: "Toggle overlay",
-    description: "Show or hide the Career Pilot overlay",
-    group: "visibility",
-  },
-  {
-    keys: ["ctrl", "shift", "x"],
-    label: "Toggle overlay (alt)",
-    description: "Same as Ctrl+Shift+U — show or hide overlay",
-    group: "visibility",
-  },
-  {
-    keys: ["ctrl", "shift", "k"],
-    label: "Minimize overlay",
-    description: "Minimize overlay to title bar",
-    group: "visibility",
-  },
-  {
-    keys: ["ctrl", "shift", "f"],
-    label: "Discrete UI",
-    description: "Lower overlay opacity until hover",
-    group: "visibility",
-  },
-  {
-    keys: ["ctrl", "shift", "a"],
-    label: "Generate answer",
-    description: "Trigger AI answer for current question",
-    group: "hints",
-  },
-  {
-    keys: ["ctrl", "shift", "y"],
-    label: "Cycle hint style",
-    description: "Full Answer → Short Hints → Keywords",
-    group: "hints",
-  },
-  {
-    keys: ["ctrl", "shift", "s"],
-    label: "Scroll up",
-    description: "Scroll the answer panel upward",
-    group: "hints",
-  },
-  {
-    keys: ["ctrl", "shift", "d"],
-    label: "Scroll down",
-    description: "Scroll the answer panel downward",
-    group: "hints",
-  },
-  {
-    keys: ["ctrl", "shift", "q"],
-    label: "Clear answer",
-    description: "Clear the current hint / answer text",
-    group: "hints",
-  },
-  {
-    keys: ["ctrl", "shift", "c"],
-    label: "Screenshot + analyse",
-    description: "Screenshot a coding problem & get AI analysis",
-    group: "actions",
-  },
-  {
-    keys: ["ctrl", "shift", "p"],
-    label: "Calm steps",
-    description: "Show grounding coaching prompts",
-    group: "actions",
-  },
-  {
-    keys: ["ctrl", "shift", "m"],
-    label: "Mute / unmute",
-    description: "Toggle microphone during a live session",
-    group: "session",
-  },
-  {
-    keys: ["ctrl", "shift", "/"],
-    label: "Hotkey help",
-    description: "Show this keyboard shortcut reference",
-    group: "session",
-  },
-  {
-    keys: ["ctrl", "1-4"],
-    label: "Dock to corner",
-    description: "Snap overlay to top-left / top-right / bottom corners",
-    group: "layout",
-  },
-  {
-    keys: ["escape"],
-    label: "Dismiss",
-    description: "Clear current hint or close panel",
-    group: "layout",
-  },
-  {
-    keys: ["ctrl", "shift", "escape"],
-    label: "Emergency hide",
-    description: "Hide overlay and reset session state",
-    group: "layout",
-  },
-];
+export function buildOverlayHotkeyCatalog(): OverlayHotkeyCatalogEntry[] {
+  return OVERLAY_HELP_SOURCES.map(entryFromDefault);
+}
+
+export const OVERLAY_HOTKEY_CATALOG: OverlayHotkeyCatalogEntry[] =
+  buildOverlayHotkeyCatalog();

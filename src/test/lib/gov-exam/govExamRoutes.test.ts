@@ -69,6 +69,10 @@ describe("Generate Mock redirect regression (TC-GOV-007)", () => {
       path.join(root, "src/components/layout/IndiaRegionGate.tsx"),
       "utf8",
     );
+    const detail = fs.readFileSync(
+      path.join(root, "src/pages/app/mock-test/GovExamDetail.tsx"),
+      "utf8",
+    );
     expect(app).toMatch(
       /path:\s*"mock-test\/generate"\s*,\s*element:\s*<IndiaAppPage\s+component=\{GenerateGovPaper\}\s*\/>/,
     );
@@ -78,6 +82,9 @@ describe("Generate Mock redirect regression (TC-GOV-007)", () => {
     expect(gate).not.toMatch(/<Navigate[^>]*to=["']\/app\/dashboard["']/);
     expect(gate).toContain('to="/app/dashboard"');
     expect(gate).toMatch(/Back to Dashboard/);
+    expect(detail).toContain("govExamGenerateNavigateTarget");
+    expect(detail).toContain("goToGenerate");
+    expect(detail).not.toMatch(/`\$\{generateBase\}&basis=/);
   });
 });
 
@@ -106,5 +113,21 @@ describe("gov exam path helpers", () => {
     expect(gen).toContain("basis=full_sim");
     expect(gen).toContain("language=hi");
     expect(gen).toContain("questionCount=100");
+  });
+
+  it("builds React Router navigate targets without malformed &basis paths", async () => {
+    const { govExamGenerateNavigateTarget } = await import("@/lib/gov-exam/govExamRoutes");
+    const target = govExamGenerateNavigateTarget({
+      examId: "uuid-1",
+      stageId: "stage-1",
+      code: "SSC_CGL",
+      basis: "quick",
+    });
+    expect(target).toEqual({
+      pathname: "/app/mock-test/generate",
+      search: expect.stringContaining("basis=quick"),
+    });
+    expect(target?.search.startsWith("?")).toBe(true);
+    expect(target?.search).not.toMatch(/^&/);
   });
 });

@@ -11,6 +11,7 @@ import {
 import {
   TAB_AUDIO_STATUS_COPY,
   isChannelUiActive,
+  liveTranscriptionBarHealth,
   tabAudioTitle,
   worstTranscriptionHealth,
   type AudioChannelHealthStatus,
@@ -53,6 +54,9 @@ function micBarCopy(input: {
   if (input.micHealth === "connecting") {
     return { key: "connecting", label: MIC_STATUS_COPY.connecting };
   }
+  if (input.micHealth === "silent_source") {
+    return { key: "disconnected", label: MIC_STATUS_COPY.silent };
+  }
   return { key: "disconnected", label: MIC_STATUS_COPY.disconnected };
 }
 
@@ -70,7 +74,7 @@ function transcriptionBarFromHealth(
     };
   }
 
-  const worst = worstTranscriptionHealth(micHealth, interviewerHealth, systemExpected);
+  const worst = liveTranscriptionBarHealth(micHealth, interviewerHealth, systemExpected);
 
   if (worst === "connecting") {
     return {

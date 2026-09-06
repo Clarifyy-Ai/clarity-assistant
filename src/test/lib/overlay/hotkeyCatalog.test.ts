@@ -44,4 +44,12 @@ describe("OVERLAY_HOTKEY_CATALOG", () => {
     expect(labels).toMatch(/mute/);
     expect(labels).toMatch(/dock/);
   });
+
+  it("uses DEFAULT_HOTKEYS combos (not legacy Ctrl+Shift+H/J)", () => {
+    const combos = OVERLAY_HOTKEY_CATALOG.map((entry) => comboKey(entry.keys));
+    expect(combos).toContain("ctrl+shift+u");
+    expect(combos).toContain("ctrl+shift+k");
+    expect(combos).not.toContain("ctrl+shift+h");
+    expect(combos).not.toContain("ctrl+shift+j");
+  });
 });

@@ -95,6 +95,64 @@ function asScorecard(row: Record<string, unknown> | null): ScorecardRowInput | n
   };
 }
 
+/** Cap-5 / zero-dim cards from the old keyword IRRELEVANT gate. */
+function isLikelyIrrelevantStub(row: Record<string, unknown> | null): boolean {
+  if (!row) return false;
+  const overall = row.overall_score;
+  if (typeof overall !== "number" || !Number.isFinite(overall) || overall > 5) {
+    return false;
+  }
+  const dims = [row.communication, row.technical, row.problem_solving, row.confidence];
+  const allLow = dims.every(
+    (d) => typeof d !== "number" || !Number.isFinite(d) || d <= 5,
+  );
+  if (!allLow) return false;
+  const details = row.details;
+  if (details && typeof details === "object" && !Array.isArray(details)) {
+    if ((details as Record<string, unknown>).quality_gate_version === 2) return false;
+  }
+  return true;
+}
+
+async function softRepairStubScorecards(
+  req: Request,
+  sessionIds: string[],
+  scorecards: Record<string, unknown>[],
+): Promise<void> {
+  const stubs = sessionIds.filter((id) =>
+    isLikelyIrrelevantStub(
+      scorecards.find((row) => row.session_id === id) ?? null,
+    )
+  );
+  if (stubs.length === 0) return;
+
+  const base = Deno.env.get("SUPABASE_URL")?.replace(/\/$/, "");
+  const anon = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+  const authHeader = req.headers.get("Authorization") ?? "";
+  if (!base || !authHeader) return;
+
+  await Promise.allSettled(
+    stubs.map(async (sessionId) => {
+      const res = await fetch(`${base}/functions/v1/generate-scorecard`, {
+        method: "POST",
+        headers: {
+          Authorization: authHeader,
+          apikey: anon,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ session_id: sessionId }),
+      });
+      if (!res.ok) {
+        console.warn(
+          "[compare-sessions] soft repair failed:",
+          sessionId,
+          res.status,
+        );
+      }
+    }),
+  );
+}
+
 Deno.serve(async (req: Request) => {
   const cors = handleCors(req);
   if (cors) return cors;
@@ -215,6 +273,31 @@ Deno.serve(async (req: Request) => {
     }
 
     const scorecards = (scorecardRows ?? []) as Record<string, unknown>[];
+    const hadStubScorecards = sessionIds.some((id) =>
+      isLikelyIrrelevantStub(
+        scorecards.find((row) => row.session_id === id) ?? null,
+      )
+    );
+
+    // Repair false IRRELEVANT stub scorecards before deltas (free generate-scorecard path).
+    if (hadStubScorecards) {
+      await softRepairStubScorecards(req, sessionIds, scorecards);
+    }
+
+    let scorecardsForCompare = scorecards;
+    if (hadStubScorecards) {
+      const { data: refreshed } = await db
+        .from("scorecards")
+        .select(
+          "session_id,user_id,overall_score,communication,technical,problem_solving,confidence,details,generated_at",
+        )
+        .eq("user_id", user.id)
+        .in("session_id", sessionIds);
+      if (refreshed?.length) {
+        scorecardsForCompare = refreshed as Record<string, unknown>[];
+      }
+    }
+
     const answers = ((answerRows ?? []) as Record<string, unknown>[]).map(
       (row): SessionAnswerRowInput => ({
         session_id: String(row.session_id),
@@ -228,10 +311,10 @@ Deno.serve(async (req: Request) => {
       sessionA: asSessionRow(foundA),
       sessionB: asSessionRow(foundB),
       scorecardA: asScorecard(
-        scorecards.find((row) => row.session_id === sessionAId) ?? null,
+        scorecardsForCompare.find((row) => row.session_id === sessionAId) ?? null,
       ),
       scorecardB: asScorecard(
-        scorecards.find((row) => row.session_id === sessionBId) ?? null,
+        scorecardsForCompare.find((row) => row.session_id === sessionBId) ?? null,
       ),
       answers,
       timeZone,

@@ -30,6 +30,7 @@ import { InsufficientCreditsAction } from "@/components/billing/InsufficientCred
 import { AI_OP_STAGES } from "@/lib/async/aiOpStages";
 import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
 import { PAGE_SHELL } from "@/lib/ui/responsivePage";
+import { normalizeFeedbackItems } from "@/lib/scorecard/normalizeFeedbackItems";
 
 // ─────────────────────────────────────────────────────────────────
 // Scorecard
@@ -600,13 +601,14 @@ export default function Scorecard() {
             items={scorecard.strengths}
             icon={CheckCircle}
             color="green"
-            emptyMessage="No strengths met the evidence threshold in this session. Review each question below for specific feedback."
+            emptyMessage="No strengths identified."
           />
           <FeedbackPanel
             title="Areas to Improve"
             items={scorecard.improvements}
             icon={AlertTriangle}
             color="amber"
+            emptyMessage="No improvement areas identified."
           />
         </div>
 
@@ -728,7 +730,7 @@ function QuestionScoreCard({
 function FeedbackPanel({
   title, items, icon: Icon, color, emptyMessage,
 }: {
-  title: string; items: string[]; icon: any; color: "green" | "amber";
+  title: string; items: string[] | null | undefined; icon: any; color: "green" | "amber";
   emptyMessage?: string;
 }) {
   const colorMap = {
@@ -736,22 +738,32 @@ function FeedbackPanel({
     amber: { bg: "bg-amber-500/10", border: "border-amber-500/20", text: "text-amber-400", dot: "bg-amber-400" },
   };
   const c = colorMap[color];
+  const visibleItems = normalizeFeedbackItems(items);
+  const fallback = emptyMessage ?? "No items identified.";
+  const emptyClass =
+    color === "green"
+      ? "text-sm italic text-green-900/75 dark:text-green-100/80"
+      : "text-sm italic text-amber-900/75 dark:text-amber-100/80";
+
   return (
     <div className={cn("rounded-2xl p-5 border", c.bg, c.border)}>
       <h3 className={cn("font-semibold text-sm mb-3 flex items-center gap-2", c.text)}>
         <Icon className="w-4 h-4" />
         {title}
       </h3>
-      <ul className="space-y-2">
-        {items.length === 0 && emptyMessage && (
-          <li className="text-sm text-muted-foreground">{emptyMessage}</li>
-        )}
-        {items.map((item, i) => (
-          <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
-            <div className={cn("w-1.5 h-1.5 rounded-full mt-1.5 shrink-0", c.dot)} />
-            {item}
+      <ul className="space-y-2" aria-label={title}>
+        {visibleItems.length === 0 ? (
+          <li className={emptyClass} data-empty-feedback="true">
+            {fallback}
           </li>
-        ))}
+        ) : (
+          visibleItems.map((item, i) => (
+            <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+              <div className={cn("w-1.5 h-1.5 rounded-full mt-1.5 shrink-0", c.dot)} />
+              {item}
+            </li>
+          ))
+        )}
       </ul>
     </div>
   );

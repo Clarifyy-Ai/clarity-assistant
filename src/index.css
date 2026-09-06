@@ -2,14 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Cookie banner sits above MobileNav — reserve scroll space so primary CTAs stay reachable. */
+/* Cookie / security notice modal — reserve scroll space on long marketing pages. */
 body.cookie-banner-visible #main-content {
-  padding-bottom: 11rem;
+  padding-bottom: 1rem;
 }
-@media (min-width: 768px) {
-  body.cookie-banner-visible #main-content {
-    padding-bottom: 7rem;
-  }
+body.cookie-banner-visible footer[role="contentinfo"] {
+  padding-bottom: 1rem;
 }
 
 /* ─────────────────────────────────────────────────────────────────

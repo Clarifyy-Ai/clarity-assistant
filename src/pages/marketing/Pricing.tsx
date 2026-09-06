@@ -127,17 +127,19 @@ export default function Pricing() {
                 <h3 className="text-base font-bold">{getPlanDisplayName(planId)}</h3>
                 <p className="text-xs text-muted-foreground mt-1">{plan.tagline}</p>
 
-                <div className="mt-5 min-h-[4.5rem]">
-                  <span className="text-3xl font-extrabold">{priceDisplay}</span>
-                  {plan.monthlyPrice > 0 && (
-                    <span className="text-sm text-muted-foreground ml-1">one-time</span>
-                  )}
+                <div className="mt-4 space-y-0.5">
+                  <div className="flex flex-wrap items-baseline gap-x-1">
+                    <span className="text-3xl font-extrabold leading-none">{priceDisplay}</span>
+                    {plan.monthlyPrice > 0 && (
+                      <span className="text-sm text-muted-foreground">one-time</span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground/70">
+                    {plan.creditsPerMonth.toLocaleString()} credits included
+                  </p>
                 </div>
-                <p className="text-[11px] text-muted-foreground/70 mt-1 min-h-[2.5rem]">
-                  {plan.creditsPerMonth.toLocaleString()} credits included
-                </p>
 
-                <div className="mt-6 pt-5 border-t border-border space-y-2.5 flex-1">
+                <div className="mt-4 pt-4 border-t border-border space-y-2.5">
                   {plan.features.map((f) => (
                     <div key={f.key} className="flex items-start gap-2 text-xs">
                       {f.included ? (
@@ -158,7 +160,7 @@ export default function Pricing() {
                 <Link
                   to={ctaHref}
                   className={cn(
-                    "mt-5 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all",
+                    "mt-4 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all",
                     plan.isPopular
                       ? "bg-primary text-primary-foreground hover:opacity-90"
                       : "bg-secondary text-foreground hover:bg-secondary/80"

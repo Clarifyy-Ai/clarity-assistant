@@ -3,6 +3,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import Login from "@/pages/auth/Login";
+import { COOKIE_CONSENT_KEY } from "@/lib/privacy/cookieConsent";
 
 const signInWithEmail = vi.fn();
 
@@ -56,6 +57,7 @@ describe("Login form validation — TC-AUTH-004", () => {
     signInWithEmail.mockReset();
     signInWithEmail.mockResolvedValue(undefined);
     vi.stubEnv("VITE_OAUTH_PROVIDERS", "none");
+    window.localStorage.setItem(COOKIE_CONSENT_KEY, "accepted");
   });
 
   it("keeps Sign in enabled with empty fields so submit can surface errors", () => {
@@ -155,6 +157,7 @@ describe("Login failure copy — BUG-015 / TC-AUTH-002", () => {
     signInWithEmail.mockReset();
     vi.stubEnv("VITE_OAUTH_PROVIDERS", "none");
     window.localStorage.clear();
+    window.localStorage.setItem(COOKIE_CONSENT_KEY, "accepted");
   });
 
   it("shows the same safe message for invalid email and invalid password", async () => {

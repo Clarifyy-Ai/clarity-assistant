@@ -37,6 +37,9 @@ function baseMock(overrides: Record<string, unknown> = {}) {
     setPeriod: vi.fn(),
     setSessionFilter: vi.fn(),
     setInterviewTypeFilter: vi.fn(),
+    clearFilters: vi.fn(),
+    exportSessionCount: 0,
+    isReloading: false,
     compareSessions: vi.fn(),
     clearComparison: vi.fn(),
     isComparing: false,
@@ -220,9 +223,51 @@ describe("Analytics load status — BUG-029 / TC-AN-001", () => {
     expect(screen.getByText("No sessions match these filters.")).toBeInTheDocument();
     expect(screen.getByTestId("analytics-filter-session")).toBeInTheDocument();
     expect(screen.getByTestId("analytics-filter-interview-type")).toBeInTheDocument();
+    expect(screen.getByTestId("analytics-clear-filters")).toBeInTheDocument();
     expect(screen.queryByText(/couldn't load your analytics/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /retry/i })).not.toBeInTheDocument();
     expect(screen.queryByText("No completed sessions yet.")).not.toBeInTheDocument();
+  });
+
+  it("shows updating state while reloading after filter change from empty result", () => {
+    useAnalytics.mockReturnValue(
+      baseMock({
+        loadStatus: "empty",
+        filtersActive: true,
+        isReloading: true,
+        filter: { period: "30d", session_filter: "all", interview_type: "all" },
+        data: { total_sessions: 0, recent_sessions: [] },
+      }),
+    );
+
+    render(
+      <MemoryRouter>
+        <Analytics />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId("processing-status")).toHaveTextContent(/updating filtered sessions/i);
+    expect(screen.getByTestId("analytics-filter-period")).toBeInTheDocument();
+    expect(screen.queryByText("No sessions match these filters.")).not.toBeInTheDocument();
+  });
+
+  it("global empty state keeps filter controls visible", () => {
+    useAnalytics.mockReturnValue(
+      baseMock({
+        loadStatus: "empty",
+        filtersActive: false,
+        data: { total_sessions: 0, recent_sessions: [] },
+      }),
+    );
+
+    render(
+      <MemoryRouter>
+        <Analytics />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("No completed sessions yet.")).toBeInTheDocument();
+    expect(screen.getByTestId("analytics-filter-period")).toBeInTheDocument();
   });
 
   it("distinguishes filter-empty success from HTTP 500 failure", () => {

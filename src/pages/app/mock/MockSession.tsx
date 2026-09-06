@@ -453,6 +453,8 @@ export default function MockSession() {
   const ttsGenerationRef = useRef(0);
   const voiceAgentRef = useRef<DeepgramVoiceAgentSession | null>(null);
   const voiceAgentConnectGenRef = useRef(0);
+  /** Skip Voice Agent reconnect attempts after the first failure this session. */
+  const voiceAgentUnavailableRef = useRef(false);
 
   const questionsCacheRef = useRef<SessionQuestion[] | null>(null);
   const isStartingRef = useRef(false);
@@ -822,6 +824,7 @@ export default function MockSession() {
 
   const ensureVoiceAgent = useCallback(async (): Promise<DeepgramVoiceAgentSession | null> => {
     if (!isDeepgramVoiceAgentEnabled()) return null;
+    if (voiceAgentUnavailableRef.current) return null;
     if (voiceAgentRef.current?.isReady) return voiceAgentRef.current;
 
     const connectGen = ++voiceAgentConnectGenRef.current;
@@ -845,6 +848,7 @@ export default function MockSession() {
         },
         handlers: {
           onError: (err) => {
+            voiceAgentUnavailableRef.current = true;
             console.warn("[MockSession] Voice Agent error:", err.message);
           },
         },
@@ -856,6 +860,7 @@ export default function MockSession() {
       voiceAgentRef.current = session;
       return session;
     } catch (err) {
+      voiceAgentUnavailableRef.current = true;
       console.warn("[MockSession] Voice Agent unavailable — falling back to TTS:", err);
       return null;
     }

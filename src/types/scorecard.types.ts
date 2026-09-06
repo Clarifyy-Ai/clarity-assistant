@@ -219,8 +219,12 @@ export function mapRowToScorecard(row: ScorecardRow): Scorecard {
     top_filler_words: details.top_filler_words ?? [],
     wpm_avg: finiteScore(details.wpm_avg),
     wpm_trend: typeof details.wpm_trend === "string" ? details.wpm_trend : null,
-    strengths: row.strengths ?? [],
-    improvements: row.improvements ?? [],
+    strengths: (row.strengths ?? [])
+      .map((s) => (s == null ? "" : String(s).trim()))
+      .filter(Boolean),
+    improvements: (row.improvements ?? [])
+      .map((s) => (s == null ? "" : String(s).trim()))
+      .filter(Boolean),
     coach_note: details.coach_note ?? row.feedback ?? "",
     star_adherence: finiteScore(details.star_adherence),
     is_shared: row.is_shared ?? false,

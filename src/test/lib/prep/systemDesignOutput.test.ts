@@ -31,4 +31,28 @@ Consistency vs fan-out cost; eventual consistency for likes.
     const text = "Just some prose without any design structure at all. ".repeat(10);
     expect(validateSystemDesignOutput(text).ok).toBe(false);
   });
+
+  it("accepts sparse section bodies when full text passes the keyword gate", () => {
+    const text = [
+      "## Requirements",
+      "",
+      "## High-level architecture",
+      "",
+      "## Data model",
+      "Brief note on entities.",
+      "## Scaling",
+      "",
+      "## Tradeoffs",
+      "Mention CAP theorem and consistency choices for this design.",
+    ].join("\n");
+    expect(validateSystemDesignOutput(text).ok).toBe(true);
+  });
+
+  it("accepts keyword-rich prose without markdown headings", () => {
+    const text =
+      "Requirements include low-latency reads. The architecture uses microservices. " +
+      "Data lives in postgres with read replicas. Scaling adds horizontal shards. " +
+      "Tradeoffs balance consistency vs availability for the interview walkthrough.";
+    expect(validateSystemDesignOutput(text).ok).toBe(true);
+  });
 });

@@ -120,6 +120,18 @@ export default function Analytics() {
     }
   }, [analytics, batchAnalyzing]);
 
+  const showFilteredEmpty =
+    analytics.loadStatus === "empty" &&
+    analytics.filtersActive &&
+    !analytics.isReloading &&
+    !analytics.isLoading;
+
+  const showGlobalEmpty =
+    analytics.loadStatus === "empty" &&
+    !analytics.filtersActive &&
+    !analytics.isReloading &&
+    !analytics.isLoading;
+
   if (analytics.loadStatus === "loading" || (analytics.loadStatus === "error" && analytics.isReloading)) {
     return (
       <div data-testid="page-width-root" className={`${PAGE_SHELL} space-y-4`}>
@@ -159,7 +171,7 @@ export default function Analytics() {
     );
   }
 
-  if (analytics.loadStatus === "empty" && !analytics.filtersActive) {
+  if (showGlobalEmpty) {
     return (
       <div data-testid="page-width-root" className={`${PAGE_SHELL} space-y-4`}>
         <PageHeader
@@ -169,6 +181,7 @@ export default function Analytics() {
             { label: "Dashboard", href: "/app/dashboard" },
             { label: "Analytics" },
           ]}
+          actions={<AnalyticsFilterControls analytics={analytics} />}
         />
         <Card>
           <EmptyState
@@ -185,7 +198,7 @@ export default function Analytics() {
     );
   }
 
-  if (analytics.loadStatus === "empty" && analytics.filtersActive) {
+  if (showFilteredEmpty) {
     return (
       <div data-testid="page-width-root" className={`${PAGE_SHELL} space-y-4`}>
         <PageHeader
@@ -203,13 +216,32 @@ export default function Analytics() {
             title="No sessions match these filters."
             description="Try widening the date range or changing session or interview type filters."
             actionLabel="Clear filters"
-            onAction={() => {
-              analytics.setPeriod("30d");
-              analytics.setSessionFilter("all");
-              analytics.setInterviewTypeFilter("all");
-            }}
+            onAction={() => analytics.clearFilters()}
           />
         </Card>
+      </div>
+    );
+  }
+
+  if (
+    (analytics.loadStatus === "empty" && analytics.filtersActive) ||
+    (analytics.isReloading && analytics.filtersActive && !analytics.data?.recent_sessions?.length)
+  ) {
+    return (
+      <div data-testid="page-width-root" className={`${PAGE_SHELL} space-y-4`}>
+        <PageHeader
+          title={PRODUCT_NAMES.analytics}
+          subtitle="Track your interview performance over time"
+          breadcrumbs={[
+            { label: "Dashboard", href: "/app/dashboard" },
+            { label: "Analytics" },
+          ]}
+          actions={<AnalyticsFilterControls analytics={analytics} />}
+        />
+        <ProcessingStatus
+          message="Updating filtered sessions…"
+          stage="analytics"
+        />
       </div>
     );
   }
@@ -407,6 +439,7 @@ function AnalyticsFilterControls({
 }: {
   analytics: ReturnType<typeof useAnalytics>;
 }) {
+  const exportCount = analytics.exportSessionCount ?? analytics.data?.recent_sessions?.length ?? 0;
   return (
     <div className="flex flex-wrap items-center gap-2">
       <Select
@@ -453,11 +486,26 @@ function AnalyticsFilterControls({
           ))}
         </SelectContent>
       </Select>
+      {analytics.filtersActive && (
+        <Button
+          variant="ghost"
+          size="sm"
+          data-testid="analytics-clear-filters"
+          onClick={() => analytics.clearFilters()}
+        >
+          Clear filters
+        </Button>
+      )}
       <Button
         variant="outline"
         size="sm"
         onClick={() => void analytics.downloadCSV()}
-        disabled={!analytics.data?.recent_sessions?.length}
+        disabled={exportCount === 0 || analytics.isLoading || analytics.isReloading}
+        title={
+          exportCount === 0
+            ? "No sessions match the current filters"
+            : `Export ${exportCount} filtered session${exportCount === 1 ? "" : "s"}`
+        }
       >
         <Download className="w-4 h-4 mr-2" />
         Export Excel

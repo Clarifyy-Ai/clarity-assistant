@@ -63,8 +63,10 @@ export function resolveSessionWpm(
   session: SpeechSessionLike,
 ): number | null {
   const fromCard = scorecardSpeechMetric(scorecard, "wpm_avg");
-  if (fromCard != null) return fromCard;
-  return typeof session.avg_wpm === "number" && Number.isFinite(session.avg_wpm)
+  if (fromCard != null && fromCard > 0) return fromCard;
+  return typeof session.avg_wpm === "number" &&
+    Number.isFinite(session.avg_wpm) &&
+    session.avg_wpm > 0
     ? session.avg_wpm
     : null;
 }

@@ -37,6 +37,7 @@ export type EdgeFunctionName =
   | "cancel-document-processing-job"
   | "cancel-paper-generation-job"
   | "cancel-subscription"
+  | "check-assessment-availability"
   | "check-exam-paper-availability"
   | "collect-exam-papers"
   | "company-research"

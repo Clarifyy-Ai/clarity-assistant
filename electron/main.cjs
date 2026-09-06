@@ -17,6 +17,8 @@ const connectSrc = [
   "wss://*.supabase.co",
   "https://api.deepgram.com",
   "wss://api.deepgram.com",
+  "https://agent.deepgram.com",
+  "wss://agent.deepgram.com",
   "https://api.stripe.com",
   "https://checkout.stripe.com",
   "https://api.github.com",
@@ -236,9 +238,9 @@ function registerGlobalShortcuts(bindings) {
   const list = Array.isArray(bindings) && bindings.length
     ? bindings
     : [
-        { accelerator: "CommandOrControl+Shift+H", action: "toggle-overlay" },
         { accelerator: "CommandOrControl+Shift+U", action: "toggle-overlay" },
-        { accelerator: "CommandOrControl+Shift+J", action: "toggle-overlay" },
+        { accelerator: "CommandOrControl+Shift+X", action: "toggle-overlay" },
+        { accelerator: "CommandOrControl+Shift+K", action: "toggle-overlay" },
         { accelerator: "CommandOrControl+Shift+P", action: "panic-calm" },
         { accelerator: "CommandOrControl+Shift+A", action: "request-ai-answer" },
       ];

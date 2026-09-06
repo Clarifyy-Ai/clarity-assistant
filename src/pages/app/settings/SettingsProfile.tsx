@@ -259,11 +259,24 @@ export default function SettingsProfile() {
         ? timezone
         : "UTC";
 
+    let websiteUrl: string | null = null;
+    try {
+      websiteUrl = website.trim() ? normalizeWebsiteUrl(website) : null;
+      setWebsiteError(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Invalid website URL.";
+      setWebsiteError(message);
+      toast.error(message);
+      setSaveFailed(true);
+      setSaving(false);
+      return;
+    }
+
     const payload = {
       full_name: trimmedName,
       bio: bio.trim(),
       timezone: tz,
-      website_url: website.trim() || null,
+      website_url: websiteUrl,
       experience_years: yearsNum,
       target_role: targetRole || null,
       avatar_url: avatarUrl.trim() || null,
@@ -281,7 +294,7 @@ export default function SettingsProfile() {
 
     try {
       await updateProfile(validation.data as any);
-      if (website.trim()) setWebsite(website.trim());
+      if (websiteUrl) setWebsite(websiteUrl);
       setSaved(true);
       toast.success("Profile saved");
       setTimeout(() => setSaved(false), 2000);

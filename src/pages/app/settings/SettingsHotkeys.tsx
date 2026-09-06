@@ -1,6 +1,6 @@
 // Sprint C: Hotkey customization UI
 import { useCallback, useEffect, useState } from "react";
-import { DEFAULT_HOTKEYS, type HotkeyId, isMac } from "@/lib/constants/hotkeys";
+import { DEFAULT_HOTKEYS, HOTKEY_CATEGORIES, HOTKEY_CATEGORY_ORDER, getOrderedHotkeysForCategory, type HotkeyId, isMac } from "@/lib/constants/hotkeys";
 import {
   captureCombo,
   comboHasRequiredModifier,
@@ -135,16 +135,15 @@ export default function SettingsHotkeys() {
     toast.success("All hotkeys reset");
   };
 
-  const entries = Object.entries(DEFAULT_HOTKEYS) as [HotkeyId, any][];
   const conflicts = findConflicts(overrides);
   const conflictingIds = new Set(
     [...conflicts.values()].flatMap((ids) => ids),
   );
-  const grouped = entries.reduce<Record<string, [HotkeyId, any][]>>((acc, e) => {
-    const cat = e[1].category ?? "general";
-    (acc[cat] ??= []).push(e);
-    return acc;
-  }, {});
+  const grouped = HOTKEY_CATEGORY_ORDER.map((cat) => ({
+    cat,
+    title: HOTKEY_CATEGORIES[cat],
+    items: getOrderedHotkeysForCategory(cat),
+  })).filter((group) => group.items.length > 0);
 
   return (
     <SettingsPageShell
@@ -194,10 +193,10 @@ export default function SettingsHotkeys() {
         </div>
       )}
 
-      {Object.entries(grouped).map(([cat, items]) => (
+      {grouped.map(({ cat, title, items }) => (
         <div key={cat} className="rounded-xl border border-border bg-card p-4">
           <h2 className="text-xs uppercase tracking-wide text-muted-foreground mb-3">
-            {cat}
+            {title}
           </h2>
           <ul className="space-y-2">
             {items.map(([id, def]) => {

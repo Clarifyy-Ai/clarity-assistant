@@ -500,11 +500,28 @@ export class DeepgramStreamClient {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
 
     const mimeType = getSupportedMimeType();
+    const options: MediaRecorderOptions = { audioBitsPerSecond: 128_000 };
+    if (mimeType) {
+      options.mimeType = mimeType;
+    }
 
-    this.mediaRecorder = new MediaRecorder(this.stream, {
-      mimeType,
-      audioBitsPerSecond: 128_000,
-    });
+    try {
+      this.mediaRecorder = new MediaRecorder(this.stream, options);
+    } catch (firstErr) {
+      try {
+        this.mediaRecorder = new MediaRecorder(this.stream);
+      } catch (secondErr) {
+        this.callbacks.onError(
+          secondErr instanceof Error
+            ? secondErr
+            : firstErr instanceof Error
+              ? firstErr
+              : new Error("MediaRecorder failed to start for this microphone stream."),
+        );
+        this.callbacks.onStatusChange("error");
+        return;
+      }
+    }
 
     this.mediaRecorder.ondataavailable = (e) => {
       if (e.data.size === 0) return;
@@ -621,7 +638,7 @@ function getMajoritySpeaker(words: TranscriptWord[]): number | null {
   return dominant;
 }
 
-function getSupportedMimeType(): string {
+function getSupportedMimeType(): string | undefined {
   const candidates = [
     "audio/webm;codecs=opus",
     "audio/webm",
@@ -631,5 +648,5 @@ function getSupportedMimeType(): string {
   for (const type of candidates) {
     if (MediaRecorder.isTypeSupported(type)) return type;
   }
-  return "audio/webm";
+  return undefined;
 }

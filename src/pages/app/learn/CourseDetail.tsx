@@ -177,12 +177,10 @@ export default function CourseDetailPage() {
         [...quizProgress.entries()]
           .filter(([quizId, progress]) => {
             const quiz = quizzes.find((item) => item.id === quizId);
-            return Boolean(
-              progress.completed_at &&
-              quiz &&
-              progress.score != null &&
-              progress.score >= quiz.passing_percentage,
-            );
+            if (!quiz || progress.score == null) return false;
+            // completed_at is the durable pass marker (survives weaker retakes).
+            if (progress.completed_at) return true;
+            return progress.score >= quiz.passing_percentage;
           })
           .map(([quizId]) => quizId),
       ),
@@ -212,6 +210,8 @@ export default function CourseDetailPage() {
           quiz_id: quiz.id,
           is_final: quiz.is_final,
           passing_percentage: quiz.passing_percentage,
+          marks_negative: 0,
+          marks_positive: 4,
         },
       });
       const testId = data?.test_id ?? data?.test?.id;
@@ -283,6 +283,11 @@ export default function CourseDetailPage() {
       <Card className="mb-4">
         <p className="text-lg font-semibold">Course progress: {percent}%</p>
         <p className="text-sm text-muted-foreground">Learner: {profile?.full_name || "You"}</p>
+        {quizzes.some((quiz) => quiz.is_final) && percent < 100 && (
+          <p className="mt-2 text-sm text-muted-foreground">
+            Complete every lesson and pass the final assessment (score at or above the pass mark) to reach 100%.
+          </p>
+        )}
         {canIssueCertificate(percent, quizRefs, passedQuizIds) && !certCode && (
           <Button className="mt-3" onClick={() => void issueCert()}>Issue course completion certificate</Button>
         )}
@@ -306,12 +311,12 @@ export default function CourseDetailPage() {
         <div className="mt-3 flex flex-col sm:flex-row flex-wrap gap-2">
         {quizzes.map((quiz) => {
           const progress = quizProgress.get(quiz.id);
-          const passed = Boolean(progress?.completed_at);
+          const passed = passedQuizIds.has(quiz.id);
           const attempted = progress?.score != null;
           const badge = passed
             ? `Passed (${Math.round(progress?.score ?? 0)}%)`
             : attempted
-              ? `Attempted (${Math.round(progress?.score ?? 0)}%)`
+              ? `Attempted (${Math.round(progress?.score ?? 0)}% · need ${quiz.passing_percentage}% to count)`
               : null;
           return (
             <Button

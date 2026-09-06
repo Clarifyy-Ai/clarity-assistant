@@ -199,7 +199,7 @@ describe("routeHint offline / AI-unavailable category fallback", () => {
       } as never,
       preferredModel: "gemini-flash",
       interviewType: "behavioural",
-      isLive: true,
+      isLive: false,
       sessionId: "sess-1",
       questionId: "q-1",
       onChunk: () => {},
@@ -212,6 +212,28 @@ describe("routeHint offline / AI-unavailable category fallback", () => {
     expect(state.offline_fallback_category).toMatch(/Technical/i);
     expect(state.current_hint.toLowerCase()).toContain("technical");
     expect(state.current_hint.toLowerCase()).not.toContain("star framework");
+  });
+
+  it("live offline path: shows reconnect error instead of generic offline templates", async () => {
+    await routeHint({
+      question: "Explain ACID properties in databases",
+      context: {
+        hint_style: "full_answer",
+      } as never,
+      preferredModel: "gemini-flash",
+      interviewType: "behavioural",
+      isLive: true,
+      sessionId: "sess-1",
+      questionId: "q-1",
+      onChunk: () => {},
+      onDone: () => {},
+      onError: () => {},
+    });
+
+    const state = useOverlayStore.getState();
+    expect(state.hint_state).toBe("idle");
+    expect(state.error_message).toMatch(/offline|reconnect/i);
+    expect(state.offline_fallback_category).toBeNull();
   });
 
   it("AI unavailable: still category-correct and not silent offline", () => {

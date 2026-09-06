@@ -3,6 +3,7 @@ import { m, AnimatePresence } from "framer-motion";
 import { Mic, Brain, Monitor, Zap, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
+import { MARKETING_SHELL } from "@/lib/ui/responsivePage";
 
 const STEPS = [
   {
@@ -41,14 +42,14 @@ const MODEL_CYCLE = ["Gemini 2.0 Flash", "GPT-4o", "Claude 3.5 Sonnet"];
 
 function CaptureDemo() {
   return (
-    <div className="rounded-xl border border-border bg-secondary/30 p-4 space-y-3">
+    <div className="rounded-xl border border-border bg-secondary/30 p-4 sm:p-5 space-y-4 h-full min-h-[180px] flex flex-col justify-center">
       <div className="flex items-center gap-2">
         <Mic className="w-4 h-4 text-primary" />
         <span className="text-[10px] font-semibold text-primary uppercase tracking-wide">
           Listening…
         </span>
       </div>
-      <div className="flex items-end justify-center gap-1 h-10">
+      <div className="flex items-end justify-center gap-1 h-14">
         {Array.from({ length: 24 }).map((_, i) => (
           <m.div
             key={i}
@@ -78,7 +79,7 @@ function AiRoutingDemo() {
   }, []);
 
   return (
-    <div className="rounded-xl border border-border bg-secondary/30 p-4 space-y-3">
+    <div className="rounded-xl border border-border bg-secondary/30 p-4 sm:p-5 space-y-4 h-full min-h-[180px] flex flex-col justify-center">
       <div className="flex items-center justify-between">
         <span className="text-[10px] font-semibold text-blue-400 uppercase tracking-wide">
           Model router
@@ -91,7 +92,7 @@ function AiRoutingDemo() {
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -8 }}
-          className="rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-center"
+          className="rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-3 text-center"
         >
           <p className="text-sm font-bold text-foreground">{MODEL_CYCLE[modelIdx]}</p>
           <p className="text-[10px] text-muted-foreground mt-0.5">Selected for this question</p>
@@ -129,14 +130,14 @@ function OverlayDemo() {
   }, []);
 
   return (
-    <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4 space-y-2">
+    <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4 sm:p-5 space-y-3 h-full min-h-[180px] flex flex-col justify-center">
       <div className="flex items-center gap-2">
         <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
         <span className="text-[10px] font-semibold text-emerald-400 uppercase tracking-wide">
           Practice overlay
         </span>
       </div>
-      <p className="text-xs text-muted-foreground leading-relaxed min-h-[48px]">
+      <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed min-h-[64px]">
         {hint.slice(0, chars)}
         {chars < hint.length && (
           <span className="inline-block w-1 h-3 bg-emerald-400 ml-0.5 animate-pulse" />
@@ -167,10 +168,10 @@ export function PracticeCoachWalkthrough() {
   const Demo = DEMO_MAP[step.id];
 
   return (
-    <section className="pb-14 sm:pb-16 px-4 sm:px-6 overflow-visible">
-      <div className="max-w-6xl mx-auto overflow-visible">
+    <section className="pt-6 sm:pt-8 pb-10 sm:pb-12 px-4 sm:px-6 overflow-visible">
+      <div className={`${MARKETING_SHELL} overflow-visible`}>
         <m.div
-          className="text-center mb-10 px-1 sm:px-2"
+          className="text-center mb-6 sm:mb-8 px-1 sm:px-2"
           initial={{ opacity: 0, y: 24 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
@@ -187,8 +188,8 @@ export function PracticeCoachWalkthrough() {
           </p>
         </m.div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
-          <div className="space-y-3">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 lg:gap-6 items-stretch">
+          <div className="flex flex-col gap-3 min-w-0">
             {STEPS.map((s, i) => {
               const Icon = s.icon;
               const isActive = i === active;
@@ -198,7 +199,7 @@ export function PracticeCoachWalkthrough() {
                   type="button"
                   onClick={() => setActive(i)}
                   className={cn(
-                    "w-full text-left rounded-2xl border p-4 transition-all",
+                    "w-full text-left rounded-2xl border p-3.5 sm:p-4 transition-all",
                     isActive
                       ? cn(s.border, s.bg, "shadow-lg")
                       : "border-border bg-card/50 hover:border-border/80",
@@ -242,18 +243,20 @@ export function PracticeCoachWalkthrough() {
             })}
           </div>
 
-          <AnimatePresence mode="wait">
-            <m.div
-              key={step.id}
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.98 }}
-              transition={{ duration: 0.35 }}
-              className="rounded-2xl border border-border bg-card p-5 shadow-xl"
-            >
-              <Demo />
-            </m.div>
-          </AnimatePresence>
+          <div className="relative min-h-[200px] lg:min-h-0">
+            <AnimatePresence mode="wait">
+              <m.div
+                key={step.id}
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.98 }}
+                transition={{ duration: 0.35 }}
+                className="lg:absolute lg:inset-0 rounded-2xl border border-border bg-card p-5 sm:p-6 shadow-xl flex flex-col justify-center"
+              >
+                <Demo />
+              </m.div>
+            </AnimatePresence>
+          </div>
         </div>
       </div>
     </section>

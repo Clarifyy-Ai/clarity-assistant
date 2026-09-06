@@ -76,7 +76,7 @@ export default function GovExams() {
   return (
     <MarketingLayout>
       <LazyMotion features={domAnimation} strict>
-      <section className="pt-8 sm:pt-12 pb-12 px-4 sm:px-6">
+      <section className="pt-8 sm:pt-12 pb-14 sm:pb-16 px-4 sm:px-6">
         <div className="max-w-5xl mx-auto">
           <m.div
             initial={{ opacity: 0, y: 24 }}
@@ -121,8 +121,8 @@ export default function GovExams() {
         </div>
       </section>
 
-      <section className="py-14 px-4 sm:px-6 bg-secondary/20">
-        <div className="max-w-5xl mx-auto">
+      <section className="px-4 sm:px-6 bg-secondary/20">
+        <div className="max-w-5xl mx-auto pt-10 sm:pt-12 pb-10 sm:pb-12">
           <m.h2 {...fadeUp()} className="text-2xl font-bold text-center mb-10">
             Supported exam types
           </m.h2>
@@ -144,7 +144,7 @@ export default function GovExams() {
         </div>
       </section>
 
-      <section className="py-14 px-4 sm:px-6">
+      <section className="pb-14 sm:pb-16 px-4 sm:px-6">
         <div className="max-w-5xl mx-auto">
           <m.h2 {...fadeUp()} className="text-2xl font-bold text-center mb-3">
             Built for serious exam prep
@@ -174,7 +174,7 @@ export default function GovExams() {
 
       <PublicOffersSection className="pb-10" compact />
 
-      <section className="py-14 px-4 sm:px-6 border-t border-border">
+      <section className="pb-14 sm:pb-16 pt-10 sm:pt-12 px-4 sm:px-6 border-t border-border">
         <div className="max-w-3xl mx-auto text-center">
           <m.div {...fadeUp()}>
             <h2 className="text-xl font-bold mb-4">Also preparing for job interviews?</h2>

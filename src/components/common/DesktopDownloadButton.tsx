@@ -64,29 +64,16 @@ export function DesktopDownloadButton({
           )}
         </>
       ) : (
-        <div className="space-y-2 min-w-0">
-          <Link
-            to={webCoachHref}
-            className={cn(
-              "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all min-h-11",
-              variant === "primary"
-                ? "bg-primary text-primary-foreground hover:opacity-90"
-                : "bg-secondary text-foreground hover:bg-secondary/80 border border-border",
-              fullWidth && "w-full",
-            )}
-          >
-            Continue in web Practice Coach
-          </Link>
+        <div className="space-y-3 min-w-0">
           {!loading && !compact && (
             <div
-              className="rounded-lg border border-border bg-muted/40 p-3 space-y-2 max-w-md"
+              className="rounded-lg border border-border bg-muted/40 px-3 py-2.5 space-y-1.5"
               data-testid="desktop-installer-unavailable"
             >
               <p className="text-xs text-foreground font-medium">Desktop app not available yet</p>
               <p className="text-[11px] text-muted-foreground leading-relaxed">
-                The {osLabel} installer isn&apos;t published for this environment yet. This is not a
-                temporary outage — use web Practice Coach above. Download appears only when a real
-                installer artifact is configured.
+                The {osLabel} installer isn&apos;t reachable from this environment yet. Use web
+                Practice Coach below, or try again after your admin publishes the Windows build.
               </p>
               {!loading && unavailableReason && (
                 <p
@@ -102,18 +89,20 @@ export function DesktopDownloadButton({
                   Dev: set VITE_DESKTOP_DOWNLOAD_URL_WIN or run npm run publish:desktop-installer.
                 </p>
               )}
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled
-                data-testid="desktop-download-unavailable-cta"
-                leftIcon={<Download className="w-3.5 h-3.5" />}
-              >
-                Get {osLabel} installer (unavailable)
-              </Button>
             </div>
           )}
+          <Link
+            to={webCoachHref}
+            className={cn(
+              "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all min-h-11",
+              variant === "primary"
+                ? "bg-primary text-primary-foreground hover:opacity-90"
+                : "bg-secondary text-foreground hover:bg-secondary/80 border border-border",
+              fullWidth && "w-full",
+            )}
+          >
+            Continue in web Practice Coach
+          </Link>
           {!loading && compact && (
             <div className="space-y-1.5">
               <p

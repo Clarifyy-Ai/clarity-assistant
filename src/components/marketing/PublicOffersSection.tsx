@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import {
   formatPublicPromoExpiry,
   formatPublicPromoHeadline,
+  getCachedPublicPromoOffers,
   loadPublicPromoOffers,
   type PublicPromoOffer,
 } from "@/lib/billing/publicPromos";
@@ -19,7 +20,9 @@ type PublicOffersSectionProps = {
 };
 
 export function PublicOffersSection({ className, compact = false }: PublicOffersSectionProps) {
-  const [offers, setOffers] = useState<PublicPromoOffer[] | null>(null);
+  const [offers, setOffers] = useState<PublicPromoOffer[] | null>(
+    () => getCachedPublicPromoOffers(),
+  );
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
   useEffect(() => {
@@ -32,21 +35,8 @@ export function PublicOffersSection({ className, compact = false }: PublicOffers
     };
   }, []);
 
-  if (offers === null) {
-    return (
-      <section
-        id="offers"
-        data-testid="public-offers-section"
-        className={cn("px-4 sm:px-6", className)}
-        aria-busy="true"
-        aria-label="Loading offers"
-      >
-        <div className="max-w-4xl mx-auto rounded-2xl border border-border bg-card/40 h-28 animate-pulse" />
-      </section>
-    );
-  }
-
-  if (offers.length === 0) return null;
+  // No loading skeleton — avoids an empty misaligned box on /pricing when promos are absent or slow.
+  if (offers === null || offers.length === 0) return null;
 
   async function copyCode(code: string) {
     try {

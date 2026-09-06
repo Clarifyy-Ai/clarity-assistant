@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { ApiClientError } from "@/lib/api/apiClient";
 
 const fetchEdgeJson = vi.fn();
@@ -9,6 +10,14 @@ vi.mock("@/lib/network/fetchEdge", () => ({
 }));
 
 import AdminMail from "@/pages/app/admin/AdminMail";
+
+function renderAdminMail() {
+  return render(
+    <MemoryRouter>
+      <AdminMail />
+    </MemoryRouter>,
+  );
+}
 
 describe("AdminMail smoke", () => {
   beforeEach(() => {
@@ -24,7 +33,7 @@ describe("AdminMail smoke", () => {
       fetchedAt: "2026-09-02T10:00:00.000Z",
     });
 
-    render(<AdminMail />);
+    renderAdminMail();
 
     await waitFor(() => {
       expect(screen.getByText("Hostinger Mail is not configured")).toBeInTheDocument();
@@ -44,7 +53,7 @@ describe("AdminMail smoke", () => {
       }),
     );
 
-    render(<AdminMail />);
+    renderAdminMail();
 
     await waitFor(() => {
       expect(screen.getByText("Hostinger Mail is not configured")).toBeInTheDocument();
@@ -91,7 +100,7 @@ describe("AdminMail smoke", () => {
       return {};
     });
 
-    render(<AdminMail />);
+    renderAdminMail();
 
     await waitFor(() => {
       expect(screen.getByText("Campus outreach")).toBeInTheDocument();

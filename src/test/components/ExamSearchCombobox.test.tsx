@@ -171,8 +171,29 @@ describe("ExamSearchCombobox request lifecycle", () => {
     render(<Parent />);
     await typeQuery("ssc");
 
-    expect(screen.getByText(EXAM.name)).toBeInTheDocument();
     expect(screen.queryByText("Searching…")).not.toBeInTheDocument();
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+  });
+
+  it("does not render an overlapping inline listbox when the parent owns results", async () => {
+    searchGovExams.mockResolvedValue({ results: [EXAM] });
+    render(
+      <ExamSearchCombobox
+        value=""
+        onSelect={vi.fn()}
+        browseWhenEmpty
+        onResultsChange={vi.fn()}
+      />,
+    );
+
+    const input = screen.getByLabelText("Search government exams");
+    await act(async () => {
+      fireEvent.focus(input);
+      await vi.advanceTimersByTimeAsync(280);
+    });
+
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+    expect(screen.queryByText(EXAM.name)).not.toBeInTheDocument();
   });
 
   it("shows registry aliases in each result", async () => {

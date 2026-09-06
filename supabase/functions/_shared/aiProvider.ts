@@ -507,26 +507,54 @@ const BLOCKED_PATTERNS = [
   /hide\s+this\s+from\s+(the\s+)?interviewer/i,
   /don't\s+tell\s+(the\s+)?interviewer/i,
   /cheat\s+on\s+(the\s+)?(interview|exam|test|assessment)/i,
-  /pretend\s+you\s+(did|have|know)/i,
-  /fabricate\s+(your|a|the)\s+(experience|credential|degree)/i,
-  /lie\s+to\s+(the\s+)?interviewer/i,
+  // Intentional deception coaching — avoid false positives on "don't pretend/fabricate" advice.
+  /(?:you\s+should|just|try\s+to)\s+pretend\s+you\s+(did|have|know)/i,
+  /(?:you\s+should|just|try\s+to)\s+fabricate\s+(your|a|the)\s+(experience|credential|degree)/i,
+  /(?:you\s+should|just|try\s+to)\s+lie\s+to\s+(the\s+)?interviewer/i,
   /social\s+security\s+number/i,
   /credit\s+card\s+number/i,
   /\b\d{3}-\d{2}-\d{4}\b/,
 ];
 
+function looksLikeJsonPayload(text: string): boolean {
+  const trimmed = text.trim();
+  if (/^[\[{]/.test(trimmed)) return true;
+  return (
+    trimmed.includes('"summary"') ||
+    trimmed.includes('"strengths"') ||
+    trimmed.includes('"overall_grade"')
+  );
+}
+
 export function moderateOutput(text: string): ModerationResult {
-  for (const pattern of BLOCKED_PATTERNS) {
-    if (pattern.test(text)) {
-      return {
-        safe: false,
-        filtered: "[Response filtered for compliance]",
-        reason: "compliance_violation",
-      };
-    }
+  if (!text) {
+    return { safe: true, filtered: text };
   }
 
-  return { safe: true, filtered: text };
+  const jsonMode = looksLikeJsonPayload(text);
+  let filtered = text;
+  let hit = false;
+
+  for (const pattern of BLOCKED_PATTERNS) {
+    if (!pattern.test(filtered)) continue;
+    hit = true;
+    if (jsonMode) {
+      // Keep structured coaching JSON parseable — redact the span, don't nuke the payload.
+      filtered = filtered.replace(pattern, "[redacted]");
+      continue;
+    }
+    return {
+      safe: false,
+      filtered: "[Response filtered for compliance]",
+      reason: "compliance_violation",
+    };
+  }
+
+  if (hit && jsonMode) {
+    return { safe: true, filtered, reason: "compliance_redacted" };
+  }
+
+  return { safe: true, filtered };
 }
 
 /* -------------------------------------------------------------------------- */

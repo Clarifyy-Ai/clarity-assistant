@@ -8,12 +8,15 @@ import {
   getEffectiveHotkeyCombo,
   loadHotkeyOverrides,
 } from "@/lib/overlay/hotkeyOverrides";
+import { useGlobalStore } from "@/store/globalStore";
+import { useUIStore } from "@/store/uiStore";
 
 const NAV_ROUTES: Partial<Record<HotkeyId, string>> = {
   GO_DASHBOARD: "/app/dashboard",
   GO_COACH: "/app/live",
   GO_ANSWERS: "/app/answers",
   OPEN_SETTINGS: "/app/settings",
+  OPEN_NOTIFICATIONS: "/app/notifications",
 };
 
 const OVERLAY_IDS: HotkeyId[] = [
@@ -56,6 +59,36 @@ export function AppHotkeyListener() {
         if (!eventMatchesKeys(e, keys)) continue;
         e.preventDefault();
         navigate(path);
+        return;
+      }
+
+      const themeKeys = comboToKeyArray(getEffectiveHotkeyCombo("TOGGLE_THEME", overrides));
+      if (eventMatchesKeys(e, themeKeys)) {
+        e.preventDefault();
+        const { theme, setTheme } = useUIStore.getState();
+        const next = theme === "light" ? "dark" : theme === "dark" ? "system" : "light";
+        setTheme(next);
+        return;
+      }
+
+      const sidebarKeys = comboToKeyArray(getEffectiveHotkeyCombo("TOGGLE_SIDEBAR", overrides));
+      if (eventMatchesKeys(e, sidebarKeys)) {
+        e.preventDefault();
+        useUIStore.getState().toggleSidebar();
+        return;
+      }
+
+      const helpKeys = comboToKeyArray(getEffectiveHotkeyCombo("HELP", overrides));
+      if (eventMatchesKeys(e, helpKeys)) {
+        e.preventDefault();
+        navigate("/app/settings/hotkeys");
+        return;
+      }
+
+      const searchKeys = comboToKeyArray(getEffectiveHotkeyCombo("SEARCH", overrides));
+      if (eventMatchesKeys(e, searchKeys)) {
+        e.preventDefault();
+        useGlobalStore.getState().openCommandPalette();
         return;
       }
     }

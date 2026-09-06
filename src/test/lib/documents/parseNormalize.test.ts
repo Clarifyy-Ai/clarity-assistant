@@ -122,6 +122,14 @@ Ship models.`;
     expect(fields.salary_range).toMatch(/25/);
   });
 
+  it("extracts location and salary from single-line PDF-style text", () => {
+    const flat =
+      "Job Title AI engineer Company microsoft Location Hyderabad / Bangalore / Remote Salary $150,000 - $200,000 Required skills Python";
+    const fields = extractJdFieldsFromText(flat);
+    expect(fields.location).toMatch(/Hyderabad/);
+    expect(fields.salary_range).toMatch(/150/);
+  });
+
   it("heals missing location into parsed_data without wiping existing skills", () => {
     const content = `Job Title: AI Engineer
 Company: Meta

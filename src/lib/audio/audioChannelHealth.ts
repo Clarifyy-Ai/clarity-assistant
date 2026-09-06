@@ -194,6 +194,21 @@ export function worstTranscriptionHealth(
   return rank[interviewer] <= rank[mic] ? interviewer : mic;
 }
 
+/**
+ * Bottom-bar transcription chip — do not blame mic STT when only tab audio is silent.
+ * Mic-only transcription can still be healthy while interviewer capture warms up.
+ */
+export function liveTranscriptionBarHealth(
+  mic: AudioChannelHealthStatus,
+  interviewer: AudioChannelHealthStatus,
+  systemAudioExpected: boolean,
+): AudioChannelHealthStatus {
+  if (!systemAudioExpected) return mic;
+  if (mic === "active") return "active";
+  if (mic === "connecting") return "connecting";
+  return worstTranscriptionHealth(mic, interviewer, true);
+}
+
 export function readTrackFlags(stream: MediaStream | null | undefined): Pick<
   AudioChannelMetrics,
   "hasStream" | "trackReadyState" | "trackEnabled" | "trackMuted"

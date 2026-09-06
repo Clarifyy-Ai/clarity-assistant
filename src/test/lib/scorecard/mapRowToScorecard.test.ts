@@ -102,4 +102,15 @@ describe("mapRowToScorecard", () => {
     expect(scorecard.rubric_version).toBe("scorecard_v2");
     expect(scorecard.attempt_count).toBe(2);
   });
+
+  it("drops blank strength and improvement strings from row arrays", () => {
+    const scorecard = mapRowToScorecard({
+      ...BASE_ROW,
+      strengths: ["", "  ", "Clear structure"],
+      improvements: [null as unknown as string, "More examples"],
+    });
+
+    expect(scorecard.strengths).toEqual(["Clear structure"]);
+    expect(scorecard.improvements).toEqual(["More examples"]);
+  });
 });

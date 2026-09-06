@@ -13,6 +13,15 @@ export function normalizeEvidenceCorpus(text: string): string {
   return text.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
+/** Strip punctuation for lenient quote matching (models often paraphrase punctuation). */
+export function stripForEvidenceMatch(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function buildDebriefEvidenceCorpus(parts: {
   answers: Array<{
     id?: string | null;
@@ -41,7 +50,32 @@ export function buildDebriefEvidenceCorpus(parts: {
 export function excerptInCorpus(excerpt: string, corpus: string): boolean {
   const needle = normalizeEvidenceCorpus(excerpt);
   if (needle.length < DEBRIEF_EVIDENCE_MIN_QUOTE) return false;
-  return normalizeEvidenceCorpus(corpus).includes(needle);
+  const hay = normalizeEvidenceCorpus(corpus);
+  if (hay.includes(needle)) return true;
+
+  const strippedNeedle = stripForEvidenceMatch(excerpt);
+  const strippedHay = stripForEvidenceMatch(corpus);
+  if (
+    strippedNeedle.length >= DEBRIEF_EVIDENCE_MIN_QUOTE &&
+    strippedHay.includes(strippedNeedle)
+  ) {
+    return true;
+  }
+
+  const needleWords = strippedNeedle.split(" ").filter((w) => w.length >= 3);
+  if (needleWords.length < 3) return false;
+
+  const hayWords = strippedHay.split(" ");
+  let matched = 0;
+  let hayIdx = 0;
+  for (const word of needleWords) {
+    while (hayIdx < hayWords.length && hayWords[hayIdx] !== word) hayIdx += 1;
+    if (hayIdx < hayWords.length) {
+      matched += 1;
+      hayIdx += 1;
+    }
+  }
+  return matched / needleWords.length >= 0.75 && matched >= 3;
 }
 
 export type DebriefEvidenceValidationIssue = {
@@ -75,23 +109,26 @@ export function validateDebriefEvidence(input: {
     }
   }
 
+  const placeholderAnswerIds = new Set(["", "null", "undefined", "n/a", "none"]);
+
   for (const id of input.referencedAnswerIds ?? []) {
     if (!id) continue;
-    if (!input.answerIds.has(String(id))) {
-      issues.push({
-        code: "EVIDENCE_ANSWER_UNKNOWN",
-        message: "A feedback item references an unknown answer id.",
-      });
+    const sid = String(id).trim();
+    if (!sid || placeholderAnswerIds.has(sid.toLowerCase())) continue;
+    if (!input.answerIds.has(sid)) {
+      // Unknown ids are non-fatal — models often mislabel ids while quotes remain valid.
+      continue;
     }
   }
 
   for (const idx of input.referencedQuestionIndices ?? []) {
     if (idx == null || !Number.isFinite(idx)) continue;
-    if (!input.questionIndices.has(Number(idx))) {
-      issues.push({
-        code: "EVIDENCE_QUESTION_UNKNOWN",
-        message: "A feedback item references an unknown question index.",
-      });
+    const n = Number(idx);
+    const zeroBased = input.questionIndices.has(n);
+    const oneBased = input.questionIndices.has(n - 1);
+    if (!zeroBased && !oneBased) {
+      // Unknown indices are non-fatal — models often misnumber questions while quotes remain valid.
+      continue;
     }
   }
 

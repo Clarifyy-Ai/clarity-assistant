@@ -327,12 +327,16 @@ describe("authStore account bootstrap", () => {
     expect(mockGetByIdMaybe.mock.calls.length).toBeGreaterThanOrEqual(3);
   });
 
-  it("awaits PROFILE_COLD_RETRY_DELAY_MS wiring before the second profile fetch on timeout", () => {
-    // Source contract: cold delay constant is imported and used before retry.
+  it("uses PROFILE_COLD_RETRY_DELAY_MS for profile load retry and soft-keep recovery", () => {
     const src = fs.readFileSync(authStoreSrcPath, "utf8");
     expect(src).toContain("PROFILE_COLD_RETRY_DELAY_MS");
+    // Sign-in retry loop: timeout-aware logging then profileLoadRetryDelayMs (base = cold delay).
     expect(src).toMatch(
-      /if \(timedOut\)[\s\S]*?PROFILE_COLD_RETRY_DELAY_MS[\s\S]*?fetchProfile\(\)/,
+      /if \(timedOut\)[\s\S]*?profileLoadRetryDelayMs\(attempt\)/,
+    );
+    // Soft-keep path: background force refresh after cold delay.
+    expect(src).toMatch(
+      /PROFILE_COLD_RETRY_DELAY_MS[\s\S]*?loadProfile\(\{ force: true, background: true \}\)/,
     );
   });
 

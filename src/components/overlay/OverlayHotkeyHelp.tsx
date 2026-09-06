@@ -156,9 +156,7 @@ export function OverlayHotkeyHelp() {
           <div className="flex flex-col px-2 py-2 gap-0.5">
             {HOTKEYS.map((hk, i) => {
               const dot = GROUP_COLORS[hk.group] ?? "#888";
-              const keyLabel = hk.keys.includes("1-4")
-                ? "⌃ 1–4"
-                : formatHotkeyLabel(hk.keys);
+              const keyLabel = formatHotkeyLabel(hk.keys);
 
               return (
                 <div

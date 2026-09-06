@@ -7,7 +7,7 @@
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface HotkeyDefinition {
-  keys:        string;        // display string e.g. "Ctrl+Shift+H"
+  keys:        string;        // display string e.g. "Ctrl+Shift+U"
   action:      string;        // machine-readable action ID
   description: string;        // human-readable description
   category:    HotkeyCategory;
@@ -155,6 +155,19 @@ export const DEFAULT_HOTKEYS: Record<string, HotkeyDefinition> = {
     description: "Go back to previous question",
     category:    "session",
   },
+  DISMISS_HINT: {
+    keys:        "Escape",
+    action:      "overlay:dismiss",
+    description: "Dismiss hint or close panel",
+    category:    "overlay",
+  },
+  EMERGENCY_HIDE: {
+    keys:        "Ctrl+Shift+Escape",
+    mac:         "⌘+Shift+Escape",
+    action:      "overlay:emergency_hide",
+    description: "End session and close overlay panels",
+    category:    "overlay",
+  },
 
   // ── AI Actions ───────────────────────────────────────────────────────────────
   GENERATE_ANSWER: {
@@ -166,8 +179,8 @@ export const DEFAULT_HOTKEYS: Record<string, HotkeyDefinition> = {
     global:      false,
   },
   GENERATE_HINT: {
-    keys:        "Ctrl+Alt+I",
-    mac:         "⌘+Alt+I",
+    keys:        "Ctrl+Shift+I",
+    mac:         "⌘+Shift+I",
     action:      "ai:generate_hint",
     description: "Get a quick AI hint",
     category:    "ai",
@@ -262,13 +275,29 @@ export const DEFAULT_HOTKEYS: Record<string, HotkeyDefinition> = {
     keys:        "Ctrl+K",
     mac:         "⌘+K",
     action:      "general:search",
-    description: "Open global search / command palette",
+    description: "Open command palette",
+    category:    "general",
+  },
+  TOGGLE_THEME: {
+    // Ctrl+Alt+T avoids Chrome/Edge Ctrl+Shift+T (reopen closed tab).
+    keys:        "Ctrl+Alt+T",
+    mac:         "⌘+⌥+T",
+    action:      "general:toggle_theme",
+    description: "Toggle dark / light theme",
+    category:    "general",
+  },
+  OPEN_NOTIFICATIONS: {
+    // Ctrl+Alt+N avoids Chrome/Edge Ctrl+Shift+N (new window).
+    keys:        "Ctrl+Alt+N",
+    mac:         "⌘+⌥+N",
+    action:      "general:open_notifications",
+    description: "Open notifications",
     category:    "general",
   },
   HELP: {
     keys:        "?",
     action:      "general:help",
-    description: "Show keyboard shortcuts",
+    description: "Show contextual help",
     category:    "general",
   },
   UNDO: {
@@ -278,16 +307,126 @@ export const DEFAULT_HOTKEYS: Record<string, HotkeyDefinition> = {
     description: "Undo last action",
     category:    "general",
   },
+  TOGGLE_SIDEBAR: {
+    keys:        "Ctrl+B",
+    mac:         "⌘+B",
+    action:      "nav:toggle_sidebar",
+    description: "Toggle sidebar",
+    category:    "navigation",
+  },
+  SHOW_HOTKEY_REFERENCE: {
+    keys:        "Ctrl+Shift+/",
+    mac:         "⌘+Shift+/",
+    action:      "overlay:hotkey_help",
+    description: "Show hotkey reference",
+    category:    "overlay",
+  },
 } as const;
 
 export type HotkeyId = keyof typeof DEFAULT_HOTKEYS;
+
+/** Category order on settings + public shortcuts — most frequently used first. */
+export const HOTKEY_CATEGORY_ORDER: HotkeyCategory[] = [
+  "general",
+  "ai",
+  "session",
+  "audio",
+  "overlay",
+  "navigation",
+];
+
+/** Within-category order (frequency). Unlisted ids append alphabetically by description. */
+export const HOTKEY_ORDER: Record<HotkeyCategory, HotkeyId[]> = {
+  general: ["SEARCH", "TOGGLE_THEME", "OPEN_NOTIFICATIONS", "HELP", "UNDO"],
+  ai: [
+    "GENERATE_ANSWER",
+    "GENERATE_HINT",
+    "REQUEST_AI_ANSWER",
+    "CYCLE_HINT_STYLE",
+    "REPHRASE_ANSWER",
+    "CAPTURE_CODING",
+    "CYCLE_MODEL",
+  ],
+  session: ["TOGGLE_STEALTH", "END_SESSION", "NEXT_QUESTION", "PREVIOUS_QUESTION"],
+  audio: ["TOGGLE_MIC", "TOGGLE_SYSTEM_AUDIO"],
+  overlay: [
+    "TOGGLE_OVERLAY",
+    "PANIC_CALM",
+    "MINIMIZE_OVERLAY",
+    "SHOW_HOTKEY_REFERENCE",
+    "TOGGLE_OVERLAY_ALIAS",
+    "DOCK_TOP_LEFT",
+    "DOCK_TOP_RIGHT",
+    "DOCK_BOTTOM_LEFT",
+    "DOCK_BOTTOM_RIGHT",
+    "SCROLL_ANSWER_UP",
+    "SCROLL_ANSWER_DOWN",
+    "INCREASE_OPACITY",
+    "DECREASE_OPACITY",
+    "CLEAR_ANSWER",
+    "DISMISS_HINT",
+    "EMERGENCY_HIDE",
+  ],
+  navigation: [
+    "TOGGLE_SIDEBAR",
+    "OPEN_SETTINGS",
+    "GO_DASHBOARD",
+    "GO_COACH",
+    "GO_ANSWERS",
+  ],
+};
 
 // ─── Grouped by Category ──────────────────────────────────────────────────────
 
 export function getHotkeysByCategory(
   category: HotkeyCategory
 ): HotkeyDefinition[] {
-  return Object.values(DEFAULT_HOTKEYS).filter((h) => h.category === category);
+  return getOrderedHotkeysForCategory(category).map(([, def]) => def);
+}
+
+export function getOrderedHotkeysForCategory(
+  category: HotkeyCategory,
+): Array<[HotkeyId, HotkeyDefinition]> {
+  const inCategory = (Object.entries(DEFAULT_HOTKEYS) as Array<[HotkeyId, HotkeyDefinition]>)
+    .filter(([, def]) => def.category === category);
+  const byId = new Map(inCategory);
+  const ordered: Array<[HotkeyId, HotkeyDefinition]> = [];
+
+  for (const id of HOTKEY_ORDER[category] ?? []) {
+    const def = byId.get(id);
+    if (def) {
+      ordered.push([id, def]);
+      byId.delete(id);
+    }
+  }
+
+  const remainder = [...byId.entries()].sort((a, b) =>
+    a[1].description.localeCompare(b[1].description),
+  );
+  return [...ordered, ...remainder];
+}
+
+export function getOrderedHotkeyCatalog(): Array<{
+  category: HotkeyCategory;
+  title: string;
+  shortcuts: Array<{ id: HotkeyId; description: string; keys: string[] }>;
+}> {
+  return HOTKEY_CATEGORY_ORDER.map((category) => ({
+    category,
+    title: HOTKEY_CATEGORIES[category],
+    shortcuts: getOrderedHotkeysForCategory(category).map(([id, def]) => ({
+      id,
+      description: def.description,
+      keys: getHotkeyDisplayParts(def),
+    })),
+  })).filter((group) => group.shortcuts.length > 0);
+}
+
+export function getHotkeyDisplayParts(hotkey: HotkeyDefinition): string[] {
+  return getHotkeyDisplay(hotkey)
+    .split("+")
+    .map((part) => part.trim())
+    .filter(Boolean);
 }
 
 export function getHotkeyByAction(action: string): HotkeyDefinition | null {
@@ -305,8 +444,8 @@ export function isMac(): boolean {
  * the Mac variant when on macOS.
  *
  * @example
- * getHotkeyDisplay(DEFAULT_HOTKEYS.TOGGLE_OVERLAY) → "⌘+Shift+H" (Mac)
- *                                                  → "Ctrl+Shift+H" (Win/Linux)
+ * getHotkeyDisplay(DEFAULT_HOTKEYS.TOGGLE_OVERLAY) → "⌘+Shift+U" (Mac)
+ *                                                  → "Ctrl+Shift+U" (Win/Linux)
  */
 export function getHotkeyDisplay(hotkey: HotkeyDefinition): string {
   return isMac() && hotkey.mac ? hotkey.mac : hotkey.keys;

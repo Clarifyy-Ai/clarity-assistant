@@ -69,6 +69,7 @@ describe("company-research async job contract", () => {
     expect(clientSrc).toContain("x-idempotency-key");
     expect(clientSrc).toContain("START_TIMEOUT_MS");
     expect(pageSrc).toContain("generateCompanyBrief");
+    expect(pageSrc).toContain("reloadBriefFromCache");
     expect(pageSrc).toContain("Cancel generation");
     expect(pageSrc).toContain("inFlightRef");
   });

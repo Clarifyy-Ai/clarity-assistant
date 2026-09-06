@@ -56,7 +56,12 @@ const DESKTOP_DOWNLOAD_URL_LINUX = sanitizeProductionUrl(
  * private or empty, which spams 404s in the browser console.
  */
 export const GITHUB_RELEASE_REPO =
-  (import.meta.env.VITE_GITHUB_RELEASE_REPO as string | undefined)?.trim() || "";
+  (import.meta.env.VITE_GITHUB_RELEASE_REPO as string | undefined)?.trim() ||
+  "Clarifyy-Ai/career-pilot-releases";
+
+/** Canonical public Windows installer on GitHub Releases (used by PHP proxy + dev fallback). */
+export const GITHUB_WINDOWS_INSTALLER_URL =
+  "https://github.com/Clarifyy-Ai/career-pilot-releases/releases/latest/download/Career-Pilot-Setup.exe";
 
 /** In-app guide with desktop install steps (see docs/ELECTRON_RELEASE.md). */
 export const DESKTOP_INSTALL_GUIDE_PATH = "/app/guide/practice-coach";
@@ -413,5 +418,12 @@ export async function resolveAvailableWindowsInstallerHref(
         : href;
     }
   }
+
+  const githubLatestProbe = await probeDesktopInstaller(
+    GITHUB_WINDOWS_INSTALLER_URL,
+    fetchImpl,
+  );
+  if (githubLatestProbe.ok) return GITHUB_WINDOWS_INSTALLER_URL;
+
   return null;
 }
