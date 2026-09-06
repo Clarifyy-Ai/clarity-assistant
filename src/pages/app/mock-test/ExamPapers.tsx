@@ -18,6 +18,7 @@ import {
   Lock,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
+import { govExamGeneratePath } from "@/lib/gov-exam/govExamRoutes";
 import { useAuthStore } from "@/store/authStore";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -624,7 +625,11 @@ export default function ExamPapers() {
                   onClick={() =>
                     navigate(
                       registryCode
-                        ? `/app/mock-test/generate?code=${encodeURIComponent(registryCode)}&basis=quick`
+                        ? govExamGeneratePath({
+                            examId: "",
+                            code: registryCode,
+                            basis: "quick",
+                          }) ?? "/app/mock-test/generate"
                         : `/app/mock-test/configure?exam=${normalised}`,
                     )
                   }

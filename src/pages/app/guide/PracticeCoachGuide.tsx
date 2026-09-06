@@ -1,6 +1,6 @@
 import { lazy, Suspense } from "react";
 import { Link } from "react-router-dom";
-import { Mic, Keyboard, Headphones, ListChecks, Monitor, Wrench } from "lucide-react";
+import { ListChecks, Monitor, Wrench } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { SkeletonCard } from "@/components/ui/SkeletonLoader";
@@ -61,30 +61,9 @@ export default function PracticeCoachGuide() {
         </Card>
       </Suspense>
 
-      <section aria-label="Related settings" className="space-y-3">
-        <h2 className="text-sm font-semibold text-foreground">Next steps</h2>
+      <section aria-label="Start Practice Coach" className="space-y-3">
+        <h2 className="text-sm font-semibold text-foreground">Ready to practice?</h2>
         <div className="flex flex-wrap gap-2">
-          <Link
-            to="/app/settings/practice-coach"
-            className="inline-flex items-center gap-2 rounded-xl border border-border bg-secondary/60 px-3 py-2.5 text-sm font-medium hover:bg-secondary transition-colors"
-          >
-            <Headphones className="w-4 h-4 shrink-0" />
-            Practice Coach settings
-          </Link>
-          <Link
-            to="/app/settings/audio"
-            className="inline-flex items-center gap-2 rounded-xl border border-border bg-secondary/60 px-3 py-2.5 text-sm font-medium hover:bg-secondary transition-colors"
-          >
-            <Mic className="w-4 h-4 shrink-0" />
-            Audio settings
-          </Link>
-          <Link
-            to="/app/settings/hotkeys"
-            className="inline-flex items-center gap-2 rounded-xl border border-border bg-secondary/60 px-3 py-2.5 text-sm font-medium hover:bg-secondary transition-colors"
-          >
-            <Keyboard className="w-4 h-4 shrink-0" />
-            Keyboard shortcuts
-          </Link>
           <Link
             to="/app/live"
             className="inline-flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/10 px-3 py-2.5 text-sm font-medium text-primary hover:bg-primary/15 transition-colors"

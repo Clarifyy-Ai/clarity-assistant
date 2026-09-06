@@ -226,7 +226,11 @@ export default function CallSessions() {
     const id = (pendingDelete.sessionId || pendingDelete.sourceId).trim();
     setDeleting(true);
     try {
-      await sessionsDB.delete(id);
+      if (pendingDelete.sourceKind === "practice_workspace") {
+        await sessionsDB.deletePracticeWorkspace(id);
+      } else {
+        await sessionsDB.delete(id);
+      }
       setItems((prev) =>
         prev.filter(
           (row) =>
@@ -282,6 +286,8 @@ export default function CallSessions() {
               key={t.id}
               type="button"
               onClick={() => patchParams({ typeChip: t.id })}
+              title={t.description}
+              aria-label={t.description ? `${t.label}: ${t.description}` : t.label}
               className={cn(
                 "px-3 py-1.5 rounded-xl text-xs font-medium border transition-all",
                 parsed.typeChip === t.id

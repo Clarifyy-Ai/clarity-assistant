@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { ApiClientError } from "@/lib/api/apiClient";
 import { GovExamPageShell } from "@/components/gov-exam/GovExamPageShell";
+import { govExamGeneratePath } from "@/lib/gov-exam/govExamRoutes";
 import { classifyGovExamLoadError, type GovExamRouteResolution } from "@/lib/gov-exam/routeResolution";
 import { GovExamReadinessPanel } from "@/components/gov-exam/GovExamReadinessPanel";
 import {
@@ -438,12 +439,11 @@ export default function GovExamDetail(): React.ReactElement {
 
   const generateBase = useMemo(() => {
     if (!exam) return "/app/mock-test/generate";
-    const q = new URLSearchParams({
+    return govExamGeneratePath({
       examId: exam.examId,
-      stageId: stage?.id ?? "",
+      stageId: stage?.id,
       code: exam.code,
-    });
-    return `/app/mock-test/generate?${q.toString()}`;
+    }) ?? "/app/mock-test/generate";
   }, [exam, stage?.id]);
 
   const topicOptions = useMemo(() => {

@@ -379,12 +379,45 @@ export default function QuestionBankPage() {
     }
   }
 
-  function exportJson() {
-    const blob = new Blob([JSON.stringify(filtered, null, 2)], { type: "application/json" });
+  function exportSpreadsheet() {
+    const exportRows = filtered.map((row) => {
+      const option = (label: string) =>
+        row.options?.find((item) => item.label.toUpperCase() === label)?.text ?? "";
+      return {
+        Question: row.question_text,
+        Type: row.question_type,
+        "Option A": option("A"),
+        "Option B": option("B"),
+        "Option C": option("C"),
+        "Option D": option("D"),
+        "Correct Answer": row.correct_answer,
+        Explanation: row.explanation ?? "",
+        Subject: row.subject,
+        Category: row.category ?? "",
+        Topic: row.topic,
+        Difficulty: row.difficulty ?? "",
+        Tags: row.tags?.join(", ") ?? "",
+        License: row.license_type ?? "",
+        Status: row.publish_status,
+      };
+    });
+    const sheet = XLSX.utils.json_to_sheet(exportRows);
+    sheet["!cols"] = [
+      { wch: 48 }, { wch: 16 }, { wch: 28 }, { wch: 28 }, { wch: 28 },
+      { wch: 28 }, { wch: 16 }, { wch: 45 }, { wch: 20 }, { wch: 20 },
+      { wch: 20 }, { wch: 14 }, { wch: 28 }, { wch: 18 }, { wch: 14 },
+    ];
+    sheet["!autofilter"] = { ref: `A1:O${exportRows.length + 1}` };
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, sheet, "Question Bank");
+    const bytes = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+    const blob = new Blob([bytes], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "question-bank.json";
+    a.download = "question-bank.xlsx";
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -426,7 +459,7 @@ export default function QuestionBankPage() {
         ]}
         actions={
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" onClick={exportJson} leftIcon={<Download className="h-4 w-4" />}>
+            <Button variant="outline" size="sm" onClick={exportSpreadsheet} leftIcon={<Download className="h-4 w-4" />}>
               Export
             </Button>
             <label className="inline-flex">

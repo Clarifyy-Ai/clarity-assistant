@@ -2,9 +2,10 @@
 //
 // Server-side guard: AI generation endpoints may only run for practice contexts.
 // Allowed DB session types: mock, warmup, rehearsal, room, practice.
-// type=live is blocked unless the session's DB tags array contains "practice" or "rehearsal".
+// type=live is allowed only when the DB identifies it as practice: either it has
+// a practice/rehearsal tag or it is not linked to an actual scheduled interview.
 //
-// SECURITY: Session practice status ONLY comes from the DB tags array.
+// SECURITY: Session practice status ONLY comes from trusted DB fields.
 // Client-supplied is_practice / requestPracticeFlag is NOT trusted.
 
 import { forbiddenResponse } from "./auth.ts";
@@ -53,6 +54,10 @@ export function sessionHasPracticeFlag(session: SessionRowForAiCheck): boolean {
   return tags.includes("practice") || tags.includes("rehearsal");
 }
 
+export function isDatabasePracticeSession(session: SessionRowForAiCheck): boolean {
+  return sessionHasPracticeFlag(session) || !session.interview_id;
+}
+
 /** Merge practice/rehearsal tags onto a live row when the client started Practice Coach. */
 export function mergePracticeTags(
   existing: string[] | null | undefined,
@@ -77,7 +82,7 @@ export function isSessionTypeAllowedForAi(
   }
 
   if (sessionType === "live") {
-    if (sessionHasPracticeFlag(session)) {
+    if (isDatabasePracticeSession(session)) {
       return { allowed: true };
     }
 
@@ -85,7 +90,7 @@ export function isSessionTypeAllowedForAi(
       allowed: false,
       code: "LIVE_SESSION_AI_FORBIDDEN",
       message:
-        "AI generation is not permitted during live employer interviews. Use Mock, Warmup, or Live Rehearsal sessions for practice AI assistance.",
+        "AI assistance is unavailable for sessions linked to an actual scheduled interview. Start a new session from Practice Coach or Mock Interview for practice assistance.",
     };
   }
 

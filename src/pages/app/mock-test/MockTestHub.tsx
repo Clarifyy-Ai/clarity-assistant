@@ -342,7 +342,15 @@ export default function MockTestHub(): React.ReactElement {
         actions={
           <div className="flex flex-wrap gap-2 w-full sm:w-auto sm:justify-end">
             <Link
-              to="/app/mock-test/generate"
+              to={
+                hubReadiness?.exam_id
+                  ? `/app/mock-test/generate?examId=${encodeURIComponent(hubReadiness.exam_id)}${
+                      hubReadiness.stage_id
+                        ? `&stageId=${encodeURIComponent(hubReadiness.stage_id)}`
+                        : ""
+                    }`
+                  : "/app/mock-test/generate"
+              }
               className="inline-flex items-center justify-center gap-1.5 min-h-11 rounded-xl border border-border px-3 py-2 text-xs font-medium text-foreground transition-all hover:bg-secondary/60"
             >
               Generate paper
@@ -577,10 +585,10 @@ export default function MockTestHub(): React.ReactElement {
             return (
             <div
               key={exam.examId}
-              className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-xl border border-border bg-card/60 px-3 py-2.5"
+              className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 rounded-xl border border-border bg-card px-3 py-3"
             >
-              <div className="min-w-0">
-                <p className="font-medium text-foreground">
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold text-foreground leading-snug">
                   {displayName}
                   {exam.shortName && exam.shortName !== exam.name ? (
                     <span className="font-normal text-muted-foreground text-sm">
@@ -589,7 +597,7 @@ export default function MockTestHub(): React.ReactElement {
                     </span>
                   ) : null}
                 </p>
-                <p className="text-xs text-muted-foreground">
+                <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
                   {exam.recruitingBody?.name}
                   {category ? ` · ${category}` : ""}
                   {stageLabel ? ` · ${stageLabel}` : ""}
@@ -624,7 +632,7 @@ export default function MockTestHub(): React.ReactElement {
                   </p>
                 )}
               </div>
-              <div className="flex flex-wrap gap-2 shrink-0 relative z-40">
+              <div className="flex flex-wrap gap-2 shrink-0 sm:justify-end">
                 {(() => {
                   const detailPath = govExamDetailPath(exam.code);
                   const stageId = exam.stage?.id ?? exam.stages[0]?.id ?? "";

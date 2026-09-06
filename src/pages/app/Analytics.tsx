@@ -460,7 +460,7 @@ function AnalyticsFilterControls({
         disabled={!analytics.data?.recent_sessions?.length}
       >
         <Download className="w-4 h-4 mr-2" />
-        Export CSV
+        Export Excel
       </Button>
     </div>
   );
@@ -703,28 +703,54 @@ function ScoreTrendChart({
       </div>
 
       <p className="sr-only">{summary}</p>
-      {/* CSS bars — avoid Recharts unmount startTime crash when leaving this tab */}
       <div
-        className="flex h-44 w-full items-end gap-1.5"
+        className="flex h-48 w-full gap-2"
         role="img"
-        aria-label="Score trend chart"
+        aria-label="Score trend chart. Scores range from 0 to 100."
         data-testid="score-trend-bars"
       >
-        {chartData.map((d, i) => (
-          <div
-            key={`${d.label}-${i}`}
-            className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1"
-            title={`${d.label}: ${formatSessionScore(d.score)}`}
-          >
-            <div
-              className="w-full max-w-[2rem] rounded-t-sm bg-primary"
-              style={{ height: `${Math.max(4, Math.min(100, d.score))}%` }}
-            />
-            <span className="w-full truncate text-center text-[9px] leading-none text-muted-foreground">
-              {d.label}
-            </span>
+        <div
+          className="flex w-7 shrink-0 flex-col justify-between pb-5 text-right text-[9px] text-muted-foreground"
+          aria-hidden
+        >
+          {[100, 75, 50, 25, 0].map((tick) => <span key={tick}>{tick}</span>)}
+        </div>
+        <div className="relative min-w-0 flex-1">
+          <div className="pointer-events-none absolute inset-x-0 bottom-5 top-0 flex flex-col justify-between" aria-hidden>
+            {[100, 75, 50, 25, 0].map((tick) => (
+              <div key={tick} className="border-t border-border/60" />
+            ))}
           </div>
-        ))}
+          <div className="absolute inset-0 flex gap-1.5">
+            {chartData.map((d, i) => (
+              <div
+                key={`${d.label}-${i}`}
+                className="group relative flex h-full min-w-0 flex-1 flex-col items-center"
+                tabIndex={0}
+                aria-label={`${d.label}: ${formatSessionScore(d.score)}`}
+              >
+                <div className="relative flex min-h-0 w-full flex-1 items-end justify-center">
+                  <span
+                    className="absolute z-10 -translate-y-1 rounded bg-popover px-1.5 py-0.5 text-[10px] font-semibold text-popover-foreground shadow-sm"
+                    style={{ bottom: `${Math.max(4, Math.min(100, d.score))}%` }}
+                  >
+                    {d.score}
+                  </span>
+                  <div
+                    className="w-full max-w-[2rem] rounded-t-sm bg-primary transition-colors group-hover:bg-primary/80"
+                    style={{ height: `${Math.max(4, Math.min(100, d.score))}%` }}
+                  />
+                  <span className="pointer-events-none absolute bottom-full mb-7 hidden whitespace-nowrap rounded-md border border-border bg-popover px-2 py-1 text-xs text-popover-foreground shadow-lg group-hover:block group-focus:block">
+                    {d.label}: {formatSessionScore(d.score)}
+                  </span>
+                </div>
+                <span className="mt-1 w-full truncate text-center text-[9px] leading-none text-muted-foreground">
+                  {d.label}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </Card>
   );
@@ -1014,49 +1040,53 @@ function ActivityHeatmap({
         {title}
       </h3>
       <div
-        className="flex gap-1 overflow-x-auto pb-2"
+        className="overflow-x-auto pb-2"
         role="img"
         aria-label={title}
       >
-        {weeks[0] && weeks[0].length > 0 ? (
-          <div className="flex flex-col gap-1 pr-1" aria-hidden="true">
-            {weeks[0].map((day) => {
-              const parsed = new Date(`${day}T12:00:00`);
-              const label = Number.isNaN(parsed.getTime())
-                ? ""
-                : parsed.toLocaleDateString("en-US", { weekday: "short" }).slice(0, 2);
-              const show = !Number.isNaN(parsed.getTime()) && parsed.getDay() % 2 === 1;
-              return (
-                <span
-                  key={`dow-${day}`}
-                  className="h-3 w-5 text-[8px] leading-3 text-muted-foreground"
-                >
-                  {show ? label : ""}
-                </span>
-              );
-            })}
+        <div className={cn("flex gap-2", weeks.length <= 10 ? "w-full min-w-[20rem]" : "min-w-max")}>
+          {weeks[0] && weeks[0].length > 0 ? (
+            <div className="flex w-6 shrink-0 flex-col gap-1" aria-hidden="true">
+              {weeks[0].map((day) => {
+                const parsed = new Date(`${day}T12:00:00`);
+                const label = Number.isNaN(parsed.getTime())
+                  ? ""
+                  : parsed.toLocaleDateString("en-US", { weekday: "short" }).slice(0, 2);
+                const show = !Number.isNaN(parsed.getTime()) && parsed.getDay() % 2 === 1;
+                return (
+                  <span
+                    key={`dow-${day}`}
+                    className="flex h-4 items-center text-[9px] leading-none text-muted-foreground"
+                  >
+                    {show ? label : ""}
+                  </span>
+                );
+              })}
+            </div>
+          ) : null}
+          <div className={cn("flex gap-2", weeks.length <= 10 ? "min-w-0 flex-1 justify-between" : "min-w-max")}>
+            {weeks.map((week, wi) => (
+              <div key={wi} className="flex shrink-0 flex-col gap-1">
+                {week.map((day) => {
+                  const val   = data[day] ?? 0;
+                  const alpha = val === 0 ? 0 : Math.max(0.15, val / maxVal);
+                  return (
+                    <div
+                      key={day}
+                      title={`${day}: ${val} session${val !== 1 ? "s" : ""}`}
+                      className="h-4 w-4 rounded-sm ring-1 ring-border/30"
+                      style={{
+                        backgroundColor: val === 0
+                          ? "rgba(255,255,255,0.04)"
+                          : `rgba(139,92,246,${alpha})`,
+                      }}
+                    />
+                  );
+                })}
+              </div>
+            ))}
           </div>
-        ) : null}
-        {weeks.map((week, wi) => (
-          <div key={wi} className="flex flex-col gap-1">
-            {week.map((day) => {
-              const val   = data[day] ?? 0;
-              const alpha = val === 0 ? 0 : Math.max(0.15, val / maxVal);
-              return (
-                <div
-                  key={day}
-                  title={`${day}: ${val} session${val !== 1 ? "s" : ""}`}
-                  className="w-3 h-3 rounded-sm"
-                  style={{
-                    backgroundColor: val === 0
-                      ? "rgba(255,255,255,0.04)"
-                      : `rgba(139,92,246,${alpha})`,
-                  }}
-                />
-              );
-            })}
-          </div>
-        ))}
+        </div>
       </div>
       <div className="flex items-center justify-end gap-2 mt-2">
         <span className="text-[10px] text-muted-foreground">Less</span>

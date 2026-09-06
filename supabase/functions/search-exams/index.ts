@@ -46,6 +46,7 @@ const DISCLAIMER =
 /** Families hidden from non-India profiles. */
 const INDIA_ONLY_FAMILIES = new Set(["state_psc"]);
 const INDIA_ONLY_CODES = new Set(["APPSC_GROUP2"]);
+const SECONDARY_SEARCH_BUDGET_MS = 3_500;
 
 type ExamRow = {
   id: string;
@@ -281,7 +282,7 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
 
       // Independent secondary indexes — run in parallel (sequential was ~4–5s).
       const [aliasRes, bodyRes, stageRes, cycleRes, languageRes, paperRes] =
-        await Promise.all([
+        await withTimeout(Promise.all([
           db.from("gov_exam_aliases").select("exam_id").ilike("alias", like).limit(200),
           db
             .from("recruiting_bodies")
@@ -321,7 +322,16 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
             )
             .in("review_status", ["approved", "in_review"])
             .limit(200),
-        ]);
+        ]), SECONDARY_SEARCH_BUDGET_MS).catch((lookupError) => {
+          // Name/code search remains authoritative. Optional enrichment indexes
+          // must not consume the entire typeahead request budget.
+          console.warn(
+            "[search-exams] secondary lookup budget exceeded:",
+            lookupError instanceof Error ? lookupError.message : "unknown",
+          );
+          const empty = { data: [], error: null };
+          return [empty, empty, empty, empty, empty, empty] as const;
+        });
 
       // Soft-fail: alias index is enrichment; name/body hits must still succeed.
       if (aliasRes.error) {

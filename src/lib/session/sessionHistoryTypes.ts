@@ -75,11 +75,11 @@ export type SessionHistoryItem = {
   updatedAt: string;
 };
 
-/** Only `sessions` rows are deleted via sessionsDB.delete (same scope as legacy list). */
+/** History sources with an owner-scoped delete implementation. */
 export function sessionHistoryItemIsDeletable(
   item: Pick<SessionHistoryItem, "sourceKind" | "sessionId" | "sourceId">,
 ): boolean {
-  if (item.sourceKind !== "interview") return false;
+  if (!["interview", "practice_workspace"].includes(item.sourceKind)) return false;
   const id = (item.sessionId || item.sourceId || "").trim();
   return id.length > 0;
 }

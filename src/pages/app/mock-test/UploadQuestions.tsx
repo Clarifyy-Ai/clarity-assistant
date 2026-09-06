@@ -851,11 +851,21 @@ function PDFImportTab({ onImported }: { onImported: (count: number) => void }) {
       setSummary(parseSummary ?? `${items.length} questions parsed.`);
       setCanRetry(false);
     } catch (error) {
-      console.error("[PDFImportTab] parse error:", error);
       const message = error instanceof Error ? error.message : "Failed to parse PDF.";
+      const unsupportedLayout = /No MCQ questions|options A[–-]D/i.test(message);
+      if (!unsupportedLayout) {
+        console.error("[PDFImportTab] parse error:", error);
+      }
       setParseError(message);
-      setCanRetry(true);
-      toast.error(message);
+      // Retrying the same non-MCQ document cannot change its structure. Keep
+      // the refunded validation result inline without reporting an uncaught
+      // application error or encouraging a pointless retry.
+      setCanRetry(!unsupportedLayout);
+      if (unsupportedLayout) {
+        toast.warning("No standard MCQs found. Credits were refunded; try another PDF or create questions manually.");
+      } else {
+        toast.error(message);
+      }
     } finally {
       setParsing(false);
       setBackgroundParse(false);

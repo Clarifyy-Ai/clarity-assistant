@@ -115,6 +115,7 @@ export default function Scorecard() {
   const [expandedQ, setExpandedQ] = useState<string | null>(null);
   const [copyFeedback, setCopyFeedback] = useState(false);
   const [shareEnabling, setShareEnabling] = useState(false);
+  const [shareBusy, setShareBusy] = useState(false);
 
   async function enableScorecardSharing(): Promise<boolean> {
     const profile = useAuthStore.getState().profile;
@@ -137,33 +138,47 @@ export default function Scorecard() {
   }
 
   async function handleShare() {
-    if (!shareAllowed) {
-      const enabled = await enableScorecardSharing();
-      if (!enabled) {
+    if (shareBusy) return;
+    setShareBusy(true);
+    try {
+      if (!shareAllowed) {
+        const enabled = await enableScorecardSharing();
+        if (!enabled) {
+          navigate("/app/settings/privacy");
+          return;
+        }
+      }
+      const url = await shareScorecard();
+      if (url) {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(url);
+        } else {
+          const input = document.createElement("textarea");
+          input.value = url;
+          input.style.position = "fixed";
+          input.style.opacity = "0";
+          document.body.appendChild(input);
+          input.select();
+          document.execCommand("copy");
+          input.remove();
+        }
+        setCopyFeedback(true);
+        setTimeout(() => setCopyFeedback(false), 2000);
+        toast.success("Share link copied to clipboard");
+        return;
+      }
+      const blocked = shareBlockedReason ?? "";
+      if (/privacy|sharing is turned off/i.test(blocked)) {
+        toast.error("Sharing is still disabled. Review your scorecard privacy setting.");
         navigate("/app/settings/privacy");
         return;
       }
+      toast.error(blocked || "Could not create a share link. Please try again.");
+    } catch {
+      toast.error("Could not copy the share link. Check browser clipboard permission and retry.");
+    } finally {
+      setShareBusy(false);
     }
-    const url = await shareScorecard();
-    if (url) {
-      await navigator.clipboard.writeText(url);
-      setCopyFeedback(true);
-      setTimeout(() => setCopyFeedback(false), 2000);
-      toast.success("Share link copied to clipboard");
-      return;
-    }
-    const blocked = shareBlockedReason ?? "";
-    if (/privacy|sharing is turned off/i.test(blocked)) {
-      toast.error(blocked, {
-        duration: 8000,
-        action: {
-          label: "Enable sharing",
-          onClick: () => void enableScorecardSharing().then((ok) => ok && handleShare()),
-        },
-      });
-      return;
-    }
-    toast.error(blocked || "Could not create a share link. Please try again.");
   }
 
   // ── Loading / pending ─────────────────────────────────────────
@@ -425,7 +440,8 @@ export default function Scorecard() {
               type="button"
               variant="secondary"
               size="sm"
-              loading={shareEnabling}
+              loading={shareEnabling || shareBusy}
+              disabled={shareEnabling || shareBusy}
               aria-label={
                 shareAllowed
                   ? isShared
@@ -457,7 +473,13 @@ export default function Scorecard() {
           </div>
         }
       />
-      <HybridSourceLine source={scorecard.scoring_source} />
+      {scorecard.scoring_source === "deterministic" ? (
+        <p className="text-[11px] text-muted-foreground">
+          Evaluation: Rule-based analysis
+        </p>
+      ) : (
+        <HybridSourceLine source={scorecard.scoring_source} />
+      )}
 
         {/* ── Overall score ──────────────────────────── */}
         <div className={cn(
@@ -578,6 +600,7 @@ export default function Scorecard() {
             items={scorecard.strengths}
             icon={CheckCircle}
             color="green"
+            emptyMessage="No strengths met the evidence threshold in this session. Review each question below for specific feedback."
           />
           <FeedbackPanel
             title="Areas to Improve"
@@ -588,16 +611,14 @@ export default function Scorecard() {
         </div>
 
         {/* ── Coach note ─────────────────────────────── */}
-        {scorecard.coach_note && (
-          <div className="bg-primary/10 border border-primary/20 rounded-2xl p-5">
-            <p className="text-xs text-primary font-medium uppercase tracking-wider mb-2">
-              Coach's Note
-            </p>
-            <p className="text-foreground text-sm leading-relaxed italic">
-              "{scorecard.coach_note}"
-            </p>
-          </div>
-        )}
+        <div className="bg-primary/10 border border-primary/20 rounded-2xl p-5">
+          <p className="text-xs text-primary font-medium uppercase tracking-wider mb-2">
+            Coach's Note
+          </p>
+          <p className="text-foreground text-sm leading-relaxed italic">
+            "{scorecard.coach_note || "This session used rule-based evaluation. Review the question breakdown and apply the listed improvements in your next attempt."}"
+          </p>
+        </div>
 
         {/* ── Per-question breakdown ──────────────────── */}
         <div>
@@ -705,9 +726,10 @@ function QuestionScoreCard({
 }
 
 function FeedbackPanel({
-  title, items, icon: Icon, color,
+  title, items, icon: Icon, color, emptyMessage,
 }: {
   title: string; items: string[]; icon: any; color: "green" | "amber";
+  emptyMessage?: string;
 }) {
   const colorMap = {
     green: { bg: "bg-green-500/10", border: "border-green-500/20", text: "text-green-400", dot: "bg-green-400" },
@@ -721,6 +743,9 @@ function FeedbackPanel({
         {title}
       </h3>
       <ul className="space-y-2">
+        {items.length === 0 && emptyMessage && (
+          <li className="text-sm text-muted-foreground">{emptyMessage}</li>
+        )}
         {items.map((item, i) => (
           <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
             <div className={cn("w-1.5 h-1.5 rounded-full mt-1.5 shrink-0", c.dot)} />

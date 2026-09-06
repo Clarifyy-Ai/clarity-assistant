@@ -33,7 +33,20 @@ export function buildAnalyticsCsv(
   sessions: ReadonlyArray<SessionAnalyticsSummary>,
   options: { timeZone: string },
 ): string {
-  const rows = sessions.map((s) => {
+  const rows = buildAnalyticsSpreadsheetRows(sessions, options);
+
+  const body = [ANALYTICS_CSV_HEADERS as unknown as string[], ...rows]
+    .map((row) => row.map(escapeAnalyticsCsvCell).join(","))
+    .join("\n");
+
+  return `\uFEFF${body}`;
+}
+
+export function buildAnalyticsSpreadsheetRows(
+  sessions: ReadonlyArray<SessionAnalyticsSummary>,
+  options: { timeZone: string },
+): Array<Array<string | number>> {
+  return sessions.map((s) => {
     const anchor = s.started_at ?? s.date;
     const day =
       anchor && typeof anchor === "string"
@@ -54,11 +67,4 @@ export function buildAnalyticsCsv(
       cellOrEmpty(s.question_count),
     ];
   });
-
-  const body = [ANALYTICS_CSV_HEADERS as unknown as string[], ...rows]
-    .map((row) => row.map(escapeAnalyticsCsvCell).join(","))
-    .join("\n");
-
-  // BOM so Excel opens UTF-8 correctly; dates stay YYYY-MM-DD text.
-  return `\uFEFF${body}`;
 }

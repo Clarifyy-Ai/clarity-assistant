@@ -25,7 +25,7 @@ export const SESSION_SHAREABILITY_MESSAGES: Record<SessionShareabilityCode, stri
   SESSION_INCOMPLETE:
     "This session is still in progress, so a share link cannot be created yet.",
   SESSION_ABANDONED:
-    "This session was abandoned without recorded answers, so it cannot be shared.",
+    "This session ended before a scorable answer was recorded. Duration and question activity may still appear, but there is no evaluated report to share.",
   SCORECARD_REQUIRED:
     "Session is complete — generate a scorecard (or debrief) before sharing.",
   SHARE_DISABLED:

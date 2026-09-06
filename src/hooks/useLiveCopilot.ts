@@ -1045,8 +1045,9 @@ export function useLiveCopilot({
         return false;
       }
 
-      const baseContext = coachStore.getContext() ?? getSafeContext();
-      if (!baseContext) return false;
+      // Typed coach chat must remain available in mic-only mode, where an audio
+      // transcript/context may not exist yet.
+      const baseContext = coachStore.getContext() ?? getSafeContext() ?? {};
       const context = await enrichContextForAi(baseContext as Record<string, unknown>);
 
       chatAbortRef.current?.abort();

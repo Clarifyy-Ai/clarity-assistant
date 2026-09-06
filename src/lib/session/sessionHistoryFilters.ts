@@ -16,10 +16,18 @@ export type SessionHistoryTypeFilter =
   | SessionHistoryCanonicalType
   | "live_copilot";
 
-export const HISTORY_TYPE_CHIPS: { id: string; label: string }[] = [
+export const HISTORY_TYPE_CHIPS: { id: string; label: string; description?: string }[] = [
   { id: "all", label: "All" },
-  { id: "live_copilot", label: "Live Copilot" },
-  { id: "practice_coach", label: "Practice Coach" },
+  {
+    id: "live_copilot",
+    label: "Live Copilot (Live)",
+    description: "Live coaching sessions, including the desktop overlay.",
+  },
+  {
+    id: "practice_coach",
+    label: "Practice Coach (Practice)",
+    description: "Rehearsal, warm-up, and other practice coaching sessions.",
+  },
   { id: "mock_interview", label: "Mock Interview" },
   { id: "government_exam", label: "Government Exam" },
   { id: "assessment", label: "Assessment" },

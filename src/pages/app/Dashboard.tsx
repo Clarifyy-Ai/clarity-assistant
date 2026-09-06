@@ -9,6 +9,7 @@ import { useUIStore } from "@/store/uiStore";
 import { useDocumentStore } from "@/store/documentStore";
 import { useInterviewSchedulerStore } from "@/store/interviewSchedulerStore";
 import { useGamification } from "@/hooks/useGamification";
+import { useStreakTracker } from "@/hooks/useStreakTracker";
 import { useInterviewScheduler } from "@/hooks/useInterviewScheduler";
 import { useDocuments } from "@/hooks/useDocuments";
 import { useDashboardData, type DashboardSessionRow } from "@/hooks/useDashboardData";
@@ -168,6 +169,7 @@ export default function Dashboard() {
   const scheduler  = useInterviewSchedulerStore();
   const docStore   = useDocumentStore();
   const gamification = useGamification();
+  const streakTracker = useStreakTracker();
   const navigate     = useNavigate();
 
   useDocuments();
@@ -206,7 +208,7 @@ export default function Dashboard() {
 
   const readinessScore = computeReadinessScore({
     sessionCount,
-    streakCurrent: gamification.streakCurrent,
+    streakCurrent: streakTracker.streak,
     hasResume: !!docStore.active_resume_id,
     hasJD: !!docStore.active_jd_id,
     hasSession: (profile?.xp ?? 0) > 0,
@@ -271,17 +273,24 @@ export default function Dashboard() {
             </div>
           )}
 
-          <div className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+          <Link
+            to="/app/sessions"
+            aria-label={`${streakTracker.streak} day streak — view session activity`}
+            title="View the sessions contributing to your activity streak"
+            className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-xl hover:bg-amber-500/15 hover:border-amber-500/30 transition-colors"
+          >
             <Flame
               className={cn(
                 "w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-500 dark:text-amber-400",
-                !gamificationLoading && gamification.streakCurrent > 0 && "animate-streak-flame",
+                !gamificationLoading && streakTracker.streak > 0 && "animate-streak-flame",
               )}
             />
             <span className="text-[10px] sm:text-xs font-bold text-amber-600 dark:text-amber-400">
-              {gamificationLoading ? "…" : `${gamification.streakCurrent} day streak`}
+              {gamificationLoading
+                ? "…"
+                : `${streakTracker.streak} ${streakTracker.streak === 1 ? "day" : "days"} streak`}
             </span>
-          </div>
+          </Link>
 
           {isLowCredit && !profileLoading ? (
             <Link
@@ -438,7 +447,7 @@ export default function Dashboard() {
             onRetryRecent={retryRecent}
             profileLoading={profileLoading}
             profile={profile}
-            gamification={gamification}
+            gamification={{ ...gamification, streakCurrent: streakTracker.streak, streakLongest: streakTracker.longestStreak }}
             gamificationLoading={gamificationLoading}
             readinessScore={readinessScore}
             readinessLoading={readinessLoading}
@@ -460,7 +469,7 @@ export default function Dashboard() {
           onRetryRecent={retryRecent}
           profileLoading={profileLoading}
           profile={profile}
-          gamification={gamification}
+          gamification={{ ...gamification, streakCurrent: streakTracker.streak, streakLongest: streakTracker.longestStreak }}
           gamificationLoading={gamificationLoading}
           readinessScore={readinessScore}
           readinessLoading={readinessLoading}

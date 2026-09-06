@@ -196,10 +196,14 @@ export async function submitCoachChatMessage(
       ? "Coach reply timed out (CP-10245). Your message was not accepted — retry the same turn."
       : getAiUserFacingError(err) ||
         "Coach AI is temporarily unavailable. Try again in a moment.";
-    // Clear pending Generating… row and the optimistic user bubble on failure.
-    useOverlayStore.getState().removeChatMessage(assistantId);
-    useOverlayStore.getState().removeChatMessage(userMsgId);
-    useOverlayStore.getState().setError(msg);
+    // Keep the submitted question visible and turn the pending row into an
+    // actionable response. A global overlay error banner obscures chat content
+    // in compact/mic-only layouts.
+    useOverlayStore.getState().updateChatMessage(assistantId, {
+      text: msg,
+      pending: false,
+      error: true,
+    });
     return false;
   } finally {
     useOverlayStore.getState().setChatGenerating(false);

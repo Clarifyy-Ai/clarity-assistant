@@ -138,7 +138,7 @@ CREATE OR REPLACE FUNCTION public.assessment_template_availability(
 )
 RETURNS jsonb
 LANGUAGE plpgsql
-STABLE
+VOLATILE
 SECURITY DEFINER
 SET search_path = public
 AS $$
@@ -255,7 +255,7 @@ CREATE OR REPLACE FUNCTION public.assessment_templates_availability(
 )
 RETURNS jsonb
 LANGUAGE plpgsql
-STABLE
+VOLATILE
 SECURITY DEFINER
 SET search_path = public
 AS $$

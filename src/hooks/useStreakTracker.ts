@@ -7,23 +7,51 @@ export function useStreakTracker() {
   const { user } = useAuthStore();
   const gamification = useGamificationStore();
 
-  useEffect(() => {
+  const checkAndHydrate = useCallback(async (): Promise<void> => {
     if (!user) return;
-    checkAndHydrate();
-  }, [user?.id]);
-
-  async function checkAndHydrate(): Promise<void> {
     const { data } = await supabase
       .from("profiles")
       .select("streak_days, longest_streak, last_active_date, xp")
-      .eq("id", user!.id)
+      .eq("id", user.id)
       .maybeSingle();
 
     if (!data) return;
 
     gamification.setStreak(data.streak_days ?? 0, data.longest_streak ?? 0, data.last_active_date ?? null);
     gamification.setXP(data.xp ?? 0);
-  }
+  }, [user?.id, gamification.setStreak, gamification.setXP]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    void checkAndHydrate();
+
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") void checkAndHydrate();
+    };
+    window.addEventListener("focus", refreshWhenVisible);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+
+    const channel = supabase
+      .channel(`dashboard-streak:${user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "profiles",
+          filter: `id=eq.${user.id}`,
+        },
+        () => void checkAndHydrate(),
+      )
+      .subscribe();
+
+    return () => {
+      window.removeEventListener("focus", refreshWhenVisible);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+      void supabase.removeChannel(channel);
+    };
+  }, [user?.id, checkAndHydrate]);
 
   const recordActivity = useCallback(async (): Promise<void> => {
     if (!user) return;
@@ -41,6 +69,7 @@ export function useStreakTracker() {
   return {
     streak:        gamification.streak_current,
     longestStreak: gamification.streak_longest,
+    refresh:       checkAndHydrate,
     recordActivity,
   };
 }

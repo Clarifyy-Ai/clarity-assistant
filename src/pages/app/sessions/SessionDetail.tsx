@@ -991,7 +991,17 @@ export default function SessionDetail() {
                 Create share link
               </Button>
             )}
-            {shareStatus?.isShared ? (
+            {shareStatus?.code === "SESSION_INCOMPLETE" ||
+            shareStatus?.code === "SESSION_ABANDONED" ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                className="w-full"
+                onClick={() => setShareOpen(false)}
+              >
+                Close
+              </Button>
+            ) : shareStatus?.isShared ? (
               <Button
                 variant="secondary"
                 size="sm"

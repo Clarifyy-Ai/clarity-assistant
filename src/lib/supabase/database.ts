@@ -495,6 +495,16 @@ export const sessionsDB = {
       { table: "sessions", operation: "delete" });
   },
 
+  async deletePracticeWorkspace(sessionId: string): Promise<void> {
+    const { error } = await supabase
+      .from("practice_workspace_sessions")
+      .delete()
+      .eq("id", sessionId);
+
+    if (error) throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED,
+      { table: "practice_workspace_sessions", operation: "delete" });
+  },
+
   async deleteAllByUserId(userId: string): Promise<void> {
     const { error } = await supabase
       .from("sessions")

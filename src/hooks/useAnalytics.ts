@@ -21,7 +21,10 @@ import {
   type SessionComparisonSide,
 } from "@/lib/analytics/sessionComparison";
 import { brandExportBasename } from "@/lib/constants/brandStorage";
-import { buildAnalyticsCsv } from "@/lib/analytics/analyticsCsv";
+import {
+  ANALYTICS_CSV_HEADERS,
+  buildAnalyticsSpreadsheetRows,
+} from "@/lib/analytics/analyticsCsv";
 import {
   buildActivityByDay,
   buildUnifiedScoreTrend,
@@ -253,7 +256,7 @@ export function useAnalytics() {
     await loadAnalytics();
   }, [user]);
 
-  // ── Download CSV ──────────────────────────────────────────────
+  // ── Download Excel workbook ───────────────────────────────────
 
   const downloadCSV = useCallback(async (): Promise<void> => {
     if (!data?.recent_sessions.length) return;
@@ -261,14 +264,18 @@ export function useAnalytics() {
     const timeZone = resolveDisplayTimeZone(
       useAuthStore.getState().profile?.timezone,
     );
-    const csv = buildAnalyticsCsv(data.recent_sessions, { timeZone });
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement("a");
-    a.href     = url;
-    a.download = `${brandExportBasename("analytics", filter.period)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const XLSX = await import("xlsx");
+    const rows = buildAnalyticsSpreadsheetRows(data.recent_sessions, { timeZone });
+    const sheet = XLSX.utils.aoa_to_sheet([ANALYTICS_CSV_HEADERS, ...rows]);
+    sheet["!cols"] = [
+      { wch: 12 }, { wch: 24 }, { wch: 22 }, { wch: 24 }, { wch: 14 },
+      { wch: 15 }, { wch: 13 }, { wch: 10 }, { wch: 12 },
+    ];
+    sheet["!autofilter"] = { ref: `A1:I${rows.length + 1}` };
+    sheet["!freeze"] = { xSplit: 0, ySplit: 1 };
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, sheet, "Skills Analytics");
+    XLSX.writeFile(workbook, `${brandExportBasename("analytics", filter.period)}.xlsx`);
   }, [data, filter.period]);
 
   const avgScore30d   = data?.avg_confidence_score ?? null;

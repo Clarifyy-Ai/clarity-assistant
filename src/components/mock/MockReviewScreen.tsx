@@ -14,6 +14,15 @@ type MockReviewScreenProps = {
   onConfirm: () => void;
 };
 
+function documentDisplayName(
+  label: string | null | undefined,
+  fallback: string,
+): string {
+  const value = label?.trim() ?? "";
+  if (!value || /^selected\s*\([^)]*\)$/i.test(value)) return fallback;
+  return value;
+}
+
 export function MockReviewScreen({
   snapshot,
   warmup,
@@ -37,7 +46,7 @@ export function MockReviewScreen({
     {
       label: "Resume",
       value: snapshot.resume_id
-        ? snapshot.resume_label?.trim() || "Selected resume"
+        ? documentDisplayName(snapshot.resume_label, "Selected resume")
         : snapshot.resume_text
           ? "Pasted / loaded text"
           : "None",
@@ -45,7 +54,7 @@ export function MockReviewScreen({
     {
       label: "Job description",
       value: snapshot.jd_id
-        ? snapshot.jd_label?.trim() || "Selected job description"
+        ? documentDisplayName(snapshot.jd_label, "Selected job description")
         : snapshot.jd_text
           ? "Provided"
           : "None",

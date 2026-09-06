@@ -467,7 +467,7 @@ export function ExamSearchCombobox({
           id={listId}
           role="listbox"
           aria-label="Government exam results"
-          className="absolute z-30 mt-1 w-full max-h-72 overflow-auto rounded-xl border border-border bg-popover shadow-md"
+          className="absolute z-[100] mt-1 w-full max-h-80 overflow-auto rounded-xl border border-slate-300 bg-white shadow-2xl dark:border-slate-700 dark:bg-[#0b1020]"
         >
           {state === "loading" && results.length === 0 && (
             <p className="px-3 py-3 text-sm text-muted-foreground">Searching…</p>
@@ -520,20 +520,20 @@ export function ExamSearchCombobox({
                   id={examOptionId(listId, exam.examId)}
                   role="option"
                   aria-selected={exam.examId === value || active}
-                  className={`w-full text-left px-3 py-2.5 border-b border-border/40 last:border-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${
-                    active ? "bg-secondary/70" : "hover:bg-secondary/40"
+                  className={`w-full text-left px-3 py-3 border-b border-slate-200 last:border-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring dark:border-slate-800 ${
+                    active ? "bg-slate-100 dark:bg-slate-800" : "hover:bg-slate-50 dark:hover:bg-slate-900"
                   }`}
                   onMouseDown={(e) => e.preventDefault()}
                   onMouseEnter={() => setActiveIndex(index)}
                   onClick={() => selectAt(index)}
                 >
-                  <p className="text-sm font-medium text-foreground truncate">
+                  <p className="text-sm font-semibold text-slate-950 dark:text-slate-50 leading-snug">
                     {examDisplayName(exam)}
                     {exam.shortName && exam.shortName !== exam.name ? (
-                      <span className="font-normal text-muted-foreground"> · {exam.name}</span>
+                      <span className="font-normal text-slate-600 dark:text-slate-300"> · {exam.name}</span>
                     ) : null}
                   </p>
-                  <p className="text-xs text-muted-foreground truncate">
+                  <p className="mt-1 text-xs text-slate-600 dark:text-slate-300 leading-snug">
                     {exam.code}
                     {exam.recruitingBody?.name ? ` · ${exam.recruitingBody.name}` : ""}
                     {category ? ` · ${category}` : ""}
@@ -541,11 +541,11 @@ export function ExamSearchCombobox({
                     {exam.languages?.length ? ` · ${exam.languages.join("/")}` : ""}
                   </p>
                   {aliases && (
-                    <p className="text-xs text-muted-foreground truncate">
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 leading-snug">
                       Also known as: {aliases}
                     </p>
                   )}
-                  <p className="text-xs mt-0.5 text-muted-foreground">
+                  <p className="text-xs mt-1 text-slate-600 dark:text-slate-300 leading-snug">
                     {typeof approved === "number"
                       ? bank
                         ? `Bank ${formatBankCoverage(approved, bank.requiredQuestions)}`

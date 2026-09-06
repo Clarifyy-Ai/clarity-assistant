@@ -160,7 +160,7 @@ export default function LiveRehearsal() {
               Floating overlay, global hotkeys, and tab-audio capture work best in the desktop app.
               Browser Overlay sessions remain fully available.
             </p>
-            <DesktopDownloadButton compact fullWidth showGuideLink />
+            <DesktopDownloadButton compact fullWidth showGuideLink={false} />
           </div>
         </div>
       )}

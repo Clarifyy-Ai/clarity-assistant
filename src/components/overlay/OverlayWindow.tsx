@@ -590,9 +590,13 @@ export function OverlayWindow({
 
   if (!isMounted || !overlayRoot) return null;
 
-  // Mount ScreenCaptureBlocker as a side-effect-only node (no visible UI; events feed ScreenCaptureBanner)
+  // Detector-only mount; visible capture messaging is rendered inside the overlay.
   const captureDetector = (
-    <ScreenCaptureBlocker isActive={isSessionActive} showWarning={false} />
+    <ScreenCaptureBlocker
+      isActive={isSessionActive}
+      showWarning={false}
+      showIndicator={false}
+    />
   );
 
   // ───────────────────────────────────────────────────────────────

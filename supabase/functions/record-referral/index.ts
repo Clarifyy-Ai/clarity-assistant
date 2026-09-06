@@ -82,9 +82,58 @@ Deno.serve(async (req: Request) => {
     );
   }
 
+  const normalizedCode = parsed.data.referral_code.toUpperCase();
+  // Resolve common business outcomes before the reward transaction. Besides
+  // producing a stable 200 response, this prevents a user's own referral link
+  // from reaching reward-ledger code that should never run for self-referrals.
+  const { data: referralOwner, error: ownerError } = await db
+    .from("profiles")
+    .select("id")
+    .ilike("referral_code", normalizedCode)
+    .maybeSingle();
+  if (ownerError) {
+    opsLog({
+      correlation_id: correlationId,
+      user_id: auth.context.user.id,
+      function_name: "record-referral",
+      operation: "resolve_referral_owner",
+      result: "error",
+      retryable: true,
+      error_class: "database_error",
+    });
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: "Referral service is temporarily unavailable",
+        code: "TEMPORARY_BACKEND_FAILURE",
+        correlation_id: correlationId,
+      }),
+      { status: 503, headers },
+    );
+  }
+  if (!referralOwner || referralOwner.id === auth.context.user.id) {
+    const reason = referralOwner ? "self_referral" : "code_not_found";
+    return new Response(
+      JSON.stringify({
+        success: true,
+        code: referralOwner ? "REFERRAL_SELF_REFERRAL" : "REFERRAL_CODE_INVALID",
+        correlation_id: correlationId,
+        result: {
+          ok: false,
+          reason,
+          referee_credits: 0,
+          referrer_credits: 0,
+          promo_code: null,
+          attribution_id: null,
+        },
+      }),
+      { status: 200, headers },
+    );
+  }
+
   const { data, error } = await db.rpc("record_referral_reward", {
     p_referred_id: auth.context.user.id,
-    p_referral_code: parsed.data.referral_code.toUpperCase(),
+    p_referral_code: normalizedCode,
   });
 
   if (error) {

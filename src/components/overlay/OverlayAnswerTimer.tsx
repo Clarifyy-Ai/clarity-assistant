@@ -27,8 +27,12 @@ export function OverlayAnswerTimer() {
           ? "text-amber-400 bg-amber-500/10 border-amber-500/15"
           : "text-sky-400/60 bg-sky-500/8 border-sky-500/12"
       )}
-      title={`Per-answer timer — target ${TARGET_SECONDS}s`}
+      title={`Answer time remaining — target ${TARGET_SECONDS}s`}
+      aria-label={`Answer time remaining ${label}`}
     >
+      <span className="mr-1 font-sans text-[9px] uppercase tracking-wide opacity-70">
+        Answer
+      </span>
       {label}
     </span>
   );

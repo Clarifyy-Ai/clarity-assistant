@@ -36,6 +36,16 @@ describe("TC-MOD-018 assessment lifecycle contracts", () => {
     expect(migration).toContain("v_available := public.count_eligible_assessment_questions");
   });
 
+  it("marks availability functions volatile because they invalidate expired attempts", () => {
+    const availabilityFunctions = migration.slice(
+      migration.indexOf("CREATE OR REPLACE FUNCTION public.assessment_template_availability"),
+      migration.indexOf("-- ── 4. Assemble"),
+    );
+    expect(availabilityFunctions).not.toContain("STABLE");
+    expect(availabilityFunctions.match(/VOLATILE/g)).toHaveLength(2);
+    expect(availabilityFunctions).toContain("UPDATE public.mock_tests");
+  });
+
   it("counts only COMPLETED attempts toward max_attempts", () => {
     expect(migration).toContain("AND status = 'COMPLETED'");
     expect(migration).not.toMatch(

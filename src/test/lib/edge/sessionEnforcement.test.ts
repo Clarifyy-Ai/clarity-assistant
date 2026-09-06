@@ -20,9 +20,16 @@ describe("sessionEnforcement practice tags", () => {
     expect(source).toContain("mergePracticeTags");
   });
 
-  it("documents that client is_practice is not trusted at AI enforcement time", () => {
+  it("uses trusted database fields rather than the client practice flag", () => {
     const source = readShared("sessionEnforcement.ts");
     expect(source).toContain("Client-supplied is_practice");
-    expect(source).toContain("DB tags array");
+    expect(source).toContain("trusted DB fields");
+    expect(source).toContain("!session.interview_id");
+  });
+
+  it("does not direct users to unavailable setup modes", () => {
+    const source = readShared("sessionEnforcement.ts");
+    expect(source).toContain("Practice Coach or Mock Interview");
+    expect(source).not.toContain("Use Mock, Warmup, or Live Rehearsal");
   });
 });

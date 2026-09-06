@@ -698,7 +698,7 @@ export default function NewInterview() {
   /* ── Render ──────────────────────────────────────────────────────────── */
 
   return (
-    <div className="max-w-2xl space-y-5">
+    <div className="mx-auto w-full max-w-5xl space-y-5">
       {/* Back + header */}
       <div className="flex items-center gap-3">
         <button
@@ -832,7 +832,11 @@ export default function NewInterview() {
         </Card>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-5" noValidate>
+      <form
+        onSubmit={handleSubmit}
+        className="grid grid-cols-1 items-start gap-5 lg:grid-cols-2"
+        noValidate
+      >
 
         {/* Company + role */}
         <Card>
@@ -1132,14 +1136,14 @@ export default function NewInterview() {
         {error && (
           <div
             role="alert"
-            className="flex items-center gap-2 text-xs text-red-400 bg-red-500/5 border border-red-500/20 rounded-xl px-4 py-3"
+            className="flex items-center gap-2 text-xs text-red-400 bg-red-500/5 border border-red-500/20 rounded-xl px-4 py-3 lg:col-span-2"
           >
             <AlertCircle className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
             {error}
           </div>
         )}
 
-        <div className="flex gap-3">
+        <div className="flex gap-3 lg:col-span-2">
           <Button
             type="button"
             variant="ghost"

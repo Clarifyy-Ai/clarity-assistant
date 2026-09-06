@@ -26,6 +26,8 @@ interface ScreenCaptureBlockerProps {
   onCaptureDetected?: (type: CaptureType) => void;
   /** When true, the honesty warning is shown inline below children */
   showWarning?:       boolean;
+  /** Show the inline capture badge. Disable for detector-only mounts. */
+  showIndicator?:     boolean;
   children?:          React.ReactNode;
 }
 
@@ -85,6 +87,7 @@ export function ScreenCaptureBlocker({
   pollIntervalMs  = 12_000,
   onCaptureDetected,
   showWarning     = true,
+  showIndicator   = true,
   children,
 }: ScreenCaptureBlockerProps) {
   const supportInfo    = getSupportInfo();
@@ -180,14 +183,17 @@ export function ScreenCaptureBlocker({
       {children}
 
       {/* Active capture indicator — shown regardless of support level */}
-      {isActive && isCapturing && (
+      {isActive && isCapturing && showIndicator && (
         <div
           className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-red-500/15 border border-red-500/25 animate-pulse"
           role="alert"
         >
           <span className="w-1.5 h-1.5 rounded-full bg-red-400 shrink-0" />
-          <p className="text-[10px] font-semibold text-red-400">
-            Screen sharing detected — overlay remains visible ({supportInfo.label})
+          <p className="flex items-center gap-1 text-[10px] font-semibold text-red-400">
+            <span>Screen sharing detected — overlay remains visible</span>
+            <span className="rounded border border-red-500/25 bg-red-500/10 px-1 py-0.5">
+              {supportInfo.label}
+            </span>
           </p>
         </div>
       )}

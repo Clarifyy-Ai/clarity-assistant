@@ -567,14 +567,16 @@ export default function AdminLearningPage() {
                               className="min-h-[120px]"
                             />
                           ) : (
-                            <Input
-                              value={editResourceUrl}
-                              onChange={(e) => setEditResourceUrl(e.target.value)}
-                              placeholder="YouTube or video URL (youtube.com/watch?v=…)"
-                            />
-                            {editResourceUrl.trim() && isYoutubeUrl(editResourceUrl) ? (
-                              <p className="text-xs text-muted-foreground">YouTube links play inline in the lesson player.</p>
-                            ) : null}
+                            <>
+                              <Input
+                                value={editResourceUrl}
+                                onChange={(e) => setEditResourceUrl(e.target.value)}
+                                placeholder="YouTube or video URL (youtube.com/watch?v=…)"
+                              />
+                              {editResourceUrl.trim() && isYoutubeUrl(editResourceUrl) ? (
+                                <p className="text-xs text-muted-foreground">YouTube links play inline in the lesson player.</p>
+                              ) : null}
+                            </>
                           )}
                           <div className="flex gap-2">
                             <Button size="sm" disabled={saving} onClick={() => void saveLesson()}>Save lesson</Button>

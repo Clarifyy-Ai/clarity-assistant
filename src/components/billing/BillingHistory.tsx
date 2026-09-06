@@ -25,7 +25,7 @@ import type { Tables } from '@/integrations/supabase/types';
  * - Invoice download
  * - Filtering & sorting
  * - Pagination
- * - Export to CSV
+ * - Export to Excel
  */
 
 type Transaction = BillingHistoryTransaction;
@@ -154,31 +154,42 @@ export function BillingHistory({
   const endIdx = startIdx + itemsPerPage;
   const displayedTransactions = filteredTransactions.slice(startIdx, endIdx);
 
-  // Export to CSV
-  const handleExport = () => {
-    const csv = [
-      ['Date', 'Type', 'Description', 'Amount', 'Credits', 'Status'].join(','),
-      ...filteredTransactions.map((t) =>
-        [
-          t.date.toLocaleDateString(),
-          t.type,
-          t.description,
-          t.amount > 0 ? formatInrPaise(Math.round(t.amount * 100)) : "—",
-          t.credits,
-          t.status,
-        ].join(',')
-      ),
-    ].join('\n');
-
-    const blob = new Blob([csv], { type: 'text/csv' });
+  // Export a native workbook so Excel preserves dates, Unicode, and column widths.
+  const handleExport = async () => {
+    const XLSX = await import('xlsx');
+    const rows = filteredTransactions.map((t) => ({
+      Date: t.date,
+      Type: t.type,
+      Description: t.description,
+      'Amount (INR)': t.amount > 0 ? t.amount : '',
+      Credits: t.credits,
+      Status: t.status,
+    }));
+    const sheet = XLSX.utils.json_to_sheet(rows, { cellDates: true });
+    sheet['!cols'] = [
+      { wch: 14 }, { wch: 14 }, { wch: 42 }, { wch: 16 }, { wch: 12 }, { wch: 14 },
+    ];
+    sheet['!autofilter'] = { ref: `A1:F${rows.length + 1}` };
+    for (let row = 2; row <= rows.length + 1; row += 1) {
+      const dateCell = sheet[`A${row}`];
+      if (dateCell) dateCell.z = 'dd-mmm-yyyy';
+      const amountCell = sheet[`D${row}`];
+      if (amountCell?.t === 'n') amountCell.z = '₹#,##0.00';
+    }
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, sheet, 'Billing History');
+    const bytes = XLSX.write(workbook, { bookType: 'xlsx', type: 'array', cellDates: true });
+    const blob = new Blob([bytes], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `billing-history-${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `billing-history-${new Date().toISOString().split('T')[0]}.xlsx`;
     a.click();
     URL.revokeObjectURL(url);
 
-    toast.success('Billing history exported to CSV');
+    toast.success('Billing history exported to Excel');
   };
 
   const handleDownloadInvoice = async (transaction: Transaction) => {

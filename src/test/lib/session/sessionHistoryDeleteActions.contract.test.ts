@@ -17,12 +17,18 @@ describe("sessionHistoryItemIsDeletable", () => {
     ).toBe(true);
   });
 
-  it("rejects non-interview source kinds", () => {
-    for (const sourceKind of [
-      "mock_test",
-      "practice_workspace",
-      "coding_submission",
-    ] as const) {
+  it("allows practice workspace rows with an owner-scoped delete implementation", () => {
+    expect(
+      sessionHistoryItemIsDeletable({
+        sourceKind: "practice_workspace",
+        sessionId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        sourceId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      }),
+    ).toBe(true);
+  });
+
+  it("rejects source kinds without a safe delete implementation", () => {
+    for (const sourceKind of ["mock_test", "coding_submission"] as const) {
       expect(
         sessionHistoryItemIsDeletable({
           sourceKind,
@@ -48,6 +54,7 @@ describe("Session History Delete actions contract", () => {
     expect(page).toContain("min-h-11 min-w-11");
     expect(page).toContain("stopPropagation");
     expect(page).toContain("sessionsDB.delete");
+    expect(page).toContain("sessionsDB.deletePracticeWorkspace");
     expect(page).toContain("ConfirmDialog");
     expect(page).toContain("Delete this session?");
   });

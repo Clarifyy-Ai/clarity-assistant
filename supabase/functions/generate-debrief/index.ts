@@ -846,8 +846,10 @@ async function generateDebriefText(options: {
     const result = await generateWithFallback({
       prompt: options.prompt,
       systemPrompt: SYSTEM_PROMPT,
-      temperature: 0.4,
-      maxTokens: Math.min(3000, policy.maxOutputTokens),
+      temperature: 0.2,
+      // The debrief schema contains several evidence-rich arrays. A 3k cap could
+      // truncate otherwise valid JSON before its closing braces.
+      maxTokens: Math.min(5000, policy.maxOutputTokens),
       userId: options.userId,
       action: "generate_debrief",
       model: options.model,
@@ -1163,7 +1165,7 @@ async function runDebriefHybrid(input: {
     runDeterministic: async () => null,
     runPython: async () => null,
     runAi: async () => {
-      const debriefAi = await generateDebriefText({
+      let debriefAi = await generateDebriefText({
         prompt,
         userId,
         model: resolvedModel,
@@ -1172,7 +1174,20 @@ async function runDebriefHybrid(input: {
       if (!debriefAi) {
         throw new Error("AI service failed");
       }
-      const parsed = parseDebriefFromAi(debriefAi.text);
+      let parsed = parseDebriefFromAi(debriefAi.text);
+      if (!parsed) {
+        // One bounded repair attempt handles truncated/malformed provider JSON.
+        // Billing is finalized only after a validated debrief is persisted.
+        debriefAi = await generateDebriefText({
+          prompt: `${prompt}
+
+Your previous response was not valid complete JSON. Return a shorter response using the exact schema above. Keep at most 3 strengths, 3 improvements, 3 action items, and 3 scored dimensions. Close every array and object. Return JSON only.`,
+          userId,
+          model: resolvedModel,
+          byok,
+        });
+        parsed = debriefAi ? parseDebriefFromAi(debriefAi.text) : null;
+      }
       if (!parsed) {
         throw new DomainError(
           "AI_INVALID_OUTPUT",

@@ -24,7 +24,7 @@ describe("coach chat continuity", () => {
     // streamCoachChat must not silently swallow AbortError (hint stream may still).
     const coachFn = client.slice(client.indexOf("async function streamCoachChat"));
     expect(coachFn).not.toMatch(/if \(\(err as Error\)\.name === "AbortError"\) return;/);
-    expect(session).toContain("removeChatMessage");
+    expect(session).toContain("updateChatMessage(assistantId");
     expect(session).toContain("pendingChatIdempotency");
     expect(session).toContain("previousTurns");
     expect(session).toContain("CP-10245");
@@ -142,8 +142,9 @@ describe("coach chat continuity", () => {
     expect(client).toContain("COACH_AI_UNAVAILABLE");
     expect(client).toContain("AI_PROVIDER_UNAVAILABLE");
     const session = read("src/lib/ai/coachChatSession.ts");
-    expect(session).toContain("removeChatMessage(assistantId)");
-    expect(session).toContain("removeChatMessage(userMsgId)");
+    expect(session).toContain("updateChatMessage(assistantId");
+    expect(session).toContain("pending: false");
+    expect(session).not.toContain("removeChatMessage(userMsgId)");
     expect(session).toContain("setChatGenerating(false)");
   });
 
@@ -172,6 +173,7 @@ describe("coach chat continuity", () => {
     // Credits only refreshed on successful onDone path, not in catch.
     const catchBlock = session.slice(session.indexOf("} catch (err) {"));
     expect(catchBlock).not.toContain("refreshCredits");
-    expect(catchBlock).toContain("removeChatMessage");
+    expect(catchBlock).toContain("updateChatMessage(assistantId");
+    expect(catchBlock).toContain("error: true");
   });
 });

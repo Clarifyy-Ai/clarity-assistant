@@ -2383,8 +2383,9 @@ export default function GenerateGovPaper(): React.ReactElement {
                 data-testid="gov-generate-continue"
                 onClick={() => setStep((s) => Math.min(3, s + 1))}
                 disabled={!continueEnabled}
+                title={step === 0 && !selectedExam ? "Select an exam above to continue" : undefined}
               >
-                Continue
+                {step === 0 && !selectedExam ? "Select an exam to continue" : "Continue"}
               </Button>
             ) : canGenerateRequested ? (
               <Button

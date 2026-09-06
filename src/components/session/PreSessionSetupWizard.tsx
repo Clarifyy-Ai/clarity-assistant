@@ -197,7 +197,20 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   const [focusCompetencies, setFocusCompetencies] = useState<string[]>([]);
   const [topicsToAvoid,    setTopicsToAvoid]    = useState<string[]>([]);
   const [skillsToEmphasize, setSkillsToEmphasize] = useState<string[]>([]);
+  const [skillToEmphasizeDraft, setSkillToEmphasizeDraft] = useState("");
   const [skillsNotToClaim, setSkillsNotToClaim] = useState<string[]>([]);
+
+  const addSkillsToEmphasize = (raw: string) => {
+    const additions = raw
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean);
+    if (!additions.length) return;
+    setSkillsToEmphasize((current) =>
+      Array.from(new Set([...current, ...additions])).slice(0, 8),
+    );
+    setSkillToEmphasizeDraft("");
+  };
 
   // Step 2 — Language & AI Settings
   const [language,         setLanguage]         = useState("English");
@@ -295,7 +308,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   }, [step, company, role, interviewType, resumeId, jdId, sessionCallType, language, seniority, industry, interviewStage, focusCompetencies, topicsToAvoid, skillsToEmphasize, skillsNotToClaim, answerBankContextIds, textVoiceMode, ttsVoice, followUpDepth, feedbackStyle, durationMinutes, model]);
 
   // Step 4 — Auto-Generate
-  const [autoGenerate,     setAutoGenerate]     = useState(false);
+  const [autoGenerate,     setAutoGenerate]     = useState(true);
 
   // Step 5 — Save Transcript
   const [saveTranscript,   setSaveTranscript]   = useState(true);
@@ -448,7 +461,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
     setModel(clampPreferredModel(typedProfile?.preferred_model, typedProfile?.plan_id));
     setHintStyle(typedProfile?.hint_style ?? "short_hints");
     setLanguage("English");
-    setAutoGenerate(false);
+    setAutoGenerate(true);
     setSaveTranscript(true);
     setDurationMinutes(freePlan ? 5 : 30);
     setSessionCallType("interview");
@@ -951,11 +964,17 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
             <button
               type="button"
               onClick={() => {
-                applyLastSetup(lastSetup);
-                setShowWizard(false);
                 setStep(1);
+                setShowWizard(false);
+                window.requestAnimationFrame(() => {
+                  document.querySelector('[data-testid="wizard-quick-start"]')?.scrollIntoView({
+                    behavior: "smooth",
+                    block: "start",
+                  });
+                });
               }}
-              className="mt-2 text-xs text-primary hover:underline"
+              data-testid="back-to-quick-start"
+              className="relative z-10 mt-2 cursor-pointer text-xs text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               Back to one-click start
             </button>
@@ -1184,6 +1203,20 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                 />
               </div>
 
+              <div className="flex items-center justify-between gap-4 p-3.5 bg-secondary/20 border border-border rounded-xl">
+                <div>
+                  <p className="text-sm font-medium text-foreground">Generate hints automatically</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    Create talking points whenever Practice Coach detects a finalized question.
+                  </p>
+                </div>
+                <BooleanSwitch
+                  checked={autoGenerate}
+                  onChange={setAutoGenerate}
+                  aria-label="Generate hints automatically"
+                />
+              </div>
+
               <div>
                 <label className="block text-xs font-medium text-muted-foreground mb-1.5">Hint Style</label>
                 <div className="grid grid-cols-3 gap-2">
@@ -1399,18 +1432,6 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                     ? "Required"
                     : "Optional"}
                 </label>
-                {resumeId && resumes.some((r) => r.id === resumeId) ? (
-                  <p className="text-sm text-foreground rounded-xl border border-border bg-secondary/30 px-3 py-2.5">
-                    Using <span className="font-medium">{resumes.find((r) => r.id === resumeId)?.title || "your selected resume"}</span>
-                    <button
-                      type="button"
-                      className="ml-2 text-xs text-primary hover:underline"
-                      onClick={() => setResumeId(null)}
-                    >
-                      Change
-                    </button>
-                  </p>
-                ) : (
                 <select
                   value={resumeId ?? ""}
                   onChange={(e) => setResumeId(e.target.value || null)}
@@ -1423,6 +1444,10 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                     <option key={r.id} value={r.id}>{r.title || (r as any).file_name}</option>
                   ))}
                 </select>
+                {resumeId && resumes.some((r) => r.id === resumeId) && (
+                  <p className="mt-1 text-[10px] text-muted-foreground">
+                    Selected resume: {resumes.find((r) => r.id === resumeId)?.title || "Untitled resume"}
+                  </p>
                 )}
               </div>
 
@@ -1524,7 +1549,44 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-muted-foreground mb-1.5">Skills to emphasize</label>
-                  <input value={skillsToEmphasize.join(", ")} onChange={(e) => setSkillsToEmphasize(e.target.value.split(",").map((v) => v.trim()).filter(Boolean).slice(0, 8))} placeholder="React, stakeholder management" className="w-full bg-secondary/40 border border-border text-foreground rounded-xl px-3 py-2.5 text-sm" />
+                  {skillsToEmphasize.length > 0 && (
+                    <div className="mb-1.5 flex flex-wrap gap-1.5">
+                      {skillsToEmphasize.map((skill) => (
+                        <span
+                          key={skill}
+                          className="inline-flex items-center gap-1 rounded-lg border border-primary/20 bg-primary/10 px-2 py-1 text-xs text-primary"
+                        >
+                          {skill}
+                          <button
+                            type="button"
+                            onClick={() => setSkillsToEmphasize((current) => current.filter((item) => item !== skill))}
+                            aria-label={`Remove ${skill}`}
+                            className="leading-none hover:text-foreground"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <input
+                    value={skillToEmphasizeDraft}
+                    onChange={(e) => setSkillToEmphasizeDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      e.stopPropagation();
+                      if (e.key === "Enter" || e.key === ",") {
+                        e.preventDefault();
+                        addSkillsToEmphasize(skillToEmphasizeDraft);
+                      }
+                    }}
+                    onBlur={() => addSkillsToEmphasize(skillToEmphasizeDraft)}
+                    placeholder={skillsToEmphasize.length ? "Add another skill" : "React, stakeholder management"}
+                    aria-describedby="skills-to-emphasize-help"
+                    className="w-full bg-secondary/40 border border-border text-foreground rounded-xl px-3 py-2.5 text-sm"
+                  />
+                  <p id="skills-to-emphasize-help" className="mt-1 text-[10px] text-muted-foreground">
+                    Press Enter or comma to add up to 8 skills.
+                  </p>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-muted-foreground mb-1.5">Skills not to claim</label>
@@ -1576,65 +1638,6 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                   </div>
                 </div>
               )}
-            </div>
-          )}
-
-          {/* ── Step 4: Auto-Generate ─────────────────────────── */}
-          {step === 3 && sessionCallType === "regular_call" && autoGenerate && (
-            <div className="space-y-5">
-              <div className={cn(
-                "flex flex-col gap-3 p-5 rounded-xl border transition-all cursor-pointer",
-                autoGenerate
-                  ? "bg-emerald-500/10 border-emerald-500/30"
-                  : "bg-secondary/20 border-border"
-              )}
-                onClick={() => setAutoGenerate(true)}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className={cn("w-5 h-5", autoGenerate ? "text-emerald-400" : "text-muted-foreground")} />
-                    <span className={cn("font-semibold text-sm", autoGenerate ? "text-emerald-400" : "text-muted-foreground")}>
-                      Auto-Generate ON
-                    </span>
-                  </div>
-                  <div className={cn(
-                    "w-4 h-4 rounded-full border-2 flex items-center justify-center",
-                    autoGenerate ? "border-emerald-400" : "border-muted-foreground/40"
-                  )}>
-                    {autoGenerate && <div className="w-2 h-2 rounded-full bg-emerald-400" />}
-                  </div>
-                </div>
-                <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  The AI automatically generates a response every time a question is detected. Best for fast-paced interviews where speed matters.
-                </p>
-              </div>
-
-              <div className={cn(
-                "flex flex-col gap-3 p-5 rounded-xl border transition-all cursor-pointer",
-                !autoGenerate
-                  ? "bg-amber-500/10 border-amber-500/30"
-                  : "bg-secondary/20 border-border"
-              )}
-                onClick={() => setAutoGenerate(false)}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Zap className={cn("w-5 h-5", !autoGenerate ? "text-amber-400" : "text-muted-foreground")} />
-                    <span className={cn("font-semibold text-sm", !autoGenerate ? "text-amber-400" : "text-muted-foreground")}>
-                      Manual Trigger
-                    </span>
-                  </div>
-                  <div className={cn(
-                    "w-4 h-4 rounded-full border-2 flex items-center justify-center",
-                    !autoGenerate ? "border-amber-400" : "border-muted-foreground/40"
-                  )}>
-                    {!autoGenerate && <div className="w-2 h-2 rounded-full bg-amber-400" />}
-                  </div>
-                </div>
-                <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  You control when the AI generates a response. Use the "Get AI Answer" button or keyboard shortcut. Better for thoughtful, deliberate practice.
-                </p>
-              </div>
             </div>
           )}
 

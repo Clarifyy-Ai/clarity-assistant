@@ -82,8 +82,9 @@ export default function DebriefDetail() {
   const { balance: creditBalance, known: creditKnown } = useCreditBalance();
   const generateInFlightRef = useRef(false);
   const cancelGenerateRef = useRef(false);
+  const autoGenerateSessionRef = useRef<string | null>(null);
 
-  // Persist-first: load DB only. Missing debriefs wait for an explicit Generate click.
+  // Persist-first: always load an existing report before considering generation.
   const fetchDebrief = useCallback(async (options?: { silent?: boolean }) => {
     if (!id || !user?.id) return;
     if (!options?.silent) {
@@ -260,6 +261,46 @@ export default function DebriefDetail() {
     }
     void fetchDebrief();
   }, [authLoading, fetchDebrief, user?.id]);
+
+  // Completed interview routes should resolve to their report without an extra click.
+  // The Edge operation is idempotent, so an already-completed/in-flight job resumes
+  // without a duplicate charge. Wait for a known balance to avoid starting work when
+  // the client already knows the account cannot afford it.
+  useEffect(() => {
+    if (
+      loading ||
+      fetchError ||
+      debrief ||
+      !session ||
+      !id ||
+      !creditKnown ||
+      genning ||
+      autoGenerateSessionRef.current === id
+    ) {
+      return;
+    }
+    const gate = evaluateActionCreditGate({
+      operationKey: "session_debrief",
+      balance: creditBalance,
+      balanceKnown: true,
+    });
+    if (gate.status === "insufficient") {
+      setCreditGateDenied(true);
+      return;
+    }
+    autoGenerateSessionRef.current = id;
+    void generateDebrief(id);
+  }, [
+    creditBalance,
+    creditKnown,
+    debrief,
+    fetchError,
+    generateDebrief,
+    genning,
+    id,
+    loading,
+    session,
+  ]);
 
   // ── Derived values ────────────────────────────────────────────
 

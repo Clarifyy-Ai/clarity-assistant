@@ -175,10 +175,18 @@ export default function CourseDetailPage() {
     () =>
       new Set(
         [...quizProgress.entries()]
-          .filter(([, progress]) => Boolean(progress.completed_at))
+          .filter(([quizId, progress]) => {
+            const quiz = quizzes.find((item) => item.id === quizId);
+            return Boolean(
+              progress.completed_at &&
+              quiz &&
+              progress.score != null &&
+              progress.score >= quiz.passing_percentage,
+            );
+          })
           .map(([quizId]) => quizId),
       ),
-    [quizProgress],
+    [quizProgress, quizzes],
   );
 
   const views = moduleProgressViews(moduleRefs, completed, course?.unlock_mode ?? "sequential");
@@ -278,7 +286,7 @@ export default function CourseDetailPage() {
         {canIssueCertificate(percent, quizRefs, passedQuizIds) && !certCode && (
           <Button className="mt-3" onClick={() => void issueCert()}>Issue course completion certificate</Button>
         )}
-        {certCode && (
+        {certCode && canIssueCertificate(percent, quizRefs, passedQuizIds) && (
           <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
             <Link className="text-sm text-primary underline" to={verificationPath(certCode)}>
               Verify {certCode}

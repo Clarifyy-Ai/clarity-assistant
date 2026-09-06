@@ -44,10 +44,6 @@ Deno.serve(async (req) => {
     console.error("[issue-course-certificate] existing lookup failed:", existingErr.message);
     return json(req, { error: "Certificate service unavailable.", code: "CERTIFICATE_UNAVAILABLE" }, 503);
   }
-  if (existing?.certificate_code) {
-    return json(req, { certificate_code: existing.certificate_code, id: existing.id });
-  }
-
   const { data: course, error: courseErr } = await db
     .from("learning_courses")
     .select("id, title, duration_hours, publish_status")
@@ -101,11 +97,61 @@ Deno.serve(async (req) => {
   }
   const percentage = total === 0 ? 0 : Math.round((1000 * completed) / total) / 10;
   if (percentage < 100) {
+    if (existing?.id) {
+      await db.from("course_certificates").delete().eq("id", existing.id);
+    }
     return json(
       req,
       { error: "Course is not complete.", code: "COURSE_NOT_COMPLETE", percentage },
       403,
     );
+  }
+
+  const { data: finalQuizzes, error: finalQuizErr } = await db
+    .from("learning_quizzes")
+    .select("id, passing_percentage")
+    .eq("course_id", courseId)
+    .eq("is_final", true);
+  if (finalQuizErr) {
+    console.error("[issue-course-certificate] final assessment lookup failed:", finalQuizErr.message);
+    return json(req, { error: "Certificate service unavailable.", code: "CERTIFICATE_UNAVAILABLE" }, 503);
+  }
+  if ((finalQuizzes ?? []).length > 0) {
+    const finalIds = (finalQuizzes ?? []).map((quiz) => quiz.id as string);
+    const { data: attempts, error: attemptErr } = await db
+      .from("quiz_progress")
+      .select("quiz_id, score, completed_at")
+      .eq("user_id", userId)
+      .in("quiz_id", finalIds);
+    if (attemptErr) {
+      console.error("[issue-course-certificate] final assessment progress failed:", attemptErr.message);
+      return json(req, { error: "Certificate service unavailable.", code: "CERTIFICATE_UNAVAILABLE" }, 503);
+    }
+    const byQuiz = new Map((attempts ?? []).map((row) => [row.quiz_id as string, row]));
+    const passedFinals = (finalQuizzes ?? []).every((quiz) => {
+      const attempt = byQuiz.get(quiz.id as string);
+      return Boolean(
+        attempt?.completed_at &&
+        Number(attempt.score ?? -1) >= Number(quiz.passing_percentage ?? 100),
+      );
+    });
+    if (!passedFinals) {
+      if (existing?.id) {
+        await db.from("course_certificates").delete().eq("id", existing.id);
+      }
+      return json(
+        req,
+        {
+          error: "Pass the final assessment before requesting a certificate.",
+          code: "FINAL_ASSESSMENT_NOT_PASSED",
+        },
+        403,
+      );
+    }
+  }
+
+  if (existing?.certificate_code) {
+    return json(req, { certificate_code: existing.certificate_code, id: existing.id });
   }
 
   const now = new Date().toISOString();
