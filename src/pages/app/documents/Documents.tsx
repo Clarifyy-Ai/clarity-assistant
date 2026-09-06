@@ -433,11 +433,7 @@ function ResumeManager() {
         toast.error(error?.message ?? "Could not download file.");
         return;
       }
-      const filename =
-        sanitizeFileName(displayName) ||
-        filePath.split("/").pop() ||
-        "document";
-      downloadBlob(data, filename);
+      downloadBlob(data, downloadFileName(displayName, filePath));
       toast.success("Download started.");
     } catch {
       toast.error("Download failed.");
