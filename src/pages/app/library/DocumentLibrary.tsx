@@ -50,6 +50,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { downloadBlob } from "@/lib/utils/fileUtils";
+import { downloadFileName } from "@/lib/files/downloadFileName";
 import { sanitizeFileName } from "@/lib/security/sanitizer";
 
 type Doc = {
