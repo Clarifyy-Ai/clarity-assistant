@@ -489,11 +489,7 @@ export default function DocumentLibraryPage() {
         toast.error(error?.message ?? "Download failed.");
         return;
       }
-      const filename =
-        sanitizeFileName(doc.document_name) ||
-        doc.storage_path.split("/").pop() ||
-        "document";
-      downloadBlob(data, filename);
+      downloadBlob(data, downloadFileName(doc.document_name, doc.storage_path));
       toast.success("Download started.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Download failed.");

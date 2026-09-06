@@ -11,6 +11,7 @@ import { useDocumentStore } from "@/store/documentStore";
 import { useDocumentManager } from "@/hooks/useDocumentManager";
 import { sanitizeFileName } from "@/lib/security/sanitizer";
 import { downloadBlob } from "@/lib/utils/fileUtils";
+import { downloadFileName } from "@/lib/files/downloadFileName";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/common/EmptyState";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
@@ -433,11 +434,7 @@ function ResumeManager() {
         toast.error(error?.message ?? "Could not download file.");
         return;
       }
-      const filename =
-        sanitizeFileName(displayName) ||
-        filePath.split("/").pop() ||
-        "document";
-      downloadBlob(data, filename);
+      downloadBlob(data, downloadFileName(displayName, filePath));
       toast.success("Download started.");
     } catch {
       toast.error("Download failed.");
