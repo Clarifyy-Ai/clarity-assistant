@@ -11,6 +11,7 @@ import { useDocumentStore } from "@/store/documentStore";
 import { useDocumentManager } from "@/hooks/useDocumentManager";
 import { sanitizeFileName } from "@/lib/security/sanitizer";
 import { downloadBlob } from "@/lib/utils/fileUtils";
+import { downloadFileName } from "@/lib/files/downloadFileName";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/common/EmptyState";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
